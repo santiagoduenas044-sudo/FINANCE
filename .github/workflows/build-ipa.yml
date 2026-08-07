@@ -31,6 +31,7 @@ jobs:
 
       - name: Build archive (no signing)
         run: |
+          set -o pipefail
           xcodebuild archive \
             -project ios/Ledger.xcodeproj \
             -scheme Ledger \
@@ -42,7 +43,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
-            | xcpretty || cat /tmp/xcodebuild.log
+            2>&1 | tee /tmp/xcodebuild.log; \
+          EXIT=${PIPESTATUS[0]}; \
+          if [ "$EXIT" -ne 0 ]; then \
+            echo "--- xcodebuild failed (exit $EXIT) ---"; \
+            grep -E "(error:|CompileAssetCatalog|actool)" /tmp/xcodebuild.log | head -80 || true; \
+            exit "$EXIT"; \
+          fi
 
       - name: Package unsigned IPA
         run: |
