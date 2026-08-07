@@ -13,6 +13,9 @@ on:
       - '.github/workflows/build-ipa.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -25,7 +28,6 @@ jobs:
       - name: Bundle web app into ios/Resources/www
         run: |
           mkdir -p ios/Resources/www/assets/js/views
-          # Copy web app sources into the www bundle folder that Xcode will pack
           cp index.html manifest.webmanifest sw.js ios/Resources/www/
           cp -r assets ios/Resources/www/
 
@@ -68,3 +70,12 @@ jobs:
           name: Ledger-unsigned-ipa
           path: ${{ runner.temp }}/Ledger-unsigned.ipa
           retention-days: 30
+
+      - name: Publish to GitHub Releases (latest-build)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-build
+          name: Latest unsigned IPA
+          body: Unsigned IPA built from the latest commit. Install with SideStore.
+          prerelease: true
+          files: ${{ runner.temp }}/Ledger-unsigned.ipa
