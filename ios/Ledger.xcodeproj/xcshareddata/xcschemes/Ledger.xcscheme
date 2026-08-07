@@ -17,7 +17,7 @@
                BlueprintIdentifier = "B0010004"
                BuildableName = "Ledger.app"
                BlueprintName = "Ledger"
-               ReferencedContainer = "container:ios/Ledger.xcodeproj">
+               ReferencedContainer = "container:Ledger.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
