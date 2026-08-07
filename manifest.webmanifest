@@ -1,0 +1,18 @@
+{
+  "name": "Ledger — Personal Finance",
+  "short_name": "Ledger",
+  "description": "Divide every dollar of income into buckets, then see exactly how much you have, where it is, and what is safe to spend.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0B0C0E",
+  "theme_color": "#0B0C0E",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "./assets/icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
