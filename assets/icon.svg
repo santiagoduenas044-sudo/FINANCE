@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ledger">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1B1D22"/>
+      <stop offset="1" stop-color="#0B0C0E"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="114" fill="url(#g)"/>
+  <!-- four buckets, each a slot from the money palette -->
+  <g>
+    <rect x="104" y="296" width="52" height="112" rx="14" fill="#3987e5"/>
+    <rect x="180" y="240" width="52" height="168" rx="14" fill="#199e70"/>
+    <rect x="256" y="176" width="52" height="232" rx="14" fill="#9085e9"/>
+    <rect x="332" y="128" width="52" height="280" rx="14" fill="#c98500"/>
+  </g>
+  <rect x="104" y="102" width="132" height="14" rx="7" fill="#F5F6F8"/>
+</svg>
