@@ -35,6 +35,7 @@ jobs:
           xcodebuild archive \
             -project ios/Ledger.xcodeproj \
             -scheme Ledger \
+            -sdk iphoneos \
             -configuration Release \
             -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Ledger.xcarchive" \
@@ -43,6 +44,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=NO \
             ONLY_ACTIVE_ARCH=NO \
+            SUPPORTED_PLATFORMS=iphoneos \
             2>&1 | tee /tmp/xcodebuild.log; \
           EXIT=${PIPESTATUS[0]}; \
           if [ "$EXIT" -ne 0 ]; then \
