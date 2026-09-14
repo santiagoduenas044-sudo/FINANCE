@@ -6,7 +6,33 @@ verified: false                 # flip to true only after official CME verificat
 verification:
   source: null                  # e.g. "cmegroup.com contract specs"
   date: null                    # e.g. "2026-09-14"
-  note: "cmegroup.com blocked by network egress proxy on 2026-09-14; values provisional"
+  note: >-
+    cmegroup.com remains blocked by the network egress proxy as of the Phase
+    6.5 re-check (2026-09-14). No field below has been confirmed against the
+    official CME Group source. See docs/CME_VERIFICATION.md for the full
+    attempt log and exactly which fields are still unverified per instrument.
+  unverified_fields:
+    - "ES.multiplier / ES.tick_size / ES.tick_value"
+    - "NQ.multiplier / NQ.tick_size / NQ.tick_value"
+    - "MES.multiplier / MES.tick_size / MES.tick_value"
+    - "MNQ.multiplier / MNQ.tick_size / MNQ.tick_value"
+    - "months (contract cycle) for all four symbols"
+    - "trading hours (RTH/ETH/maintenance break) shared across all four symbols, see config/default.yaml:sessions"
+  attempts:
+    - phase: "Phase 3"
+      date: "2026-09-14"
+      method: "WebFetch to cmegroup.com contract-specs pages (ES, NQ, MES, MNQ)"
+      result: "EGRESS_BLOCKED for the whole cmegroup.com domain"
+    - phase: "Phase 6.5"
+      date: "2026-09-14"
+      method: "WebFetch retried on cmegroup.com; WebFetch to web.archive.org as a fallback mirror; WebSearch as a secondary check"
+      result: >-
+        cmegroup.com: still EGRESS_BLOCKED. web.archive.org: unsupported host
+        for WebFetch in this environment (not a network allow/deny signal,
+        just an unsupported target). WebSearch: returned an aggregated,
+        paraphrased answer attributed to CME Group, but this is a
+        search-engine synthesis, NOT a direct read of the primary source, so
+        it was deliberately NOT used to set verified: true.
 
 # Month codes for quarterly index futures cycle.
 month_codes:

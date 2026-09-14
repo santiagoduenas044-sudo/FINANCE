@@ -185,6 +185,14 @@ class ContractSpec(BaseModel):
             raise ValueError("must be positive")
         return v
 
+    @property
+    def point_value(self) -> float:
+        """Dollar value of a 1.00 index-point move. Same quantity as
+        `multiplier` under a different, commonly-used trading name — exposed
+        as an alias (not a stored/duplicated field) so risk/sizing code can
+        use whichever term reads better without two sources of truth."""
+        return self.multiplier
+
     def points_to_dollars(self, points: float) -> float:
         return points * self.multiplier
 
