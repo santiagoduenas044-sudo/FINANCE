@@ -118,6 +118,15 @@ class SetupsConfig(BaseModel):
     orb: OrbParams = Field(default_factory=OrbParams)
 
 
+class SignalConfig(BaseModel):
+    """Signal Engine (Phase 6): SetupCandidate -> Signal | NoTrade.
+
+    Reasonable, un-optimized defaults — no parameter sweeps here."""
+    min_risk_reward: float = 1.0          # nearest-TP R:R must be >= this, else NO_TRADE
+    deduplication_enabled: bool = True    # same candidate never converted twice
+    validate_entry_against_context: bool = True  # re-check entry == close[N] via AnalysisContext
+
+
 class DiscordOutputConfig(BaseModel):
     """Discord output adapter (Phase 5.5). The webhook value itself is NEVER
     stored here; only the name of the env var that holds it."""
@@ -143,6 +152,7 @@ class EngineConfig(BaseModel):
     timeframe_roles: TimeframeRoles = Field(default_factory=TimeframeRoles)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     setups: SetupsConfig = Field(default_factory=SetupsConfig)
+    signals: SignalConfig = Field(default_factory=SignalConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
 
     @classmethod

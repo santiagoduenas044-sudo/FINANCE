@@ -37,6 +37,15 @@ class AnalysisContext:
     structure: TimeframeView    # structure (e.g. 15m)
     execution: TimeframeView    # entry     (e.g. 5m)
 
+    def view_for(self, timeframe: str) -> "TimeframeView | None":
+        """Return whichever role view matches `timeframe`, or None if this
+        AnalysisContext doesn't track that timeframe. Never reaches outside the
+        already-built (as-of) views."""
+        for v in (self.execution, self.structure, self.htf):
+            if v.timeframe == timeframe:
+                return v
+        return None
+
 
 def _slice_asof(df: pd.DataFrame, decision_time: pd.Timestamp) -> pd.DataFrame:
     """Keep only bars whose CLOSE label is <= decision_time (fully closed)."""
