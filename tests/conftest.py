@@ -64,6 +64,31 @@ def engine(config, registry) -> DataEngine:
     return DataEngine(config, registry)
 
 
+TZ = "America/New_York"
+
+
+def make_bars_from_ohlc(rows, start="2026-06-15 09:31", tz=TZ, volume=100.0):
+    """Build a CLOSE-labeled OHLCV frame from explicit (open,high,low,close) rows."""
+    idx = pd.date_range(start, periods=len(rows), freq="1min", tz=tz)
+    idx.name = "timestamp"
+    df = pd.DataFrame(rows, columns=["open", "high", "low", "close"], index=idx)
+    df["volume"] = volume
+    return df
+
+
+def make_bars_from_closes(closes, spread=0.5, **kw):
+    """Build bars from a close path; high/low bracket each bar by `spread`."""
+    rows = []
+    prev = closes[0]
+    for c in closes:
+        o = prev
+        h = max(o, c) + spread
+        l = min(o, c) - spread
+        rows.append((o, h, l, c))
+        prev = c
+    return make_bars_from_ohlc(rows, **kw)
+
+
 def weekdays(start: date, n: int) -> list[date]:
     """n consecutive weekdays starting at/after `start`."""
     out = []
