@@ -127,6 +127,23 @@ class SignalConfig(BaseModel):
     validate_entry_against_context: bool = True  # re-check entry == close[N] via AnalysisContext
 
 
+class RiskConfig(BaseModel):
+    """Risk Engine (Phase 7): Signal -> Risk Validation -> Position Size /
+    Risk Decision. Reasonable, un-optimized defaults — no parameter sweeps.
+
+    NOTE: this engine NEVER computes a dollar amount unless
+    ContractRegistry.require_verified() succeeds for the instrument's specs
+    (see signal_engine/risk/engine.py). Nothing here bypasses that guard.
+    """
+    risk_mode: Literal["fixed", "percent"] = "percent"
+    fixed_risk_dollar: float = 500.0        # used when risk_mode == "fixed"
+    risk_pct: float = 0.01                  # 1% of account equity (percent mode)
+    max_risk_per_trade_dollar: Optional[float] = None  # optional extra hard ceiling
+    daily_loss_limit_dollar: float = 1000.0
+    max_trades_per_day: int = 5
+    max_contracts: int = 10
+
+
 class DiscordOutputConfig(BaseModel):
     """Discord output adapter (Phase 5.5). The webhook value itself is NEVER
     stored here; only the name of the env var that holds it."""
@@ -153,6 +170,7 @@ class EngineConfig(BaseModel):
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     setups: SetupsConfig = Field(default_factory=SetupsConfig)
     signals: SignalConfig = Field(default_factory=SignalConfig)
+    risk: RiskConfig = Field(default_factory=RiskConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
 
     @classmethod

@@ -89,6 +89,15 @@ signals:                             # Phase 6 — SetupCandidate -> Signal | No
   deduplication_enabled: true
   validate_entry_against_context: true
 
+risk:                                 # Phase 7 — Signal -> Risk Validation -> Position Size
+  risk_mode: "percent"                # "fixed" | "percent"
+  fixed_risk_dollar: 500.0            # used when risk_mode == "fixed" (not optimized)
+  risk_pct: 0.01                      # 1% of account equity (percent mode, not optimized)
+  max_risk_per_trade_dollar: null     # optional extra hard ceiling on top of the mode above
+  daily_loss_limit_dollar: 1000.0
+  max_trades_per_day: 5
+  max_contracts: 10
+
 output:                             # Phase 5.5 — external observability adapters
   discord:
     enabled: false                  # off by default; core does not depend on it
