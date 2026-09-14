@@ -61,6 +61,24 @@ def test_no_lookahead_truncation_equivalence(engine):
         assert_frame_equal(a, b, check_freq=False)
 
 
+def test_no_duplicate_labels_or_empty_bins_with_eth(engine):
+    """Regression: ETH empty bins (volume=0, NaN OHLC) must be dropped, so
+    resampled frames never carry duplicate timestamps or NaN OHLC rows."""
+    # raw 1m open-labeled ET: an ETH pre-market block + an RTH block, one day
+    eth = pd.date_range("2026-06-15 08:00", "2026-06-15 09:29", freq="1min")
+    rth = pd.date_range("2026-06-15 09:30", "2026-06-15 10:30", freq="1min")
+    idx = eth.append(rth)
+    raw = pd.DataFrame({"open": 100.0, "high": 100.5, "low": 99.5,
+                        "close": 100.2, "volume": 10.0}, index=idx)
+    raw.index.name = "raw_ts"
+    provider = FakeProvider({(SYMBOL, "1m", CONTRACT): raw})
+    lc = engine.load_contract(provider, SYMBOL, CONTRACT, "1m")
+    engine.build_timeframes(lc)
+    for tf, df in lc.timeframes.items():
+        assert not df.index.duplicated().any(), f"{tf} has duplicate timestamps"
+        assert not df[OHLC].isna().any().any(), f"{tf} has NaN OHLC (empty bin)"
+
+
 def test_future_bars_do_not_change_past(engine):
     """Appending future 1m bars must not alter any resampled bar with
     label <= N."""

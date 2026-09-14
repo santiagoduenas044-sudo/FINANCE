@@ -76,6 +76,48 @@ class TimeframeRoles(BaseModel):
     execution: str = "5m"
 
 
+class AnalysisConfig(BaseModel):
+    """Market Analysis (Phase 4) backend selection."""
+    structure_backend: Literal["native", "smc"] = "native"
+    native_n_left: int = 3
+    native_n_right: int = 3
+    smc_swing_length: int = 8
+    with_order_blocks: bool = True
+
+
+class LiquiditySweepParams(BaseModel):
+    enabled: bool = True
+    timeframe: str = "5m"
+    stop_buffer_ticks: float = 2.0
+    rr_targets: list[float] = Field(default_factory=lambda: [1.0, 2.0])
+    expiration_bars: int = 6
+    use_opposing_liquidity_target: bool = True
+
+
+class VwapReclaimParams(BaseModel):
+    enabled: bool = True
+    timeframe: str = "5m"
+    lookback_bars: int = 12
+    stop_buffer_ticks: float = 2.0
+    rr_targets: list[float] = Field(default_factory=lambda: [1.0, 2.0])
+    expiration_bars: int = 6
+
+
+class OrbParams(BaseModel):
+    enabled: bool = True
+    timeframe: str = "5m"
+    opening_range_minutes: int = 30
+    session: str = "RTH"
+    rr_targets: list[float] = Field(default_factory=lambda: [1.0, 2.0])  # multiples of OR range
+    expiration_bars: int = 12
+
+
+class SetupsConfig(BaseModel):
+    liquidity_sweep: LiquiditySweepParams = Field(default_factory=LiquiditySweepParams)
+    vwap_reclaim: VwapReclaimParams = Field(default_factory=VwapReclaimParams)
+    orb: OrbParams = Field(default_factory=OrbParams)
+
+
 class EngineConfig(BaseModel):
     version: int = 1
     data: DataConfig = Field(default_factory=DataConfig)
@@ -85,6 +127,8 @@ class EngineConfig(BaseModel):
     rollover: RolloverConfig = Field(default_factory=RolloverConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     timeframe_roles: TimeframeRoles = Field(default_factory=TimeframeRoles)
+    analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
+    setups: SetupsConfig = Field(default_factory=SetupsConfig)
 
     @classmethod
     def load(cls, path: Optional[str | Path] = None) -> "EngineConfig":

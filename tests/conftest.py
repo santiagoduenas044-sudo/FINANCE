@@ -89,6 +89,32 @@ def make_bars_from_closes(closes, spread=0.5, **kw):
     return make_bars_from_ohlc(rows, **kw)
 
 
+def tz_bars(times, ohlc, session="RTH", tdate=date(2026, 6, 15), volume=100.0):
+    """Build annotated OHLCV bars at explicit tz-aware timestamps (for setup tests)."""
+    from signal_engine.data.models import SESSION, TRADING_DATE
+    idx = pd.DatetimeIndex([pd.Timestamp(t, tz=TZ) for t in times], name="timestamp")
+    df = pd.DataFrame(ohlc, columns=["open", "high", "low", "close"], index=idx)
+    df["volume"] = volume
+    df[SESSION] = session
+    df[TRADING_DATE] = tdate
+    return df
+
+
+def make_ctx(bars, tf="5m", symbol="ES", session="RTH"):
+    """Minimal AnalysisContext with all three roles pointing at `bars`."""
+    from signal_engine.data.context import AnalysisContext, TimeframeView
+    v = TimeframeView(tf, bars)
+    return AnalysisContext(symbol, bars.index[-1], session, v, v, v)
+
+
+def make_analysis(tf, ts, indicators=None, swings=None, structure=None,
+                  fvg=None, liquidity=None, obs=None):
+    from signal_engine.features.analyzer import MarketAnalysis, TimeframeAnalysis
+    ta = TimeframeAnalysis(tf, ts, indicators if indicators is not None else pd.DataFrame(),
+                           swings or [], structure or [], fvg or [], liquidity or [], obs or [])
+    return MarketAnalysis("ES", ts, {tf: ta})
+
+
 def weekdays(start: date, n: int) -> list[date]:
     """n consecutive weekdays starting at/after `start`."""
     out = []

@@ -49,9 +49,11 @@ def resample_ohlcv(
             origin = classifier.session_open_dt(tdate, session, tz)
         else:
             origin = "epoch"
+        # NOTE: empty bins get volume=0 (sum of empty) but NaN OHLC, so we must
+        # drop on OHLC — dropna(how="all") over all columns would keep them.
         res = grp[OHLCV].resample(
             offset, label="right", closed="right", origin=origin
-        ).agg(_AGG).dropna(how="all")
+        ).agg(_AGG).dropna(subset=[OPEN, HIGH, LOW, CLOSE], how="all")
         if not res.empty:
             res[SESSION] = session
             res[TRADING_DATE] = tdate

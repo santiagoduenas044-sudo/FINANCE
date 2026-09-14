@@ -53,3 +53,33 @@ timeframe_roles:                    # semantic roles (ARCHITECTURE.md §7)
   context: "1H"
   structure: "15m"
   execution: "5m"
+
+analysis:                           # Phase 4 market-analysis backend
+  structure_backend: "native"       # "native" | "smc"
+  native_n_left: 3
+  native_n_right: 3
+  smc_swing_length: 8
+  with_order_blocks: true
+
+setups:                             # Phase 5 — each setup toggled independently
+  liquidity_sweep:
+    enabled: true
+    timeframe: "5m"
+    stop_buffer_ticks: 2.0
+    rr_targets: [1.0, 2.0]          # R multiples for TP1/TP2 (not optimized)
+    expiration_bars: 6
+    use_opposing_liquidity_target: true
+  vwap_reclaim:
+    enabled: true
+    timeframe: "5m"
+    lookback_bars: 12
+    stop_buffer_ticks: 2.0
+    rr_targets: [1.0, 2.0]
+    expiration_bars: 6
+  orb:
+    enabled: true
+    timeframe: "5m"
+    opening_range_minutes: 30
+    session: "RTH"
+    rr_targets: [1.0, 2.0]          # multiples of the OR range
+    expiration_bars: 12
