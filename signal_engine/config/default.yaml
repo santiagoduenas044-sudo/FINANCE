@@ -83,3 +83,11 @@ setups:                             # Phase 5 — each setup toggled independent
     session: "RTH"
     rr_targets: [1.0, 2.0]          # multiples of the OR range
     expiration_bars: 12
+
+output:                             # Phase 5.5 — external observability adapters
+  discord:
+    enabled: false                  # off by default; core does not depend on it
+    webhook_env: "DISCORD_WEBHOOK_URL"   # env var NAME (never the value)
+    timeout_seconds: 5.0
+    retry_count: 2
+    deduplication_enabled: true

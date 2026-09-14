@@ -10,3 +10,8 @@ venv/
 
 # Generated data artifacts (reproducible from sample CSVs + config)
 data_store/
+
+# Secrets / local environment (never commit real webhooks or tokens)
+.env
+.env.*
+!.env.example

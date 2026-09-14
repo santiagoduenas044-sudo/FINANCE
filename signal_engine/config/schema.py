@@ -118,6 +118,20 @@ class SetupsConfig(BaseModel):
     orb: OrbParams = Field(default_factory=OrbParams)
 
 
+class DiscordOutputConfig(BaseModel):
+    """Discord output adapter (Phase 5.5). The webhook value itself is NEVER
+    stored here; only the name of the env var that holds it."""
+    enabled: bool = False                    # off by default; core is unaffected
+    webhook_env: str = "DISCORD_WEBHOOK_URL"
+    timeout_seconds: float = 5.0
+    retry_count: int = 2                     # extra attempts on transient errors
+    deduplication_enabled: bool = True
+
+
+class OutputConfig(BaseModel):
+    discord: DiscordOutputConfig = Field(default_factory=DiscordOutputConfig)
+
+
 class EngineConfig(BaseModel):
     version: int = 1
     data: DataConfig = Field(default_factory=DataConfig)
@@ -129,6 +143,7 @@ class EngineConfig(BaseModel):
     timeframe_roles: TimeframeRoles = Field(default_factory=TimeframeRoles)
     analysis: AnalysisConfig = Field(default_factory=AnalysisConfig)
     setups: SetupsConfig = Field(default_factory=SetupsConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
 
     @classmethod
     def load(cls, path: Optional[str | Path] = None) -> "EngineConfig":
