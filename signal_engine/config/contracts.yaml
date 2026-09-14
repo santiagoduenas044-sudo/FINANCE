@@ -1,0 +1,58 @@
+# Centralized, versioned contract specifications.
+# IMPORTANT: values are PROVISIONAL and NOT verified against CME Group yet.
+# See docs/CME_VERIFICATION.md. Never hardcode these in strategy/risk logic.
+version: 1
+verified: false                 # flip to true only after official CME verification
+verification:
+  source: null                  # e.g. "cmegroup.com contract specs"
+  date: null                    # e.g. "2026-09-14"
+  note: "cmegroup.com blocked by network egress proxy on 2026-09-14; values provisional"
+
+# Month codes for quarterly index futures cycle.
+month_codes:
+  H: 3    # March
+  M: 6    # June
+  U: 9    # September
+  Z: 12   # December
+
+contracts:
+  ES:
+    name: "E-mini S&P 500"
+    multiplier: 50.0            # $ per index point   (PROVISIONAL)
+    tick_size: 0.25            # index points         (PROVISIONAL)
+    tick_value: 12.50          # $ per tick           (PROVISIONAL)
+    months: [H, M, U, Z]
+    exchange: CME
+    currency: USD
+    is_micro: false
+    micro_of: null
+  NQ:
+    name: "E-mini Nasdaq-100"
+    multiplier: 20.0           # PROVISIONAL
+    tick_size: 0.25            # PROVISIONAL
+    tick_value: 5.00           # PROVISIONAL
+    months: [H, M, U, Z]
+    exchange: CME
+    currency: USD
+    is_micro: false
+    micro_of: null
+  MES:
+    name: "Micro E-mini S&P 500"
+    multiplier: 5.0            # PROVISIONAL
+    tick_size: 0.25            # PROVISIONAL
+    tick_value: 1.25           # PROVISIONAL
+    months: [H, M, U, Z]
+    exchange: CME
+    currency: USD
+    is_micro: true
+    micro_of: ES
+  MNQ:
+    name: "Micro E-mini Nasdaq-100"
+    multiplier: 2.0            # PROVISIONAL
+    tick_size: 0.25            # PROVISIONAL
+    tick_value: 0.50          # PROVISIONAL
+    months: [H, M, U, Z]
+    exchange: CME
+    currency: USD
+    is_micro: true
+    micro_of: NQ

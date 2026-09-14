@@ -1,2 +1,12 @@
 .DS_Store
 node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Generated data artifacts (reproducible from sample CSVs + config)
+data_store/

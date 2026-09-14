@@ -1,0 +1,75 @@
+"""Shared test fixtures and synthetic data builders (deterministic)."""
+from __future__ import annotations
+
+from datetime import date, datetime, time, timedelta
+
+import numpy as np
+import pandas as pd
+import pytest
+
+from signal_engine.config.schema import EngineConfig
+from signal_engine.data.contracts import ContractRegistry
+from signal_engine.data.engine import DataEngine
+from signal_engine.data.providers.base import MarketDataProvider
+
+
+class FakeProvider(MarketDataProvider):
+    """In-memory provider returning pre-built raw OHLCV frames."""
+    source_timestamp_convention = "open"
+
+    def __init__(self, mapping: dict[tuple[str, str, str], pd.DataFrame]):
+        # key: (symbol, timeframe, contract)
+        self.mapping = mapping
+
+    def get_raw_bars(self, symbol, timeframe, contract=None):
+        return self.mapping[(symbol, timeframe, contract)].copy()
+
+    def list_contracts(self, symbol):
+        return sorted({k[2] for k in self.mapping if k[0] == symbol})
+
+
+def make_rth_1m(dates: list[date], start_price=5000.0, seed=0,
+                day_volume=390.0) -> pd.DataFrame:
+    """Build OPEN-labeled naive-ET 1m RTH bars (09:30..15:59) for given dates.
+    Deterministic; valid OHLC (high>=max(o,c), low<=min(o,c))."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    price = start_price
+    per_bar_vol = day_volume / 390.0
+    for d in dates:
+        for i in range(390):  # 09:30 .. 15:59 open times
+            ts = datetime.combine(d, time(9, 30)) + timedelta(minutes=i)
+            o = price
+            c = o + float(rng.normal(0, 1.0))
+            h = max(o, c) + abs(float(rng.normal(0, 0.3)))
+            l = min(o, c) - abs(float(rng.normal(0, 0.3)))
+            rows.append((ts, o, h, l, c, per_bar_vol))
+            price = c
+    df = pd.DataFrame(rows, columns=["datetime", "open", "high", "low", "close", "volume"])
+    return df.set_index("datetime")
+
+
+@pytest.fixture
+def config() -> EngineConfig:
+    return EngineConfig.load()
+
+
+@pytest.fixture
+def registry() -> ContractRegistry:
+    return ContractRegistry.load()
+
+
+@pytest.fixture
+def engine(config, registry) -> DataEngine:
+    return DataEngine(config, registry)
+
+
+def weekdays(start: date, n: int) -> list[date]:
+    """n consecutive weekdays starting at/after `start`."""
+    out = []
+    d = start
+    while len(out) < n:
+        if d.weekday() < 5:
+            out.append(d)
+        d += timedelta(days=1)
+    return out

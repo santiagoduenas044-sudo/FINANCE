@@ -1,0 +1,55 @@
+# Default Data Engine configuration (Phase 3). Everything here is overridable.
+version: 1
+
+data:
+  timezone: America/New_York        # canonical tz for all internal timestamps
+  base_timeframe: "1m"              # finest available timeframe of the source
+  target_timeframes: ["5m", "15m", "1H"]   # generated via no-lookahead resample
+  # How the SOURCE labels each bar's timestamp:
+  #   "open"  = timestamp marks the START of the bar (FirstRateData convention)
+  #   "close" = timestamp marks the END/close of the bar
+  # Internally all bars are normalized to CLOSE-labeled.
+  input_timestamp_convention: "open"
+  # tz localization policy for naive ET timestamps during DST transitions
+  dst_ambiguous: "infer"            # pandas tz_localize ambiguous=
+  dst_nonexistent: "shift_forward"  # pandas tz_localize nonexistent=
+
+validation:
+  gap_factor: 3.0                   # intra-session gap > gap_factor * base_interval => flagged
+  drop_invalid: false               # if true, drop invalid rows instead of only reporting
+  raise_on_error: false             # if true, raise on any ERROR-severity issue
+
+sessions:
+  # All times are local to data.timezone (ET). See docs/MARKET_DATA.md §7.
+  rth:
+    start: "09:30"
+    end: "16:00"
+  eth:
+    enabled: true                   # independent toggle for extended hours
+    start: "18:00"                  # Globex open (previous evening for a trade date)
+    end: "17:00"                    # Globex close
+    maintenance_break:
+      start: "17:00"
+      end: "18:00"
+  # Trade-date rolls at this local time (CME clearing convention ~17:00 ET).
+  trade_date_rollover: "17:00"
+
+resample:
+  # Align higher-timeframe bins to the session open ("session_open") or to the
+  # epoch grid ("epoch"). session_open keeps ORB/context aligned to 09:30 / 18:00.
+  origin: "session_open"
+
+rollover:
+  method: "volume"                  # volume-based front->next roll
+  # roll when next-contract daily volume exceeds front by this ratio, within window
+  volume_ratio: 1.0
+  lookback_days: 15                 # only consider rolling within N trade days of expiry
+  continuous_adjustment: "ratio"    # "raw" | "ratio" for the CONTINUOUS series stats
+
+storage:
+  root: "data_store"                # parquet root (partitioned by symbol/contract/timeframe)
+
+timeframe_roles:                    # semantic roles (ARCHITECTURE.md §7)
+  context: "1H"
+  structure: "15m"
+  execution: "5m"
