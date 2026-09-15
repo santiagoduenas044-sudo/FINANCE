@@ -427,6 +427,28 @@
     </div>
   </div>
 
+  <!-- GHOST BRAIN: market state + active trade + confluence -->
+  <div class="grid" id="ghost-row" style="grid-template-columns:1.3fr 1fr 1fr; margin-bottom:18px" hidden>
+    <div class="card">
+      <div class="card-h"><h2>👻 Market State</h2><span class="chip" style="padding:5px 10px"><span class="v" id="ghost-symbol">ES</span></span></div>
+      <div class="card-b" id="market-state">
+        <div class="detail-empty" style="padding:20px"><span class="ico">🧠</span>GHOST is reading the market…</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Active Trade</h2><span class="st" id="active-status" style="display:none"></span></div>
+      <div class="card-b" id="active-trade">
+        <div class="detail-empty" style="padding:20px"><span class="ico">📈</span>No active trade.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Confluence</h2><span class="chip" style="padding:5px 10px" id="conf-score-chip" hidden><span class="v" id="conf-score">—</span></span></div>
+      <div class="card-b" id="confluence">
+        <div class="detail-empty" style="padding:20px"><span class="ico">⚖️</span>No current GHOST decision.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- BOTTOM: signals + detail -->
   <div class="grid grid-2">
     <div class="card">
@@ -449,6 +471,24 @@
       <div class="card-b" id="detail-body">
         <div class="detail-empty"><span class="ico">🎯</span>Select a signal to inspect its full thesis, levels, and outcome.</div>
       </div>
+    </div>
+  </div>
+
+  <!-- GHOST paper trades: closed history + stats -->
+  <div class="grid grid-2" id="paper-row" style="margin-top:18px" hidden>
+    <div class="card">
+      <div class="card-h"><h2>Paper Trades <span style="color:var(--muted-2);text-transform:none;font-weight:400;font-size:10px">(simulated · no orders)</span></h2></div>
+      <div class="sig-wrap">
+        <table>
+          <thead><tr><th>Opened</th><th>Instr</th><th>Dir</th><th>Setup</th><th>Entry</th><th>Exit</th><th>R</th><th>Result</th></tr></thead>
+          <tbody id="paper-body"></tbody>
+        </table>
+        <div id="paper-empty" class="detail-empty" style="display:none"><span class="ico">🗂️</span>No closed paper trades yet.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>GHOST Stats</h2></div>
+      <div class="card-b" id="ghost-stats"><div class="big-sub">No trades recorded yet.</div></div>
     </div>
   </div>
 
@@ -544,7 +584,7 @@ function renderSymbolTabs() {
   host.innerHTML = state.symbols.map(s =>
     `<button class="sym-tab ${s === state.symbol ? "active" : ""}" data-sym="${s}">${s}</button>`).join("");
   host.querySelectorAll(".sym-tab").forEach(b =>
-    b.onclick = () => { state.symbol = b.dataset.sym; state.selectedId = null; renderSymbolTabs(); renderDetail(null); refreshChart(); });
+    b.onclick = () => { state.symbol = b.dataset.sym; state.selectedId = null; renderSymbolTabs(); renderDetail(null); refreshChart(); refreshGhost(); });
 }
 
 // ------------------------------------------------------------------ status
@@ -1042,13 +1082,118 @@ async function boot() {
   await refreshStatus();
   await refreshChart();
   await refreshHistory();
+  await refreshGhost();
 }
 function tickClock() { $("clock").textContent = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
+
+// ------------------------------------------------------------------ GHOST brain
+const biasClass = (b) => b === "BULLISH" ? "dir-LONG" : b === "BEARISH" ? "dir-SHORT" : "dir-NONE";
+function row(k, vHtml) { return `<div class="stat-row"><span class="k">${k}</span><span class="v">${vHtml}</span></div>`; }
+
+async function refreshGhost() {
+  if (!state.symbol) return;
+  let m;
+  try { m = await api(`/api/ghost/market/${state.symbol}`); } catch (e) { $("ghost-row").hidden = true; $("paper-row").hidden = true; return; }
+  if (!m.enabled) { $("ghost-row").hidden = true; $("paper-row").hidden = true; return; }
+  $("ghost-row").hidden = false; $("paper-row").hidden = false;
+  $("ghost-symbol").textContent = state.symbol;
+
+  // --- market state ---
+  const ms = m.market_state;
+  const el = $("market-state");
+  if (!ms) { el.innerHTML = `<div class="detail-empty" style="padding:20px"><span class="ico">🧠</span>Waiting for a GHOST cycle…</div>`; }
+  else {
+    const reg = ms.regime, mtf = ms.mtf, st = ms.structure, lq = ms.liquidity;
+    el.innerHTML =
+      row("Regime", `<span class="dir ${reg.regime.startsWith('TREND_UP')?'dir-LONG':reg.regime.startsWith('TREND_DOWN')?'dir-SHORT':'dir-NONE'}">${reg.regime}</span> <span style="color:var(--muted-2);font-size:11px">· vol ${reg.volatility}</span>`) +
+      row("HTF (context)", `<span class="dir ${biasClass(mtf.context.bias)}">${mtf.context.bias}</span> <span style="color:var(--muted-2);font-size:11px">${mtf.context.timeframe}</span>`) +
+      row("Structure", `<span class="dir ${biasClass(mtf.structure.bias)}">${mtf.structure.bias}</span> <span style="color:var(--muted-2);font-size:11px">${mtf.structure.timeframe}</span>`) +
+      row("Execution", `<span class="dir ${biasClass(mtf.execution.bias)}">${mtf.execution.bias}</span>`) +
+      row("Alignment", `<b>${mtf.alignment}</b>`) +
+      row("VWAP", ms.vwap_side + (ms.vwap != null ? ` · ${fmtPx(ms.vwap)}` : "")) +
+      row("Session", ms.session) +
+      row("Liquidity", `<span style="font-size:11.5px">${esc(lq.detail || "—")}</span>`) +
+      (st.changed_recently ? row("⚠ Structure", `just changed (${st.last_event_type || ""})`) : "");
+  }
+
+  // --- confluence (from last decision) ---
+  const d = m.last_decision, cel = $("confluence"), chip = $("conf-score-chip");
+  if (d && d.confluence) {
+    const c = d.confluence;
+    chip.hidden = false;
+    $("conf-score").textContent = c.score;
+    const head = d.action === "NO_TRADE"
+      ? `<div class="det-head"><span class="dir dir-NONE">NO TRADE</span><span style="color:var(--muted);font-size:12px">${(d.no_trade_reasons||[]).map(esc).join(", ")}</span></div>`
+      : `<div class="det-head"><span class="dir dir-${d.action}">${d.action}</span><span style="color:var(--muted);font-size:12px">${esc(d.setup||"")}</span></div>`;
+    cel.innerHTML = head +
+      `<div class="big-num" style="font-size:26px;margin:6px 0">${c.score} <span style="font-size:12px;color:var(--muted)">/ ${c.threshold}</span></div>` +
+      `<ul class="det-list">${(c.contributions||[]).map(x => `<li><b style="color:${x.points>=0?'var(--green)':'var(--red)'}">${x.points>=0?'+':''}${x.points}</b> ${esc(x.name)} <span style="color:var(--muted-2)">(${esc(x.detail)})</span></li>`).join("") || "<li>no contributions</li>"}</ul>`;
+  } else {
+    chip.hidden = true;
+    cel.innerHTML = `<div class="detail-empty" style="padding:20px"><span class="ico">⚖️</span>No current GHOST decision.</div>`;
+  }
+
+  // --- active trade ---
+  let act = { trades: [] };
+  try { act = await api(`/api/ghost/trades/active?symbol=${state.symbol}`); } catch (e) {}
+  const ael = $("active-trade"), astatus = $("active-status");
+  if (act.trades && act.trades.length) {
+    const t = act.trades[0];
+    astatus.style.display = "inline-flex"; astatus.className = `st st-${t.status === 'TP1_HIT' ? 'ACTIVE' : t.status}`; astatus.textContent = t.status;
+    const pnlCol = t.pnl_points >= 0 ? "var(--green)" : "var(--red)";
+    ael.innerHTML =
+      `<div class="det-head"><span class="dir dir-${t.direction}">${t.direction}</span> <b>${t.instrument}</b> <span style="color:var(--muted);font-size:12px">${esc(t.setup)}</span></div>` +
+      `<div class="det-grid" style="margin:10px 0">
+        <div class="det-cell"><div class="l">Entry</div><div class="n">${fmtPx(t.entry)}</div></div>
+        <div class="det-cell"><div class="l">Current</div><div class="n">${fmtPx(t.current_price)}</div></div>
+        <div class="det-cell"><div class="l">P&L (pts)</div><div class="n" style="color:${pnlCol}">${t.pnl_points>=0?'+':''}${t.pnl_points.toFixed(2)}</div></div>
+        <div class="det-cell"><div class="l">R</div><div class="n" style="color:${pnlCol}">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(2)}R</div></div>
+      </div>` +
+      row("Stop", fmtPx(t.stop)) + row("Targets", (t.take_profits||[]).map(fmtPx).join(" / ") || "—") +
+      row("MFE / MAE", `<span style="color:var(--green)">+${t.mfe_r.toFixed(2)}R</span> / <span style="color:var(--red)">${t.mae_r.toFixed(2)}R</span>`) +
+      row("Bars held", t.bars_held);
+  } else {
+    astatus.style.display = "none";
+    ael.innerHTML = `<div class="detail-empty" style="padding:20px"><span class="ico">📈</span>No active trade for ${state.symbol}.</div>`;
+  }
+
+  // --- paper history + stats ---
+  let h = { trades: [] }, s = {};
+  try { h = await api("/api/ghost/trades/history?limit=40"); } catch (e) {}
+  try { s = await api("/api/ghost/stats"); } catch (e) {}
+  const pbody = $("paper-body"), pempty = $("paper-empty");
+  if (h.trades && h.trades.length) {
+    pempty.style.display = "none";
+    pbody.innerHTML = h.trades.map(t => `<tr>
+      <td>${fmtTime(t.opened_at)}</td><td>${t.instrument}</td>
+      <td class="dir dir-${t.direction}">${t.direction}</td><td>${esc(t.setup)}</td>
+      <td>${fmtPx(t.entry)}</td><td>${fmtPx(t.exit_price)}</td>
+      <td style="color:${t.r_multiple>=0?'var(--green)':'var(--red)'}">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(2)}</td>
+      <td><span class="st st-${t.exit_reason==='TP1'||t.exit_reason==='TP2'?'WIN':t.exit_reason==='STOP'?'LOSS':'INVALIDATED'}">${esc(t.exit_reason||t.status)}</span></td>
+    </tr>`).join("");
+  } else { pbody.innerHTML = ""; pempty.style.display = "block"; }
+
+  const sel = $("ghost-stats");
+  if (s.enabled && s.total_trades > 0) {
+    sel.innerHTML =
+      `<div class="mini-stats" style="margin-top:0">
+        <div class="mini win"><div class="n">${s.wins}</div><div class="l">Win</div></div>
+        <div class="mini loss"><div class="n">${s.losses}</div><div class="l">Loss</div></div>
+        <div class="mini"><div class="n">${(s.win_rate*100).toFixed(0)}%</div><div class="l">Win rate</div></div>
+      </div>` +
+      row("Total trades", s.total_trades) +
+      row("Total R", `<b style="color:${s.total_r>=0?'var(--green)':'var(--red)'}">${s.total_r>=0?'+':''}${s.total_r.toFixed(2)}R</b>`) +
+      row("Avg R (expectancy)", `${s.avg_r>=0?'+':''}${s.avg_r.toFixed(2)}R`) +
+      row("Avg MFE / MAE", `<span style="color:var(--green)">+${s.avg_mfe_r.toFixed(2)}R</span> / <span style="color:var(--red)">${s.avg_mae_r.toFixed(2)}R</span>`);
+  } else {
+    sel.innerHTML = `<div class="big-sub">No closed paper trades yet.</div>`;
+  }
+}
 
 boot();
 tickClock(); setInterval(tickClock, 1000);
 setInterval(refreshStatus, 3000);
-setInterval(async () => { await refreshChart(); refreshHistory(); }, 5000);
+setInterval(async () => { await refreshChart(); refreshHistory(); refreshGhost(); }, 5000);
 </script>
 </body>
 </html>

@@ -166,6 +166,54 @@ class OutputConfig(BaseModel):
     discord: DiscordOutputConfig = Field(default_factory=DiscordOutputConfig)
 
 
+class ConfluenceWeights(BaseModel):
+    """Explainable, CONFIGURABLE contribution weights for GHOST's confluence
+    score (Phase 14). The score is NOT a probability of winning — it is the
+    relative QUALITY of the conditions. Positive weights add on alignment;
+    penalties subtract on conflict."""
+    htf_alignment: float = 20.0            # HTF (context) bias matches the signal
+    mtf_structure_alignment: float = 15.0  # structure-tf (15m) bias matches
+    structure_alignment: float = 15.0      # execution-tf structure matches
+    liquidity_sweep: float = 15.0          # a supportive liquidity sweep occurred
+    vwap_alignment: float = 10.0           # price on the correct side of VWAP
+    volume_confirmation: float = 10.0      # RVOL >= threshold on the decision bar
+    rr_quality: float = 12.0               # nearest-target R:R is healthy
+    regime_alignment: float = 10.0         # regime favors this setup/direction
+    htf_conflict_penalty: float = 25.0     # subtracted when HTF opposes
+    against_structure_penalty: float = 20.0  # subtracted when structure opposes
+
+
+class GhostConfig(BaseModel):
+    """GHOST intelligence + paper-memory layer (Phase 14). Purely additive: it
+    reads the existing analysis and wraps the existing Setup/Signal engines with
+    context + confluence + NO_TRADE + paper-trade memory. It NEVER changes the
+    Data/Analysis/Setup/Signal/Risk logic, connects nothing external, and places
+    no orders. Disabled -> the runtime behaves exactly as before."""
+    enabled: bool = True
+    min_confluence_score: float = 55.0
+    weights: ConfluenceWeights = Field(default_factory=ConfluenceWeights)
+
+    # --- regime classification (deterministic, no-lookahead) --- #
+    regime_lookback: int = 40              # bars used to assess trend/range
+    regime_slope_lookback: int = 10        # bars for EMA slope
+    range_atr_ratio: float = 0.6           # |emaFast-emaSlow| < ratio*ATR => range-ish
+    transition_lookback: int = 6           # CHoCH within N bars => TRANSITION
+    high_vol_pct: float = 0.80             # ATR percentile above => HIGH volatility
+    low_vol_pct: float = 0.20              # below => LOW volatility
+
+    # --- NO_TRADE guards --- #
+    block_htf_conflict: bool = True        # HTF strongly opposes => NO_TRADE
+    block_against_structure: bool = True   # execution structure opposes => NO_TRADE
+    max_atr_percentile: float = 0.97       # above => excessive_volatility NO_TRADE
+    min_rr: float = 1.0                    # below nearest-target R:R => target_too_close
+    stale_after_bars: int = 3              # decision bar older than N bars => stale_data
+    rvol_confirm: float = 1.0              # RVOL >= this counts as volume confirmation
+    valid_sessions: list[str] = Field(default_factory=lambda: ["RTH", "ETH"])
+
+    # --- paper memory --- #
+    paper_enabled: bool = True             # create/track PaperTrades from decisions
+
+
 class EngineConfig(BaseModel):
     version: int = 1
     data: DataConfig = Field(default_factory=DataConfig)
@@ -181,6 +229,7 @@ class EngineConfig(BaseModel):
     risk: RiskConfig = Field(default_factory=RiskConfig)
     live: LiveDataConfig = Field(default_factory=LiveDataConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
+    ghost: GhostConfig = Field(default_factory=GhostConfig)
 
     @classmethod
     def load(cls, path: Optional[str | Path] = None) -> "EngineConfig":

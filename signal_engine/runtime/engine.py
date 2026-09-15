@@ -62,6 +62,11 @@ class BotRuntime:
     # NoTrade produced, so the dashboard's history survives a restart —
     # `recent_signals` (below) stays purely in-memory/transient by design.
     signal_log_path: str | Path | None = None
+    # Phase 14, optional: GHOST intelligence brain + paper-trade memory. Both
+    # None => runtime behaves exactly as before (no GHOST, no paper trades).
+    ghost: object | None = None                    # ghost.brain.GhostBrain
+    paper_tracker: object | None = None            # paper.tracker.PaperTradeTracker
+    ghost_log_path: str | Path | None = None
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
     started_at: datetime | None = field(default=None, init=False)
@@ -77,6 +82,10 @@ class BotRuntime:
     daily_realized_pnl: float = field(default=0.0, init=False)
     data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
     feed_last_update_at: dict[str, datetime] = field(default_factory=dict, init=False)
+    # Phase 14: latest GHOST market-state + decision per symbol (JSON-safe), for
+    # the dashboard. Populated only when `ghost` is configured.
+    ghost_market_state: dict[str, dict] = field(default_factory=dict, init=False)
+    ghost_last_decision: dict[str, dict] = field(default_factory=dict, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -183,6 +192,7 @@ class BotRuntime:
 
         self._update_instrument_status(symbol, ctx)
 
+        results: list[Signal | NoTrade] = []
         if candidates:
             try:
                 results = self.signal_engine.evaluate_candidates(ctx, candidates)
@@ -199,6 +209,16 @@ class BotRuntime:
                     no_trades_produced += 1
                     self.recent_signals.append(result)
                     self._persist_record(result)
+
+        # Phase 14: GHOST intelligence + paper memory (optional, additive). Runs
+        # every cycle so active paper trades update on each closed bar, even when
+        # there were no new candidates. Never affects the base pipeline above;
+        # a failure here can never break the trading cycle.
+        if self.ghost is not None:
+            try:
+                self._run_ghost(symbol, ctx, results)
+            except Exception as exc:  # noqa: BLE001
+                self._set_component(ComponentStatus.DEGRADED, "ghost", str(exc))
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
@@ -230,6 +250,61 @@ class BotRuntime:
                 self._update_discord_health()
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
+
+    def _run_ghost(self, symbol: str, ctx, base_results: list) -> None:
+        """Phase 14 GHOST layer: interpret context, decide with confluence, and
+        keep paper-trade memory. Read-only w.r.t. the trading engines — it only
+        CALLS the analyzer and consumes the base results already produced."""
+        # 1) update active paper trades with this decision (closed) bar.
+        exec_tf = self.data_engine.cfg.timeframe_roles.execution
+        bars = ctx.execution.bars
+        if self.paper_tracker is not None and not bars.empty:
+            try:
+                self.paper_tracker.update_symbol(symbol, bars.iloc[-1], ctx.decision_time)
+            except Exception:  # noqa: BLE001 - memory update never breaks the cycle
+                pass
+
+        # 2) build market state + GHOST decisions (same analysis the setups saw).
+        analysis = self.setup_engine.analyzer.analyze(ctx)
+        feed_status = self.data_feed_status.get(symbol)
+        data_stale = getattr(feed_status, "value", None) == "STALE"
+        has_active = (self.paper_tracker.has_open if self.paper_tracker is not None else None)
+        ms, decisions = self.ghost.evaluate(ctx, analysis, base_results,
+                                            data_stale=data_stale, has_active=has_active)
+        self._set_component(ComponentStatus.OK, "ghost")
+        self.ghost_market_state[symbol] = ms.to_dict()
+        if decisions:
+            self.ghost_last_decision[symbol] = decisions[-1].to_dict()
+
+        # 3) create paper trades for GHOST-approved decisions (dedup inside).
+        for d in decisions:
+            self._persist_ghost(d)
+            if d.is_trade and self.paper_tracker is not None and d.signal is not None:
+                sig = d.signal
+                self.paper_tracker.open_trade(
+                    signal_id=sig.signal_id, instrument=sig.instrument,
+                    direction=d.action, setup=sig.setup, entry=sig.entry,
+                    stop=sig.stop, take_profits=list(sig.take_profits),
+                    opened_at=sig.timestamp, invalidation_price=sig.invalidation_price,
+                    timeframe=sig.timeframe,
+                    context={
+                        "regime": ms.regime.regime.value,
+                        "session": ms.session,
+                        "mtf": ms.mtf.alignment.value,
+                        "confluence": d.confluence.score if d.confluence else None,
+                    },
+                )
+
+    def _persist_ghost(self, decision) -> None:
+        if self.ghost_log_path is None:
+            return
+        try:
+            path = Path(self.ghost_log_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a") as fh:
+                fh.write(json.dumps(_ghost_log_entry(decision)) + "\n")
+        except OSError:
+            pass
 
     def _pull_live_bars(self, symbol: str) -> dict[str, pd.DataFrame] | None:
         """Poll the configured LiveFeed for `symbol` and reflect its health
@@ -271,6 +346,8 @@ class BotRuntime:
             "risk",
             ComponentStatus.OK if self.risk_engine is not None else ComponentStatus.DISABLED,
         )
+        if self.ghost is not None:
+            self.component_health["ghost"] = ComponentHealth("ghost", ComponentStatus.OK)
         self._update_discord_health()
 
     def _update_discord_health(self) -> None:
@@ -387,6 +464,13 @@ class BotRuntime:
             "feed_last_update_at": {
                 sym: _iso(ts) for sym, ts in self.feed_last_update_at.items()
             },
+            "ghost": {
+                "enabled": self.ghost is not None,
+                "active_trades": (len(self.paper_tracker.active())
+                                  if self.paper_tracker is not None else 0),
+                "regime": {sym: (st.get("regime", {}) or {}).get("regime")
+                           for sym, st in self.ghost_market_state.items()},
+            },
         }
 
     def recent_signals_dict(self, limit: int = 20) -> list[dict]:
@@ -450,6 +534,23 @@ def _record_to_dict(r: Signal | NoTrade) -> dict:
         # Phase 12: keep NoTrade detail symmetric with SIGNAL entries.
         "timeframe": r.timeframe,
         "candidate_direction": r.candidate_direction.value if r.candidate_direction else None,
+    }
+
+
+def _ghost_log_entry(decision) -> dict:
+    """Compact, JSON-safe record of a GHOST decision for the audit log."""
+    ms = decision.market_state
+    return {
+        "kind": "GHOST",
+        "action": decision.action,
+        "instrument": decision.instrument,
+        "setup": decision.setup,
+        "timestamp": _iso(decision.timestamp),
+        "regime": ms.regime.regime.value,
+        "session": ms.session,
+        "mtf": ms.mtf.alignment.value,
+        "score": decision.confluence.score if decision.confluence else None,
+        "no_trade_reasons": [r.value for r in decision.no_trade_reasons],
     }
 
 

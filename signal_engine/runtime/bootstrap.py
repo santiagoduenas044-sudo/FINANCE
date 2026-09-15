@@ -41,6 +41,8 @@ from .engine import BotRuntime
 ROOT = Path(__file__).resolve().parent.parent.parent
 SAMPLES = ROOT / "tests" / "data_samples"
 DEFAULT_SIGNAL_LOG = ROOT / "data_store" / "signal_log.jsonl"
+DEFAULT_GHOST_LOG = ROOT / "data_store" / "ghost_log.jsonl"
+DEFAULT_PAPER_DIR = ROOT / "data_store" / "paper"
 BARS_PER_TICK = 5  # how many 1m bars the simulated fallback delivers per poll
 
 # Symbol -> bundled sample contract for the SimulatedLiveAdapter fallback.
@@ -136,10 +138,23 @@ def build_runtime(
     signal_engine = SignalEngine(data_engine.cfg.signals)
     dispatcher = OutputDispatcher.from_config(data_engine.cfg)  # Discord if enabled+configured
 
+    # Phase 14: GHOST brain + paper-trade memory (additive; disabled -> identical
+    # behaviour to before). No new connections, no orders, no AI in the path.
+    ghost = paper_tracker = ghost_log = None
+    gcfg = data_engine.cfg.ghost
+    if gcfg.enabled:
+        from ..ghost.brain import GhostBrain
+        from ..paper.tracker import PaperTradeTracker
+        ghost = GhostBrain(gcfg)
+        ghost_log = DEFAULT_GHOST_LOG
+        if gcfg.paper_enabled:
+            paper_tracker = PaperTradeTracker(store_dir=DEFAULT_PAPER_DIR)
+
     runtime = BotRuntime(
         data_engine, setup_engine, signal_engine, registry,
         output_dispatcher=dispatcher, live_feeds=live_feeds,
         signal_log_path=signal_log_path,
+        ghost=ghost, paper_tracker=paper_tracker, ghost_log_path=ghost_log,
     )
     # Record each feed's real source on the runtime so status/chart can report
     # simulated-vs-delayed honestly (read-only metadata; no logic depends on it).

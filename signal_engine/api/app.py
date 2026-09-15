@@ -150,6 +150,41 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             raise HTTPException(status_code=400, detail="limit must be between 10 and 600")
         return build_chart_data(runtime, symbol, limit=limit)
 
+    @app.get("/api/ghost/market/{symbol}")
+    def get_ghost_market(symbol: str) -> dict:
+        """GHOST's structured market state for a symbol (regime, MTF, structure,
+        liquidity, key levels) plus its latest decision. Empty when GHOST is off
+        or no cycle has run for the symbol yet."""
+        if symbol not in (runtime.live_feeds or {}):
+            raise HTTPException(status_code=404, detail=f"unknown symbol {symbol!r}")
+        return {
+            "enabled": runtime.ghost is not None,
+            "market_state": runtime.ghost_market_state.get(symbol),
+            "last_decision": runtime.ghost_last_decision.get(symbol),
+        }
+
+    @app.get("/api/ghost/trades/active")
+    def get_active_trades(symbol: str | None = None) -> dict:
+        if runtime.paper_tracker is None:
+            return {"trades": [], "enabled": False}
+        trades = runtime.paper_tracker.active(symbol)
+        return {"trades": [t.to_dict() for t in trades], "enabled": True}
+
+    @app.get("/api/ghost/trades/history")
+    def get_trade_history(limit: int = 50) -> dict:
+        if runtime.paper_tracker is None:
+            return {"trades": [], "enabled": False}
+        if limit < 1 or limit > 500:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+        return {"trades": [t.to_dict() for t in runtime.paper_tracker.history(limit)],
+                "enabled": True}
+
+    @app.get("/api/ghost/stats")
+    def get_ghost_stats() -> dict:
+        if runtime.paper_tracker is None:
+            return {"enabled": False}
+        return {"enabled": True, **runtime.paper_tracker.stats()}
+
     @app.get("/api/signals/detail/{signal_id}")
     def get_signal_detail(signal_id: str) -> dict:
         """Full detail for one signal by id. Looks in the persisted log first
