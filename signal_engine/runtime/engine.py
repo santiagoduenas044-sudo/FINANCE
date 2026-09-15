@@ -11,9 +11,11 @@ are — no changes to their logic.
 """
 from __future__ import annotations
 
+import json
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 import pandas as pd
@@ -56,6 +58,10 @@ class BotRuntime:
     output_dispatcher: OutputDispatcher | None = None
     live_feeds: dict[str, LiveFeed] | None = None   # Phase 10, optional
     now_fn: Callable[[], datetime] = field(default=_utcnow)
+    # Phase 11, optional: append-only JSONL audit trail of every Signal/
+    # NoTrade produced, so the dashboard's history survives a restart —
+    # `recent_signals` (below) stays purely in-memory/transient by design.
+    signal_log_path: str | Path | None = None
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
     started_at: datetime | None = field(default=None, init=False)
@@ -70,6 +76,7 @@ class BotRuntime:
     trades_today: int = field(default=0, init=False)
     daily_realized_pnl: float = field(default=0.0, init=False)
     data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
+    feed_last_update_at: dict[str, datetime] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         self._init_component_health()
@@ -187,6 +194,7 @@ class BotRuntime:
                 else:
                     no_trades_produced += 1
                     self.recent_signals.append(result)
+                    self._persist_record(result)
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
@@ -196,6 +204,7 @@ class BotRuntime:
 
     def _handle_signal(self, signal: Signal) -> None:
         self.recent_signals.append(signal)
+        self._persist_record(signal)
         self.trades_today += 1
 
         if self.risk_engine is not None and self.account is not None:
@@ -230,6 +239,8 @@ class BotRuntime:
         feed.poll()
         health = feed.health()
         self.data_feed_status[symbol] = health.status
+        if health.last_update_at is not None:
+            self.feed_last_update_at[symbol] = health.last_update_at
 
         if health.status is DataFeedStatus.DISCONNECTED:
             self._set_component(ComponentStatus.DOWN, "data",
@@ -293,6 +304,21 @@ class BotRuntime:
     def _log(self, event: RuntimeEvent) -> None:
         self.events.append(event)
 
+    def _persist_record(self, result: Signal | NoTrade) -> None:
+        """Append one Signal/NoTrade to the on-disk audit log, if configured.
+        Best-effort: a disk/permission failure never breaks the trading
+        cycle — it only downgrades to an in-memory-only record."""
+        if self.signal_log_path is None:
+            return
+        entry = _record_to_dict(result)
+        try:
+            path = Path(self.signal_log_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a") as fh:
+                fh.write(json.dumps(entry) + "\n")
+        except OSError as exc:
+            self._set_component(ComponentStatus.DEGRADED, "signal_log", type(exc).__name__)
+
     def _notify_discord(self, event: RuntimeEvent) -> None:
         if self.output_dispatcher is None:
             return
@@ -331,24 +357,43 @@ class BotRuntime:
             "data_feed_status": {
                 sym: status.value for sym, status in self.data_feed_status.items()
             },
+            "feed_last_update_at": {
+                sym: _iso(ts) for sym, ts in self.feed_last_update_at.items()
+            },
         }
 
     def recent_signals_dict(self, limit: int = 20) -> list[dict]:
-        out = []
-        for r in list(self.recent_signals)[-limit:][::-1]:
-            if isinstance(r, Signal):
-                out.append({
-                    "kind": "SIGNAL", "instrument": r.instrument, "setup": r.setup,
-                    "direction": r.direction.value, "timestamp": r.timestamp.isoformat(),
-                    "entry": r.entry, "stop": r.stop, "take_profits": r.take_profits,
-                })
-            elif isinstance(r, NoTrade):
-                out.append({
-                    "kind": "NO_TRADE", "instrument": r.instrument,
-                    "setup": r.setup, "timestamp": r.timestamp.isoformat(),
-                    "reasons": r.reasons,
-                })
-        return out
+        return [_record_to_dict(r) for r in list(self.recent_signals)[-limit:][::-1]]
+
+
+def _record_to_dict(r: Signal | NoTrade) -> dict:
+    if isinstance(r, Signal):
+        return {
+            "kind": "SIGNAL", "instrument": r.instrument, "setup": r.setup,
+            "direction": r.direction.value, "timestamp": r.timestamp.isoformat(),
+            "entry": r.entry, "stop": r.stop, "take_profits": r.take_profits,
+        }
+    return {
+        "kind": "NO_TRADE", "instrument": r.instrument,
+        "setup": r.setup, "timestamp": r.timestamp.isoformat(),
+        "reasons": r.reasons,
+    }
+
+
+def read_signal_log(path: str | Path, limit: int = 50) -> list[dict]:
+    """Read the last `limit` entries from a signal_log_path audit file.
+    Returns [] if the file doesn't exist yet (e.g. no signal fired since
+    the log was configured) — never raises for that expected case."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    lines = p.read_text().splitlines()
+    out = []
+    for line in lines[-limit:]:
+        line = line.strip()
+        if line:
+            out.append(json.loads(line))
+    return out[::-1]
 
 
 def _iso(dt: datetime | pd.Timestamp | None) -> str | None:

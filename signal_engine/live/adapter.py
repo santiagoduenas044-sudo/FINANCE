@@ -17,6 +17,12 @@ from .models import LiveBar
 
 class LiveDataAdapter(ABC):
     name: str
+    # Whether this source is known to be delayed (vs. real-time). LiveFeed
+    # reads this to report DataFeedStatus.DELAYED instead of LIVE — purely
+    # informational for the dashboard, never affects reconnect/staleness
+    # logic. Default False so existing adapters (SimulatedLiveAdapter) are
+    # unaffected; a real delayed vendor sets it True.
+    is_delayed: bool = False
 
     @abstractmethod
     def connect(self) -> None:

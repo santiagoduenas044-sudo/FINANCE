@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..runtime.engine import BotRuntime
+from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -36,6 +36,14 @@ def create_app(runtime: BotRuntime) -> FastAPI:
         if limit < 1 or limit > 200:
             raise HTTPException(status_code=400, detail="limit must be between 1 and 200")
         return {"signals": runtime.recent_signals_dict(limit=limit)}
+
+    @app.get("/api/signals/history")
+    def get_signal_history(limit: int = 50) -> dict:
+        if limit < 1 or limit > 500:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+        if runtime.signal_log_path is None:
+            return {"signals": [], "persisted": False}
+        return {"signals": read_signal_log(runtime.signal_log_path, limit=limit), "persisted": True}
 
     @app.get("/api/risk/today")
     def get_risk_today() -> dict:

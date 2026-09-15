@@ -79,6 +79,7 @@
   .pill-DOWN { background: rgba(239,68,68,.15); color: var(--red); }
   .pill-DISABLED { background: rgba(107,114,128,.15); color: var(--gray); }
   .pill-feed-LIVE { background: rgba(34,197,94,.15); color: var(--green); }
+  .pill-feed-DELAYED { background: rgba(59,130,246,.15); color: var(--accent); }
   .pill-feed-STALE { background: rgba(234,179,8,.15); color: var(--yellow); }
   .pill-feed-DISCONNECTED { background: rgba(239,68,68,.15); color: var(--red); }
   .instr { display: flex; justify-content: space-between; padding: 10px 0;
@@ -135,7 +136,7 @@
     </div>
 
     <div class="panel" style="grid-column: 1 / -1;">
-      <h2>Recent Signals</h2>
+      <h2>Recent Signals <span id="signals-persisted" style="color:var(--muted); text-transform:none; font-weight:400;"></span></h2>
       <table>
         <thead><tr><th>Time</th><th>Instrument</th><th>Setup</th><th>Kind</th><th>Entry</th><th>Stop</th></tr></thead>
         <tbody id="signals-body"></tbody>
@@ -205,6 +206,7 @@ async function refresh() {
   const instrDiv = document.getElementById("instruments");
   const instruments = Object.entries(status.instruments || {});
   const feedStatus = status.data_feed_status || {};
+  const feedUpdated = status.feed_last_update_at || {};
   instrDiv.innerHTML = instruments.length
     ? instruments.map(([sym, i]) => {
         const fs = feedStatus[sym] || "DISCONNECTED";
@@ -213,6 +215,9 @@ async function refresh() {
           <span class="sym">${sym} <span class="pill pill-feed-${fs}">${fs}</span></span>
           <span class="px">${i.last_price != null ? i.last_price.toFixed(2) : "-"}
             <span style="color:var(--muted)"> (${i.session || "-"})</span></span>
+        </div>
+        <div style="color:var(--muted); font-size:11.5px; margin:-6px 0 8px;">
+          Last feed update: ${fmtTime(feedUpdated[sym])}
         </div>`;
       }).join("")
     : '<div class="empty">No data yet.</div>';
@@ -224,12 +229,16 @@ async function refresh() {
       <span class="pill pill-${c.status}">${c.status}</span>
     </div>`).join("");
 
-  let signals;
+  let signals, persisted = false;
   try {
-    signals = (await api("/api/signals/recent?limit=15")).signals;
+    const hist = await api("/api/signals/history?limit=15");
+    signals = hist.signals;
+    persisted = hist.persisted;
   } catch (e) {
     signals = [];
   }
+  document.getElementById("signals-persisted").textContent =
+    persisted ? "(saved to disk — survives restart)" : "(in-memory only — configure signal_log_path)";
   const tbody = document.getElementById("signals-body");
   const empty = document.getElementById("signals-empty");
   if (!signals.length) {

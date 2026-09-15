@@ -15,7 +15,8 @@ import pandas as pd
 
 
 class DataFeedStatus(str, Enum):
-    LIVE = "LIVE"                  # connected and data is fresh
+    LIVE = "LIVE"                  # connected, data is fresh, source is real-time
+    DELAYED = "DELAYED"            # connected, data is fresh, but source is known-delayed
     STALE = "STALE"                # connected (or was), but no fresh data recently
     DISCONNECTED = "DISCONNECTED"  # adapter reports no connection
 

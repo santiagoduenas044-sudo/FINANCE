@@ -168,8 +168,10 @@ class LiveFeed:
             status = DataFeedStatus.DISCONNECTED
         else:
             age = (self.now_fn() - self._last_update_at).total_seconds()
-            status = (DataFeedStatus.LIVE if age <= self.cfg.live.stale_after_seconds
-                     else DataFeedStatus.STALE)
+            if age > self.cfg.live.stale_after_seconds:
+                status = DataFeedStatus.STALE
+            else:
+                status = DataFeedStatus.DELAYED if self.adapter.is_delayed else DataFeedStatus.LIVE
         return FeedHealth(
             status=status, last_update_at=self._last_update_at,
             last_bar_timestamp=self._last_bar_ts,
