@@ -1,5 +1,10 @@
 # Deploying the Futures Signal Engine (24/7)
 
+> **Running it on a Mac mini (Apple Silicon) as a local server?** Use the native
+> launchd setup in **[`deploy/macos/README.md`](macos/README.md)** — one command
+> (`bash deploy/macos/install.sh`), no Docker. The guide below is for a
+> Linux VPS / cloud server.
+
 Two ways to run the bot + dashboard continuously on a VPS/cloud server so it
 keeps working with your Mac closed and Claude Code shut. Pick **one**.
 

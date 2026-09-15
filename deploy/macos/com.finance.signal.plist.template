@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd LaunchAgent for the FINANCE 24/7 signal bot + dashboard.
+  This is a TEMPLATE: deploy/macos/install.sh renders __REPO__ / __LOGDIR__
+  and installs it to ~/Library/LaunchAgents/com.finance.signal.plist.
+
+  Behaviour:
+    RunAtLoad + KeepAlive  -> starts at login and restarts automatically if it
+                              ever exits/crashes (single instance per Label, so
+                              no duplicate processes are possible).
+    ThrottleInterval       -> at least 10s between restarts (no tight crash loop).
+    ExitTimeOut            -> graceful-shutdown window: launchd sends SIGTERM,
+                              uvicorn stops the loop + runtime, then exits.
+    Standard*Path          -> persistent logs, easy to tail.
+  Secrets are NOT here — run.sh loads them from the repo's .env file.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.finance.signal</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/deploy/macos/run.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>ExitTimeOut</key>
+  <integer>25</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>__LOGDIR__/dashboard.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOGDIR__/dashboard.err.log</string>
+</dict>
+</plist>
