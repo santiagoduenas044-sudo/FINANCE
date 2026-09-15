@@ -1,0 +1,149 @@
+"""Runtime bootstrap (Phase 13): build a fully-wired BotRuntime the same way
+for every entry point — the dashboard server, the headless 24/7 runner, and
+tests. Previously this lived inside scripts/run_dashboard.py; centralizing it
+keeps the data-source wiring (real Yahoo delayed → simulated fallback) in ONE
+place so both the dashboard and the daemon behave identically.
+
+Nothing here changes the trading engines. It only *wires them together* exactly
+as the earlier phases already did:
+
+    Yahoo delayed ES/NQ → LiveFeed → BotRuntime → (Setup → Signal → Risk) → Discord + Dashboard
+
+Data source policy (unchanged from Phase 11):
+  * Try YahooDelayedAdapter first for each symbol (real delayed ES=F/NQ=F).
+  * If unreachable, ES falls back to replaying the bundled ES sample data
+    (SimulatedLiveAdapter); NQ has no bundled sample, so it is skipped rather
+    than fabricated.
+The fallback is flagged (``simulated=True``) so the dashboard can show a strong,
+honest visual distinction between real delayed data and the sample fallback.
+"""
+from __future__ import annotations
+
+import logging
+import sys
+from dataclasses import dataclass
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+
+from ..config.schema import EngineConfig
+from ..data.contracts import ContractRegistry
+from ..data.engine import DataEngine
+from ..data.ingestion import normalize
+from ..data.providers.csv_provider import CsvProvider
+from ..live.feed import LiveFeed
+from ..live.simulated import SimulatedLiveAdapter
+from ..live.yahoo_adapter import YahooDelayedAdapter
+from ..output.dispatcher import OutputDispatcher
+from ..setups.engine import SetupEngine
+from ..signals.engine import SignalEngine
+from .engine import BotRuntime
+
+ROOT = Path(__file__).resolve().parent.parent.parent
+SAMPLES = ROOT / "tests" / "data_samples"
+DEFAULT_SIGNAL_LOG = ROOT / "data_store" / "signal_log.jsonl"
+BARS_PER_TICK = 5  # how many 1m bars the simulated fallback delivers per poll
+
+# Symbol -> bundled sample contract for the SimulatedLiveAdapter fallback.
+# Only symbols listed here can fall back when the real source is unreachable —
+# NQ is intentionally absent (no fabricated data).
+_SIMULATED_FALLBACK_SOURCE = {"ES": "ESM26"}
+
+
+def configure_logging(log_file: str = "", level: int = logging.INFO) -> logging.Logger:
+    """Set up logging suitable for unattended operation: timestamped lines to
+    stdout (captured by systemd/journald or Docker) plus an optional rotating
+    file. Returns the ``signal_engine`` logger. Idempotent-ish: clears prior
+    handlers so re-running in one process doesn't duplicate lines."""
+    fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-7s %(name)s: %(message)s", "%Y-%m-%d %H:%M:%S")
+    root = logging.getLogger("signal_engine")
+    root.setLevel(level)
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    stream = logging.StreamHandler(sys.stdout)
+    stream.setFormatter(fmt)
+    root.addHandler(stream)
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        fileh = RotatingFileHandler(log_file, maxBytes=5_000_000, backupCount=5)
+        fileh.setFormatter(fmt)
+        root.addHandler(fileh)
+    root.propagate = False
+    return root
+
+
+@dataclass(frozen=True)
+class FeedInfo:
+    """What actually got wired for a symbol — surfaced so the dashboard/logs
+    can distinguish real delayed data from the sample fallback."""
+    symbol: str
+    source: str            # adapter name, e.g. "yahoo_delayed" / "simulated"
+    delayed: bool          # real-but-delayed source?
+    simulated: bool        # replaying bundled sample data (NOT real market data)?
+
+
+def build_live_feed(symbol: str, data_engine: DataEngine, *, logger=None,
+                    allow_simulated_fallback: bool = True):
+    """Return (LiveFeed | None, FeedInfo | None) for `symbol`."""
+    def _log(msg: str) -> None:
+        (logger.info if logger else print)(msg)
+
+    real_adapter = YahooDelayedAdapter(timezone=data_engine.cfg.data.timezone)
+    try:
+        real_adapter.connect()
+        _log(f"[{symbol}] connected to Yahoo Finance (delayed) live data.")
+        feed = LiveFeed(real_adapter, symbol, data_engine.cfg)
+        return feed, FeedInfo(symbol, real_adapter.name, True, False)
+    except ConnectionError as exc:
+        _log(f"[{symbol}] Yahoo Finance unreachable ({type(exc).__name__}); falling back...")
+
+    contract = _SIMULATED_FALLBACK_SOURCE.get(symbol) if allow_simulated_fallback else None
+    if contract is None:
+        _log(f"[{symbol}] no simulated fallback data available — skipping this symbol.")
+        return None, None
+
+    provider = CsvProvider(SAMPLES)
+    raw = provider.get_raw_bars(symbol, "1m", contract=contract)
+    historical_1m = normalize(raw, data_engine.cfg.data, "1m")
+    sim_adapter = SimulatedLiveAdapter(historical_1m, symbol=symbol, bars_per_poll=BARS_PER_TICK)
+    _log(f"[{symbol}] using SimulatedLiveAdapter (replaying bundled sample data).")
+    feed = LiveFeed(sim_adapter, symbol, data_engine.cfg)
+    return feed, FeedInfo(symbol, sim_adapter.name, False, True)
+
+
+def build_runtime(
+    symbols: list[str],
+    *,
+    config: EngineConfig | None = None,
+    signal_log_path: str | Path | None = DEFAULT_SIGNAL_LOG,
+    logger=None,
+    allow_simulated_fallback: bool = True,
+) -> tuple[BotRuntime, dict[str, FeedInfo]]:
+    """Wire a BotRuntime for `symbols`. Returns (runtime, feed_info_by_symbol)."""
+    data_engine = DataEngine(config) if config is not None else DataEngine()
+    registry = ContractRegistry.load()
+
+    live_feeds: dict[str, LiveFeed] = {}
+    feed_info: dict[str, FeedInfo] = {}
+    for symbol in symbols:
+        feed, info = build_live_feed(symbol, data_engine, logger=logger,
+                                     allow_simulated_fallback=allow_simulated_fallback)
+        if feed is not None and info is not None:
+            live_feeds[symbol] = feed
+            feed_info[symbol] = info
+
+    setup_engine = SetupEngine(data_engine.cfg, registry)
+    signal_engine = SignalEngine(data_engine.cfg.signals)
+    dispatcher = OutputDispatcher.from_config(data_engine.cfg)  # Discord if enabled+configured
+
+    runtime = BotRuntime(
+        data_engine, setup_engine, signal_engine, registry,
+        output_dispatcher=dispatcher, live_feeds=live_feeds,
+        signal_log_path=signal_log_path,
+    )
+    # Record each feed's real source on the runtime so status/chart can report
+    # simulated-vs-delayed honestly (read-only metadata; no logic depends on it).
+    runtime.feed_info = {s: {"source": i.source, "delayed": i.delayed,
+                             "simulated": i.simulated}
+                         for s, i in feed_info.items()}
+    return runtime, feed_info

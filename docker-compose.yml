@@ -1,0 +1,35 @@
+# 24/7 Futures Signal Engine (Phase 13).
+#
+#   1. cp .env.example .env   and set at least DASHBOARD_TOKEN (remote mode
+#      refuses to serve publicly without one).
+#   2. docker compose up -d --build
+#   3. Dashboard: http://<host>:8000/?token=<DASHBOARD_TOKEN>
+#
+# No broker, no order execution, no auto-trading of an account.
+services:
+  signal-engine:
+    build: .
+    image: futures-signal-engine:latest
+    restart: unless-stopped          # auto-recover after crashes / reboots
+    ports:
+      - "${BOT_PORT:-8000}:8000"
+    environment:
+      BOT_MODE: remote
+      BOT_HOST: 0.0.0.0
+      BOT_PORT: 8000
+      BOT_AUTO_START: "true"
+      BOT_SYMBOLS: "${BOT_SYMBOLS:-ES,NQ}"
+      BOT_CYCLE_SECONDS: "${BOT_CYCLE_SECONDS:-5}"
+      # Secrets come from your .env — never baked into the image.
+      DASHBOARD_TOKEN: "${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env for remote mode}"
+      DISCORD_WEBHOOK_URL: "${DISCORD_WEBHOOK_URL:-}"
+      BOT_CORS_ORIGINS: "${BOT_CORS_ORIGINS:-}"
+    volumes:
+      # Persist the signal log across restarts/redeploys.
+      - ./data_store:/app/data_store
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status==200 else sys.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

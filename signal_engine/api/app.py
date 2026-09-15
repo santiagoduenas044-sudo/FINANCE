@@ -10,23 +10,76 @@ URLs, no tokens) — see signal_engine/runtime/engine.py.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..config.runtime_settings import ServerSettings
 from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
+
 from .chart import build_chart_data
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 _VALID_ACTIONS = {"start", "pause", "stop"}
 
+# Endpoints reachable without an auth token even when auth is enabled: the
+# health check (for load balancers / systemd / uptime probes) and the static
+# UI shell itself (the browser then sends the token on the /api/* calls).
+_AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
+_AUTH_EXEMPT_EXACT = {"/"}
 
-def create_app(runtime: BotRuntime) -> FastAPI:
+
+def _is_auth_exempt(path: str) -> bool:
+    return path in _AUTH_EXEMPT_EXACT or path.startswith(_AUTH_EXEMPT_PREFIXES)
+
+
+def _extract_token(request: Request) -> str:
+    """Accept the token via `Authorization: Bearer <token>` (preferred) or a
+    `?token=` query param (so the dashboard link can carry it on a phone). This
+    is a placeholder auth mechanism — a real deployment should sit behind TLS
+    and, ideally, a reverse proxy doing proper auth."""
+    header = request.headers.get("authorization", "")
+    if header.lower().startswith("bearer "):
+        return header[7:].strip()
+    return request.query_params.get("token", "").strip()
+
+
+def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
+               service=None) -> FastAPI:
+    settings = settings or ServerSettings()
     app = FastAPI(title="Futures Signal Engine — Control Dashboard")
+    app.state.settings = settings
+    app.state.service = service
+    app.state.started_at = time.time()
+
+    # -- CORS: only when explicitly configured (never a wildcard) ---------- #
+    if settings.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_origins),
+            allow_credentials=True,
+            allow_methods=["GET", "POST"],
+            allow_headers=["*"],
+        )
+
+    # -- Auth placeholder: bearer token, enforced only when configured ----- #
+    # Local mode ships with auth DISABLED (loopback only). Remote mode REQUIRES
+    # a token (ServerSettings.validate()). The token value is read from the
+    # environment — never hard-coded, never returned in any response.
+    @app.middleware("http")
+    async def _auth_gate(request: Request, call_next):
+        if settings.auth_enabled and not _is_auth_exempt(request.url.path):
+            token = _extract_token(request)
+            if token != settings.auth_token:
+                return JSONResponse(status_code=401,
+                                    content={"detail": "unauthorized: missing or invalid token"})
+        return await call_next(request)
 
     @app.get("/api/status")
     def get_status() -> dict:
@@ -52,6 +105,34 @@ def create_app(runtime: BotRuntime) -> FastAPI:
             "trades_today": runtime.trades_today,
             "daily_realized_pnl": runtime.daily_realized_pnl,
         }
+
+    @app.get("/api/health")
+    def get_health() -> dict:
+        """Unauthenticated, secret-free liveness/readiness probe for systemd,
+        Docker, and uptime monitors. Reports enough to tell healthy from stuck
+        without exposing any configuration secret."""
+        return {
+            "ok": True,
+            "status": runtime.status.value,
+            "connection": runtime.connection_state(),
+            "uptime_seconds": round(time.time() - app.state.started_at, 1),
+            "last_heartbeat_at": runtime.to_status_dict()["last_heartbeat_at"],
+            "symbols": sorted((runtime.live_feeds or {}).keys()),
+            "mode": settings.mode,
+        }
+
+    @app.get("/api/service")
+    def get_service() -> dict:
+        """Runtime-loop diagnostics (poll/dedup counters). Empty when the API is
+        created without a BotService (e.g. unit tests)."""
+        svc = app.state.service
+        return svc.stats() if svc is not None else {"running": False, "attached": False}
+
+    @app.get("/api/config")
+    def get_config() -> dict:
+        """Secret-free view of how the server is configured (mode, host/port,
+        auth on/off). Never returns the token itself."""
+        return settings.public_dict()
 
     @app.get("/api/symbols")
     def get_symbols() -> dict:

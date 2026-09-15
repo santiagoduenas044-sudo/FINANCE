@@ -1,0 +1,44 @@
+# systemd unit for the Futures Signal Engine dashboard (includes the bot loop).
+# Runs 24/7 independently of Claude Code / any IDE.
+#
+# Install:
+#   sudo cp deploy/systemd/signal-dashboard.service /etc/systemd/system/
+#   sudo mkdir -p /etc/signal-engine
+#   sudo cp .env.example /etc/signal-engine/dashboard.env   # then edit secrets
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now signal-dashboard
+#   systemctl status signal-dashboard    # / journalctl -u signal-dashboard -f
+#
+# Adjust User, WorkingDirectory and ExecStart paths to your install location.
+[Unit]
+Description=Futures Signal Engine — Dashboard + Bot (delayed data, no auto-trading)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+WorkingDirectory=/opt/signal-engine
+Environment=PYTHONPATH=/opt/signal-engine
+# Secrets & config live outside the repo. In remote mode DASHBOARD_TOKEN is
+# required — the process refuses to serve publicly without it.
+EnvironmentFile=/etc/signal-engine/dashboard.env
+ExecStart=/opt/signal-engine/.venv/bin/python scripts/run_dashboard.py
+
+# Auto-recovery: always restart, with a small backoff, and don't give up.
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+# SIGINT triggers the service's graceful shutdown (stops the loop cleanly).
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# Light hardening.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

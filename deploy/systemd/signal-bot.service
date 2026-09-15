@@ -1,0 +1,35 @@
+# systemd unit for the HEADLESS Futures Signal Engine bot (no web dashboard).
+# Use this when you want the smallest always-on process — signals are written
+# to data_store/signal_log.jsonl and sent to Discord, with no HTTP served.
+#
+# Install (see signal-dashboard.service for full steps):
+#   sudo cp deploy/systemd/signal-bot.service /etc/systemd/system/
+#   sudo cp .env.example /etc/signal-engine/bot.env    # then edit secrets
+#   sudo systemctl enable --now signal-bot
+[Unit]
+Description=Futures Signal Engine — Headless Bot (delayed data, no auto-trading)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+Group=bot
+WorkingDirectory=/opt/signal-engine
+Environment=PYTHONPATH=/opt/signal-engine
+Environment=BOT_AUTO_START=true
+EnvironmentFile=/etc/signal-engine/bot.env
+ExecStart=/opt/signal-engine/.venv/bin/python scripts/run_bot.py
+
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

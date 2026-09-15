@@ -102,6 +102,27 @@
   .feed-STALE .dot   { background: var(--yellow); }
   .feed-DISCONNECTED     { color: var(--red); }
   .feed-DISCONNECTED .dot{ background: var(--red); }
+  .feed-SIMULATED        { color: var(--amber); background: rgba(255,171,94,.12) !important; }
+  .feed-SIMULATED .dot   { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .feed-CONNECTING       { color: var(--muted); }
+  .feed-CONNECTING .dot  { background: var(--muted); }
+
+  /* connection indicator in the top bar */
+  .conn { display: inline-flex; align-items: center; gap: 7px; }
+  .conn-CONNECTED   { color: var(--green); }   .conn-CONNECTED .dot   { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .conn-DEGRADED    { color: var(--yellow); }   .conn-DEGRADED .dot    { background: var(--yellow); }
+  .conn-DISCONNECTED{ color: var(--red); }      .conn-DISCONNECTED .dot{ background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .conn-CONNECTING  { color: var(--muted); }    .conn-CONNECTING .dot  { background: var(--muted); }
+  .conn-NONE        { color: var(--muted-2); }  .conn-NONE .dot        { background: var(--muted-2); }
+
+  /* simulated-data warning banner */
+  .sim-banner {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 18px;
+    padding: 11px 18px; border-radius: 12px; font-size: 12.5px; font-weight: 600;
+    color: #ffdcb3; background: linear-gradient(90deg, rgba(255,171,94,.16), rgba(255,171,94,.05));
+    border: 1px solid rgba(255,171,94,.35);
+  }
+  .sim-banner .b { font-weight: 800; color: var(--amber); letter-spacing: .04em; }
 
   /* ---------- Cards ---------- */
   .card {
@@ -137,7 +158,8 @@
     box-shadow: 0 6px 18px -8px var(--accent-glow);
   }
   .price-block { display: flex; align-items: baseline; gap: 12px; }
-  .price-now { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .price-now { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; transition: color .2s; }
+  .price-chg { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .price-sub { font-size: 12px; color: var(--muted); }
   .chart-top .spacer { flex: 1 1 auto; }
   .legend { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
@@ -247,11 +269,14 @@
   .st { padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
   .st-WIN { background: var(--green-soft); color: var(--green); }
   .st-LOSS { background: var(--red-soft); color: var(--red); }
-  .st-ACTIVE { background: rgba(90,169,255,.16); color: var(--blue); }
+  .st-ACTIVE { background: rgba(90,169,255,.16); color: var(--blue); position: relative; }
+  .st-ACTIVE::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--blue); margin-right: 5px; box-shadow: 0 0 6px var(--blue); animation: pulse 1.6s ease-in-out infinite; vertical-align: middle; }
   .st-INVALIDATED { background: rgba(107,114,128,.18); color: #9aa2b5; }
 
   /* ---------- Detail panel ---------- */
-  .detail-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 10px; }
+  .detail-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 40px 20px; line-height: 1.7; }
+  .detail-empty .ico { font-size: 30px; opacity: .35; display: block; margin-bottom: 10px; }
   .det-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
   .det-setup { font-size: 17px; font-weight: 700; }
   .det-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
@@ -306,11 +331,18 @@
     </div>
     <div class="spacer"></div>
     <div class="top-metrics">
+      <span class="chip conn conn-CONNECTING" id="conn-chip"><span class="dot"></span><span id="conn-text">—</span></span>
       <span class="chip" id="feed-chip"><span class="dot"></span><span id="feed-text">—</span></span>
       <span class="chip"><span class="k">Updated</span><span class="v" id="last-update">—</span></span>
       <span class="chip"><span class="k">Clock</span><span class="v" id="clock">—</span></span>
       <span id="status-badge" class="badge badge-OFFLINE"><span class="dot"></span><span id="status-text">OFFLINE</span></span>
     </div>
+  </div>
+
+  <!-- SIMULATED DATA WARNING -->
+  <div class="sim-banner" id="sim-banner" hidden>
+    <span class="b">⚠ SIMULATED</span>
+    <span>Yahoo Finance is unreachable — the chart is replaying <b>bundled sample data</b>, not live market data. Real ES/NQ delayed quotes resume automatically once the network is available.</span>
   </div>
 
   <!-- CHART -->
@@ -319,6 +351,7 @@
       <div class="sym-tabs" id="sym-tabs"></div>
       <div class="price-block">
         <span class="price-now" id="price-now">—</span>
+        <span class="price-chg" id="price-chg"></span>
         <span class="price-sub"><span id="price-tf">5m</span> · <span id="price-session">—</span></span>
       </div>
       <div class="spacer"></div>
@@ -405,14 +438,16 @@
           <thead><tr><th>Time</th><th>Instr</th><th>Setup</th><th>Dir</th><th>Entry</th><th>Stop</th><th>Status</th></tr></thead>
           <tbody id="signals-body"></tbody>
         </table>
-        <div id="signals-empty" class="detail-empty" style="display:none">No signals recorded yet.</div>
+        <div id="signals-empty" class="detail-empty" style="display:none">
+          <span class="ico">🛰️</span>No signals yet.<br>The bot logs every LONG/SHORT and NO-TRADE decision here as it runs.
+        </div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-h"><h2>Signal Details</h2><span class="chip" style="padding:5px 10px" id="detail-status"></span></div>
       <div class="card-b" id="detail-body">
-        <div class="detail-empty">Select a signal to inspect its full thesis, levels, and outcome.</div>
+        <div class="detail-empty"><span class="ico">🎯</span>Select a signal to inspect its full thesis, levels, and outcome.</div>
       </div>
     </div>
   </div>
@@ -427,8 +462,24 @@
 "use strict";
 // ------------------------------------------------------------------ helpers
 const $ = (id) => document.getElementById(id);
+
+// Remote-auth support (placeholder): a bearer token may be supplied via
+// ?token=... in the URL (persisted to localStorage) and is sent on every
+// API call. With auth disabled (local mode) this is simply ignored.
+const AUTH_TOKEN = (() => {
+  try {
+    const u = new URL(window.location.href);
+    const t = u.searchParams.get("token");
+    if (t) { localStorage.setItem("dash_token", t); return t; }
+    return localStorage.getItem("dash_token") || "";
+  } catch (e) { return ""; }
+})();
 async function api(path, opts) {
-  const res = await fetch(path, opts || {});
+  opts = opts || {};
+  if (AUTH_TOKEN) {
+    opts.headers = Object.assign({}, opts.headers, { Authorization: "Bearer " + AUTH_TOKEN });
+  }
+  const res = await fetch(path, opts);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.detail || res.statusText);
@@ -511,6 +562,11 @@ async function refreshStatus() {
   $("btn-pause").disabled = s.status !== "ONLINE";
   $("btn-stop").disabled = s.status === "OFFLINE";
 
+  // connection indicator (ONLINE while feeds reconnect => distinct from bot status)
+  const conn = s.connection || "CONNECTING";
+  const cc = $("conn-chip"); cc.className = `chip conn conn-${conn}`;
+  $("conn-text").textContent = conn;
+
   $("trades-today").textContent = s.trades_today ?? 0;
   $("daily-pnl").textContent = `$${Number(s.daily_realized_pnl || 0).toFixed(2)}`;
   $("last-update").textContent = ago(mostRecent(s.feed_last_update_at));
@@ -523,12 +579,14 @@ async function refreshStatus() {
   $("components").innerHTML = Object.entries(s.components || {}).map(([n,c]) =>
     `<div class="comp"><span class="cn">${n}</span><span class="pill pill-${c.status}" title="${(c.detail||"").replace(/"/g,"'")}">${c.status}</span></div>`).join("");
 
-  // market status feeds
+  // market status feeds — show SIMULATED distinctly from real DELAYED/LIVE
   const feeds = s.data_feed_status || {}, upd = s.feed_last_update_at || {}, inst = s.instruments || {};
+  const finfo = s.feed_info || {};
   const anySession = Object.values(inst).map(i => i.session).find(Boolean);
   $("mkt-session").textContent = anySession || "—";
-  $("mkt-feeds").innerHTML = Object.keys({...feeds, ...inst}).sort().map(sym => {
-    const fs = feeds[sym] || "DISCONNECTED";
+  $("mkt-feeds").innerHTML = Object.keys({...feeds, ...inst, ...finfo}).sort().map(sym => {
+    const sim = finfo[sym]?.simulated;
+    const fs = sim ? "SIMULATED" : (feeds[sym] || "DISCONNECTED");
     return `<div class="stat-row"><span class="k">${sym} <span class="feed-${fs}" style="font-weight:700"><span class="dot" style="display:inline-block;margin-right:4px"></span>${fs}</span></span>
       <span class="v">${fmtPx(inst[sym]?.last_price)} · ${ago(upd[sym])}</span></div>`;
   }).join("") || `<div class="big-sub">No instruments reporting yet.</div>`;
@@ -552,10 +610,19 @@ async function refreshChart() {
   // header
   $("price-tf").textContent = d.timeframe || "5m";
   $("price-session").textContent = d.session || "—";
-  $("price-now").textContent = fmtPx(d.last_price);
-  const fc = $("feed-chip"); const fs = d.feed_status || "DISCONNECTED";
-  fc.className = `chip feed-${fs}`;
-  $("feed-text").textContent = (d.delayed ? "DELAYED · " : "") + fs;
+  renderPrice(d);
+
+  // feed indicator: SIMULATED (amber) is visually distinct from real DELAYED (blue)
+  const fc = $("feed-chip");
+  let label, cls;
+  if (d.simulated) { label = "SIMULATED"; cls = "feed-SIMULATED"; }
+  else if (d.feed_status === "DELAYED") { label = "DELAYED"; cls = "feed-DELAYED"; }
+  else if (d.feed_status === "LIVE") { label = "LIVE"; cls = "feed-LIVE"; }
+  else if (d.feed_status === "STALE") { label = "STALE"; cls = "feed-STALE"; }
+  else { label = d.feed_status || "DISCONNECTED"; cls = "feed-DISCONNECTED"; }
+  fc.className = `chip ${cls}`;
+  $("feed-text").textContent = label;
+  $("sim-banner").hidden = !d.simulated;
 
   // signals stats for this symbol
   const sigs = (d.signals || []).filter(x => x.kind === "SIGNAL");
@@ -567,11 +634,26 @@ async function refreshChart() {
 
   const empty = $("chart-empty");
   if (!d.available || !d.candles.length) {
-    empty.textContent = d.reason ? `${d.reason}` : "Waiting for delayed market data…";
+    empty.innerHTML = `<div><div style="font-size:26px;opacity:.4;margin-bottom:8px">📡</div>${d.reason ? esc(d.reason) : "Waiting for delayed market data…"}</div>`;
     empty.classList.add("show");
   } else empty.classList.remove("show");
 
   drawChart();
+}
+
+// Current-price display: last price + change vs the first visible candle.
+function renderPrice(d) {
+  $("price-now").textContent = fmtPx(d.last_price);
+  const el = $("price-chg");
+  if (!el) return;
+  const candles = d.candles || [];
+  if (!candles.length || d.last_price == null) { el.textContent = ""; return; }
+  const base = candles[0].o;
+  const diff = d.last_price - base;
+  const pct = base ? (diff / base) * 100 : 0;
+  const up = diff >= 0;
+  el.textContent = `${up ? "▲" : "▼"} ${Math.abs(diff).toFixed(2)} (${up ? "+" : ""}${pct.toFixed(2)}%)`;
+  el.style.color = up ? "var(--green)" : "var(--red)";
 }
 
 // ------------------------------------------------------------------ recent signals table + history
@@ -623,7 +705,7 @@ function renderDetail(rec) {
   const body = $("detail-body"), stChip = $("detail-status");
   if (!rec) {
     stChip.textContent = ""; stChip.className = "chip"; stChip.style.display = "none";
-    body.innerHTML = `<div class="detail-empty">Select a signal to inspect its full thesis, levels, and outcome.</div>`;
+    body.innerHTML = `<div class="detail-empty"><span class="ico">🎯</span>Select a signal to inspect its full thesis, levels, and outcome.</div>`;
     return;
   }
   const st = rec.status || "ACTIVE";
@@ -758,24 +840,34 @@ function drawChart() {
     ctx.setLineDash([]);
   }
 
-  // ---- liquidity levels (horizontal)
-  if (state.layers.liquidity) for (const lv of (d.structure.liquidity || [])) {
-    if (lv.price < pMin || lv.price > pMax) continue;
-    const y = yAt(lv.price);
-    ctx.strokeStyle = COL.liq; ctx.globalAlpha = lv.swept_at ? 0.28 : 0.6;
-    ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(plotL, y); ctx.lineTo(plotR, y); ctx.stroke();
-    ctx.setLineDash([]); ctx.globalAlpha = 1;
-    ctx.fillStyle = COL.liq; ctx.globalAlpha = lv.swept_at ? 0.5 : 0.9;
-    ctx.textAlign = "left"; ctx.font = "9px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
-    ctx.fillText((lv.side==="buy-side"?"BSL":"SSL") + (lv.swept_at?" ✓":""), plotL + 3, y - 5);
-    ctx.globalAlpha = 1; ctx.font = "11px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
+  // ---- liquidity levels (horizontal). Labels are de-cluttered: only shown
+  // when far enough from an already-labeled level so they never stack.
+  if (state.layers.liquidity) {
+    const labeledY = [];
+    ctx.font = "9px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
+    for (const lv of (d.structure.liquidity || [])) {
+      if (lv.price < pMin || lv.price > pMax) continue;
+      const y = yAt(lv.price);
+      ctx.strokeStyle = COL.liq; ctx.globalAlpha = lv.swept_at ? 0.22 : 0.55;
+      ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(plotL, y); ctx.lineTo(plotR, y); ctx.stroke();
+      ctx.setLineDash([]);
+      if (!labeledY.some(ly => Math.abs(ly - y) < 12)) {
+        labeledY.push(y);
+        ctx.fillStyle = COL.liq; ctx.globalAlpha = lv.swept_at ? 0.5 : 0.9;
+        ctx.textAlign = "left";
+        ctx.fillText((lv.side === "buy-side" ? "BSL" : "SSL") + (lv.swept_at ? " ✓" : ""), plotL + 3, y - 5);
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.font = "11px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
   }
 
-  // ---- indicator lines
+  // ---- indicator lines (rounded joins for a smoother, more professional look)
   const line = (arr, color, width) => {
     if (!arr || !arr.length) return;
-    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath();
+    ctx.strokeStyle = color; ctx.lineWidth = width;
+    ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.beginPath();
     let started = false;
     for (const p of arr) {
       if (!tIndex.has(p.t)) continue;
@@ -783,6 +875,7 @@ function drawChart() {
       if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
     }
     ctx.stroke();
+    ctx.lineJoin = "miter"; ctx.lineCap = "butt";
   };
 
   // ---- candles + volume
@@ -806,6 +899,24 @@ function drawChart() {
   if (state.layers.ema20) line(d.indicators.ema20, COL.ema20, 1.4);
   if (state.layers.ema9) line(d.indicators.ema9, COL.ema9, 1.4);
   if (state.layers.vwap) line(d.indicators.vwap, COL.vwap, 1.6);
+
+  // ---- current/last price line + right-axis tag (a pro-terminal touch)
+  const lastC = candles[n - 1];
+  if (lastC && lastC.c >= pMin && lastC.c <= pMax) {
+    const y = yAt(lastC.c), up = lastC.c >= lastC.o, col = up ? COL.up : COL.down;
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.setLineDash([2, 3]); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(plotL, y); ctx.lineTo(plotR, y); ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+    // tag
+    const label = lastC.c.toFixed(2);
+    ctx.font = "10px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
+    const tw = ctx.measureText(label).width + 10;
+    ctx.fillStyle = col;
+    ctx.fillRect(plotR + 2, y - 8, Math.max(tw, w - plotR - 4), 16);
+    ctx.fillStyle = "#07090f"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText(label, plotR + 6, y);
+    ctx.font = "11px " + (CSS.getPropertyValue("--mono").trim() || "monospace");
+  }
 
   // ---- structure events (BOS/CHoCH)
   if (state.layers.structure) for (const ev of (d.structure.events || [])) {

@@ -162,6 +162,8 @@ def _empty_chart(symbol: str, timeframe: str, reason: str) -> dict:
         "reason": reason,
         "feed_status": "DISCONNECTED",
         "delayed": True,
+        "source": "unknown",
+        "simulated": False,
         "last_update_at": None,
         "last_bar_time": None,
         "last_price": None,
@@ -186,12 +188,18 @@ def build_chart_data(runtime: "BotRuntime", symbol: str,
         return _empty_chart(symbol, execution_tf, f"no data feed configured for {symbol!r}")
 
     health = feed.health()
+    info = (runtime.feed_info or {}).get(symbol, {})
+    source = info.get("source", getattr(feed.adapter, "name", "unknown"))
+    simulated = bool(info.get("simulated", not feed.adapter.is_delayed
+                              and getattr(feed.adapter, "name", "") == "simulated"))
     tf_bars = feed.get_tf_bars()
     exec_bars = tf_bars.get(execution_tf)
     if exec_bars is None or exec_bars.empty:
         payload = _empty_chart(symbol, execution_tf, "no bars received yet")
         payload["feed_status"] = health.status.value
         payload["delayed"] = feed.adapter.is_delayed
+        payload["source"] = source
+        payload["simulated"] = simulated
         payload["last_update_at"] = _iso_or_none(health.last_update_at)
         return payload
 
@@ -286,6 +294,8 @@ def build_chart_data(runtime: "BotRuntime", symbol: str,
         "reason": None,
         "feed_status": health.status.value,
         "delayed": feed.adapter.is_delayed,
+        "source": source,
+        "simulated": simulated,
         "last_update_at": _iso_or_none(health.last_update_at),
         "last_bar_time": decision_time.isoformat(),
         "last_price": float(last["close"]) if last is not None else None,

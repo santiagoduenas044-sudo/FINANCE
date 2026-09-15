@@ -77,6 +77,10 @@ class BotRuntime:
     daily_realized_pnl: float = field(default=0.0, init=False)
     data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
     feed_last_update_at: dict[str, datetime] = field(default_factory=dict, init=False)
+    # Phase 13: read-only metadata about each symbol's real data source
+    # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
+    # an honest delayed-vs-simulated distinction. No trading logic reads this.
+    feed_info: dict[str, dict] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         self._init_component_health()
@@ -333,15 +337,38 @@ class BotRuntime:
     # ------------------------------------------------------------------ #
     # JSON-safe snapshot for the API/dashboard — NEVER includes secrets
     # ------------------------------------------------------------------ #
+    def connection_state(self) -> str:
+        """Aggregate feed connectivity, distinct from BotStatus (which stays
+        ONLINE while feeds reconnect). One of:
+          CONNECTED  — at least one feed is delivering fresh data
+          DEGRADED   — feeds present but stale
+          DISCONNECTED — feeds configured but none connected
+          NONE       — no feeds configured
+          CONNECTING — feeds configured but not polled yet
+        """
+        if not self.live_feeds:
+            return "NONE"
+        statuses = list(self.data_feed_status.values())
+        if not statuses:
+            return "CONNECTING"
+        values = {s.value for s in statuses}
+        if values & {DataFeedStatus.LIVE.value, DataFeedStatus.DELAYED.value}:
+            return "CONNECTED"
+        if DataFeedStatus.STALE.value in values:
+            return "DEGRADED"
+        return "DISCONNECTED"
+
     def to_status_dict(self) -> dict:
         return {
             "status": self.status.value,
+            "connection": self.connection_state(),
             "started_at": _iso(self.started_at),
             "last_heartbeat_at": _iso(self.last_heartbeat_at),
             "last_run_at": _iso(self.last_run_at),
             "last_error": self.last_error,
             "trades_today": self.trades_today,
             "daily_realized_pnl": self.daily_realized_pnl,
+            "feed_info": self.feed_info,
             "components": {
                 name: {"status": h.status.value, "detail": h.detail}
                 for name, h in self.component_health.items()
