@@ -78,6 +78,9 @@
   .pill-DEGRADED { background: rgba(234,179,8,.15); color: var(--yellow); }
   .pill-DOWN { background: rgba(239,68,68,.15); color: var(--red); }
   .pill-DISABLED { background: rgba(107,114,128,.15); color: var(--gray); }
+  .pill-feed-LIVE { background: rgba(34,197,94,.15); color: var(--green); }
+  .pill-feed-STALE { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .pill-feed-DISCONNECTED { background: rgba(239,68,68,.15); color: var(--red); }
   .instr { display: flex; justify-content: space-between; padding: 10px 0;
           border-bottom: 1px solid var(--panel-border); }
   .instr:last-child { border-bottom: none; }
@@ -201,13 +204,17 @@ async function refresh() {
 
   const instrDiv = document.getElementById("instruments");
   const instruments = Object.entries(status.instruments || {});
+  const feedStatus = status.data_feed_status || {};
   instrDiv.innerHTML = instruments.length
-    ? instruments.map(([sym, i]) => `
+    ? instruments.map(([sym, i]) => {
+        const fs = feedStatus[sym] || "DISCONNECTED";
+        return `
         <div class="instr">
-          <span class="sym">${sym}</span>
+          <span class="sym">${sym} <span class="pill pill-feed-${fs}">${fs}</span></span>
           <span class="px">${i.last_price != null ? i.last_price.toFixed(2) : "-"}
             <span style="color:var(--muted)"> (${i.session || "-"})</span></span>
-        </div>`).join("")
+        </div>`;
+      }).join("")
     : '<div class="empty">No data yet.</div>';
 
   const compDiv = document.getElementById("components");

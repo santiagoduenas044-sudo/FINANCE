@@ -32,6 +32,11 @@ from .models import (
     RuntimeEvent,
 )
 
+# Phase 10: optional. BotRuntime works exactly as in Phase 9 (historical
+# tf_bars passed explicitly to run_cycle()) when no live_feeds are configured.
+from ..live.feed import LiveFeed
+from ..live.models import DataFeedStatus
+
 _DEFAULT_MAX_EVENTS = 200
 _DEFAULT_MAX_SIGNALS = 100
 
@@ -49,6 +54,7 @@ class BotRuntime:
     risk_engine: RiskEngine | None = None
     account: AccountState | None = None
     output_dispatcher: OutputDispatcher | None = None
+    live_feeds: dict[str, LiveFeed] | None = None   # Phase 10, optional
     now_fn: Callable[[], datetime] = field(default=_utcnow)
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
@@ -63,6 +69,7 @@ class BotRuntime:
     events: deque = field(default_factory=lambda: deque(maxlen=_DEFAULT_MAX_EVENTS), init=False)
     trades_today: int = field(default=0, init=False)
     daily_realized_pnl: float = field(default=0.0, init=False)
+    data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         self._init_component_health()
@@ -113,13 +120,24 @@ class BotRuntime:
     # ------------------------------------------------------------------ #
     # The actual trading cycle — refuses to run unless ONLINE
     # ------------------------------------------------------------------ #
-    def run_cycle(self, symbol: str, tf_bars: dict[str, pd.DataFrame]) -> CycleResult:
+    def run_cycle(self, symbol: str, tf_bars: dict[str, pd.DataFrame] | None = None) -> CycleResult:
+        """`tf_bars`: pass explicitly for historical/backtest-style use
+        (Phase 9 behavior, unchanged). Omit it to pull from a configured
+        `live_feeds[symbol]` instead (Phase 10) — the feed is polled first,
+        so this always reflects the freshest data available right now."""
         now = self.now_fn()
         self.heartbeat()
 
         if self.status is not BotStatus.ONLINE:
             return CycleResult(ran=False, timestamp=now,
                                reason=f"runtime status is {self.status.value}, not ONLINE")
+
+        used_live_feed = tf_bars is None
+        if used_live_feed:
+            tf_bars = self._pull_live_bars(symbol)
+            if tf_bars is None:
+                return CycleResult(ran=False, timestamp=now,
+                                   reason=f"no data source configured for {symbol!r}")
 
         execution_tf = self.data_engine.cfg.timeframe_roles.execution
         bars = tf_bars.get(execution_tf)
@@ -133,7 +151,13 @@ class BotRuntime:
 
         try:
             ctx = self.data_engine.analysis_context(symbol, decision_time, tf_bars)
-            self._set_component(ComponentStatus.OK, "data")
+            if not used_live_feed:
+                # _pull_live_bars() already set an accurate "data" status
+                # (OK/DEGRADED/DOWN) from the feed's real connection health —
+                # don't clobber a DISCONNECTED/STALE reading with a blanket OK
+                # just because slicing the (possibly stale/last-known) buffer
+                # into an AnalysisContext happened to succeed.
+                self._set_component(ComponentStatus.OK, "data")
         except Exception as exc:      # noqa: BLE001 — deliberately broad: never crash the runtime
             self._fail_cycle(f"data/context error: {exc}", "data")
             return CycleResult(ran=False, timestamp=now, reason=str(exc), errors=[str(exc)])
@@ -193,6 +217,30 @@ class BotRuntime:
                 self._update_discord_health()
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
+
+    def _pull_live_bars(self, symbol: str) -> dict[str, pd.DataFrame] | None:
+        """Poll the configured LiveFeed for `symbol` and reflect its health
+        into component_health/data_feed_status. Returns None if no feed is
+        configured for this symbol at all (a genuine setup problem, distinct
+        from a feed that IS configured but currently disconnected)."""
+        feed = (self.live_feeds or {}).get(symbol)
+        if feed is None:
+            return None
+
+        feed.poll()
+        health = feed.health()
+        self.data_feed_status[symbol] = health.status
+
+        if health.status is DataFeedStatus.DISCONNECTED:
+            self._set_component(ComponentStatus.DOWN, "data",
+                                f"{symbol} feed disconnected: {health.detail}")
+        elif health.status is DataFeedStatus.STALE:
+            self._set_component(ComponentStatus.DEGRADED, "data",
+                                f"{symbol} feed stale (no update since {health.last_update_at})")
+        else:
+            self._set_component(ComponentStatus.OK, "data")
+
+        return feed.get_tf_bars()
 
     def _fail_cycle(self, reason: str, component: str) -> None:
         self._set_component(ComponentStatus.DOWN, component, reason)
@@ -279,6 +327,9 @@ class BotRuntime:
                     "session": s.session,
                 }
                 for sym, s in self.instrument_status.items()
+            },
+            "data_feed_status": {
+                sym: status.value for sym, status in self.data_feed_status.items()
             },
         }
 

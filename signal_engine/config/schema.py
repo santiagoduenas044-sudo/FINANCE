@@ -127,6 +127,14 @@ class SignalConfig(BaseModel):
     validate_entry_against_context: bool = True  # re-check entry == close[N] via AnalysisContext
 
 
+class LiveDataConfig(BaseModel):
+    """Live Market Data (Phase 10). Reasonable, un-optimized defaults."""
+    stale_after_seconds: float = 90.0     # no fresh bar within this window -> STALE
+    reconnect_max_attempts: int = 3       # per poll() cycle, before giving up as DISCONNECTED
+    reconnect_backoff_seconds: float = 2.0
+    buffer_max_days: int = 10             # bound the in-memory 1m buffer size
+
+
 class RiskConfig(BaseModel):
     """Risk Engine (Phase 7): Signal -> Risk Validation -> Position Size /
     Risk Decision. Reasonable, un-optimized defaults — no parameter sweeps.
@@ -171,6 +179,7 @@ class EngineConfig(BaseModel):
     setups: SetupsConfig = Field(default_factory=SetupsConfig)
     signals: SignalConfig = Field(default_factory=SignalConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
+    live: LiveDataConfig = Field(default_factory=LiveDataConfig)
     output: OutputConfig = Field(default_factory=OutputConfig)
 
     @classmethod

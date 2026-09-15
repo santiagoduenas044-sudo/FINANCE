@@ -89,6 +89,12 @@ signals:                             # Phase 6 — SetupCandidate -> Signal | No
   deduplication_enabled: true
   validate_entry_against_context: true
 
+live:                                  # Phase 10 — Live Market Data
+  stale_after_seconds: 90.0            # no fresh bar within this window -> STALE
+  reconnect_max_attempts: 3
+  reconnect_backoff_seconds: 2.0
+  buffer_max_days: 10
+
 risk:                                 # Phase 7 — Signal -> Risk Validation -> Position Size
   risk_mode: "percent"                # "fixed" | "percent"
   fixed_risk_dollar: 500.0            # used when risk_mode == "fixed" (not optimized)
