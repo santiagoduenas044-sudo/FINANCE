@@ -22,6 +22,8 @@ environment (see .env.example) — otherwise they are safely skipped.
 """
 from __future__ import annotations
 
+import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -45,6 +47,8 @@ SAMPLES = ROOT / "tests" / "data_samples"
 SYMBOL = "ES"
 CYCLE_SECONDS = 5
 BARS_PER_TICK = 5   # how many 1m bars the simulated feed "delivers" per cycle
+HOST = "127.0.0.1"
+PORT = 8000
 
 
 def build_runtime() -> BotRuntime:
@@ -75,7 +79,24 @@ def background_loop(runtime: BotRuntime) -> None:
         time.sleep(CYCLE_SECONDS)
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        return s.connect_ex((host, port)) == 0
+
+
 def main() -> None:
+    if _port_in_use(HOST, PORT):
+        print(
+            f"ERROR: port {PORT} on {HOST} is already in use — a previous "
+            f"dashboard instance is likely still running.\n"
+            f"Find and stop it first, e.g.:\n"
+            f"  lsof -i :{PORT}          # or: ss -ltnp | grep {PORT}\n"
+            f"  kill <PID>               # then re-run this script",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     runtime = build_runtime()
     app = create_app(runtime)
 
@@ -83,8 +104,8 @@ def main() -> None:
     thread.start()
 
     print("LIVE mode (simulated feed replaying ES sample data).")
-    print("Dashboard: http://127.0.0.1:8000/  (bot starts OFFLINE — use Start button)")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    print(f"Dashboard: http://{HOST}:{PORT}/  (bot starts OFFLINE — use Start button)")
+    uvicorn.run(app, host=HOST, port=PORT, log_level="info")
 
 
 if __name__ == "__main__":
