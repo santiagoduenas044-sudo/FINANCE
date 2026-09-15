@@ -114,9 +114,20 @@ def build_runtime() -> BotRuntime:
 def background_loop(runtime: BotRuntime) -> None:
     while True:
         if runtime.status.value == "ONLINE":
+            # run_cycle() polls each feed itself and then runs the full
+            # (unchanged) Setup -> Signal -> Risk pipeline.
             for symbol in (runtime.live_feeds or {}):
                 runtime.run_cycle(symbol)     # no tf_bars -> pulls from the live feed
         else:
+            # Bot is OFFLINE/PAUSED/ERROR: never run the trading pipeline, but
+            # DO keep pulling delayed market data so the dashboard's live chart
+            # stays real (this only fetches bars into the feed buffer — it does
+            # not detect setups, generate signals, size risk, or place orders).
+            for feed in (runtime.live_feeds or {}).values():
+                try:
+                    feed.poll()
+                except Exception:  # noqa: BLE001 - data refresh must never crash the loop
+                    pass
             runtime.heartbeat()
         time.sleep(CYCLE_SECONDS)
 

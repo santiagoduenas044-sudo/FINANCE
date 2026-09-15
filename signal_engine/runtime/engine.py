@@ -366,17 +366,63 @@ class BotRuntime:
         return [_record_to_dict(r) for r in list(self.recent_signals)[-limit:][::-1]]
 
 
+def _json_safe(value):
+    """Best-effort recursive conversion to JSON-serialisable primitives.
+
+    Used only for the read-only audit log / dashboard payload — it never
+    feeds back into the trading pipeline, so an odd value is coerced to its
+    string form rather than being allowed to raise and break persistence."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (datetime, pd.Timestamp)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    try:
+        import numpy as _np  # local import: numpy is already a hard dependency
+        if isinstance(value, _np.generic):
+            return value.item()
+    except Exception:  # noqa: BLE001
+        pass
+    return str(value)
+
+
+def _level_ref_to_dict(ref) -> dict:
+    return {
+        "kind": ref.kind,
+        "timestamp": _iso(ref.timestamp),
+        "price": _json_safe(ref.price),
+        "note": ref.note,
+    }
+
+
 def _record_to_dict(r: Signal | NoTrade) -> dict:
     if isinstance(r, Signal):
         return {
             "kind": "SIGNAL", "instrument": r.instrument, "setup": r.setup,
             "direction": r.direction.value, "timestamp": r.timestamp.isoformat(),
             "entry": r.entry, "stop": r.stop, "take_profits": r.take_profits,
+            # Phase 12: richer, JSON-safe detail so the dashboard can show the
+            # full setup story (reasons, R:R, invalidation, structure used) and
+            # so it survives a restart alongside the rest of the log entry.
+            "signal_id": r.signal_id,
+            "timeframe": r.timeframe,
+            "risk_reward": _json_safe(r.risk_reward),
+            "reasons": list(r.reasons),
+            "invalidation_conditions": list(r.invalidation_conditions),
+            "invalidation_price": r.invalidation_price,
+            "market_context": _json_safe(r.market_context),
+            "referenced": [_level_ref_to_dict(ref) for ref in r.referenced],
         }
     return {
         "kind": "NO_TRADE", "instrument": r.instrument,
         "setup": r.setup, "timestamp": r.timestamp.isoformat(),
         "reasons": r.reasons,
+        # Phase 12: keep NoTrade detail symmetric with SIGNAL entries.
+        "timeframe": r.timeframe,
+        "candidate_direction": r.candidate_direction.value if r.candidate_direction else None,
     }
 
 

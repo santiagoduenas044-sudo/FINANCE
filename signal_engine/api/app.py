@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
+from .chart import build_chart_data
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -51,6 +52,35 @@ def create_app(runtime: BotRuntime) -> FastAPI:
             "trades_today": runtime.trades_today,
             "daily_realized_pnl": runtime.daily_realized_pnl,
         }
+
+    @app.get("/api/symbols")
+    def get_symbols() -> dict:
+        """Symbols that actually have a data feed configured — this is what the
+        chart selector offers, so it never advertises a feed that isn't there."""
+        return {"symbols": sorted((runtime.live_feeds or {}).keys())}
+
+    @app.get("/api/chart/{symbol}")
+    def get_chart(symbol: str, limit: int = 200) -> dict:
+        # Only symbols with a configured feed are chartable. Reject anything
+        # else explicitly (never build analysis for an unknown symbol).
+        if symbol not in (runtime.live_feeds or {}):
+            raise HTTPException(status_code=404, detail=f"no data feed for symbol {symbol!r}")
+        if limit < 10 or limit > 600:
+            raise HTTPException(status_code=400, detail="limit must be between 10 and 600")
+        return build_chart_data(runtime, symbol, limit=limit)
+
+    @app.get("/api/signals/detail/{signal_id}")
+    def get_signal_detail(signal_id: str) -> dict:
+        """Full detail for one signal by id. Looks in the persisted log first
+        (survives restart) then the in-memory recent signals."""
+        candidates: list[dict] = []
+        if runtime.signal_log_path is not None:
+            candidates.extend(read_signal_log(runtime.signal_log_path, limit=1000))
+        candidates.extend(runtime.recent_signals_dict(limit=1000))
+        for rec in candidates:
+            if rec.get("signal_id") == signal_id:
+                return rec
+        raise HTTPException(status_code=404, detail=f"signal {signal_id!r} not found")
 
     @app.post("/api/control/{action}")
     def control(action: str) -> dict:
