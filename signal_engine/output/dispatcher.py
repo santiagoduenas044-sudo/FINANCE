@@ -10,6 +10,7 @@ from typing import Iterable
 
 from ..config.schema import EngineConfig
 from ..setups.models import SetupCandidate
+from ..signals.models import Signal
 from .base import OutputAdapter
 from .discord import DiscordOutputAdapter
 from .events import OutputEvent
@@ -45,3 +46,12 @@ class OutputDispatcher:
     def publish_candidates(self, candidates: Iterable[SetupCandidate]) -> None:
         for c in candidates:
             self.publish_candidate(c)
+
+    def publish_signal(self, signal: Signal) -> None:
+        event = OutputEvent.from_signal(signal)
+        for adapter in self.adapters:
+            try:
+                adapter.emit(event)
+            except Exception as exc:            # defensive: adapters shouldn't raise
+                log.warning("Output adapter %r raised (%s); ignored.",
+                            getattr(adapter, "name", "?"), type(exc).__name__)

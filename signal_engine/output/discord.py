@@ -17,6 +17,7 @@ import urllib.request
 
 from ..config.schema import DiscordOutputConfig
 from ..setups.models import SetupCandidate
+from ..signals.models import Signal
 from .base import OutputAdapter
 from .events import OutputEvent
 
@@ -72,8 +73,56 @@ def render_fields(c: SetupCandidate) -> list[tuple[str, str]]:
     return fields
 
 
+def render_signal_fields(s: Signal) -> list[tuple[str, str]]:
+    """Same shape as render_fields(), for a definitive Signal (Phase 6/9) —
+    Direction here IS LONG/SHORT (the final decision), unlike a candidate's
+    BULLISH/BEARISH bias."""
+    tps = s.take_profits or []
+    fields: list[tuple[str, str]] = [
+        ("Instrument", s.instrument),
+        ("Setup", s.setup),
+        ("Direction", s.direction.value),               # LONG / SHORT
+        ("Timestamp", s.timestamp.isoformat()),
+        ("Timeframe", s.timeframe),
+        ("Entry", _fmt_price(s.entry)),
+        ("Stop", _fmt_price(s.stop)),
+    ]
+    if len(tps) >= 1:
+        fields.append(("Take Profit 1", _fmt_price(tps[0])))
+    if len(tps) >= 2:
+        fields.append(("Take Profit 2", _fmt_price(tps[1])))
+    if s.risk_reward:
+        fields.append(("R:R", ", ".join(f"{r:.2f}" for r in s.risk_reward)))
+    if s.market_context:
+        ctx = ", ".join(f"{k}={v}" for k, v in s.market_context.items())
+        fields.append(("Market context", _truncate(ctx)))
+    if s.reasons:
+        fields.append(("Reasons", _truncate("\n".join(f"• {r}" for r in s.reasons))))
+    if s.invalidation_conditions:
+        fields.append(("Invalidation", _truncate("\n".join(s.invalidation_conditions))))
+    if s.expiration is not None:
+        fields.append(("Expiration", s.expiration.isoformat()))
+    return fields
+
+
+_STATUS_COLOR = {
+    "BOT_STARTED": 0x2ECC71,   # green
+    "BOT_PAUSED": 0xF1C40F,    # yellow
+    "BOT_STOPPED": 0x95A5A6,   # gray
+    "BOT_ERROR": 0xE74C3C,     # red
+}
+_STATUS_EMOJI = {
+    "BOT_STARTED": "🟢", "BOT_PAUSED": "🟡", "BOT_STOPPED": "🔴", "BOT_ERROR": "🔴",
+}
+
+
 def build_discord_payload(event: OutputEvent) -> dict:
     """Pure function: OutputEvent -> Discord webhook JSON payload (embed)."""
+    if event.kind == "runtime_status":
+        return _build_runtime_status_payload(event)
+    if event.kind == "signal":
+        return _build_signal_payload(event)
+
     c = event.candidate
     embed = {
         "title": event.title,                               # 🟡 SETUP CANDIDATE
@@ -82,6 +131,42 @@ def build_discord_payload(event: OutputEvent) -> dict:
         "color": _EMBED_COLOR,
         "fields": [{"name": n, "value": v or "-", "inline": True}
                    for n, v in render_fields(c)],
+        "footer": {"text": event.disclaimer},
+    }
+    return {"embeds": [embed]}
+
+
+_SIGNAL_COLOR = {"LONG": 0x2ECC71, "SHORT": 0xE74C3C}
+
+
+def _build_signal_payload(event: OutputEvent) -> dict:
+    s = event.signal
+    embed = {
+        "title": event.title,
+        "description": f"**{event.disclaimer}**",
+        "color": _SIGNAL_COLOR.get(s.direction.value, 0x3498DB),
+        "fields": [{"name": n, "value": v or "-", "inline": True}
+                  for n, v in render_signal_fields(s)],
+        "footer": {"text": event.disclaimer},
+    }
+    return {"embeds": [embed]}
+
+
+def _build_runtime_status_payload(event: OutputEvent) -> dict:
+    """Bot lifecycle notification (Phase 9) — a distinct, simple embed. Never
+    includes secrets (status_payload is a plain, pre-sanitized dict)."""
+    p = event.status_payload or {}
+    status = p.get("status", "UNKNOWN")
+    emoji = _STATUS_EMOJI.get(status, "⚪")
+    embed = {
+        "title": f"{emoji} {event.title}",
+        "description": f"**{event.disclaimer}**",
+        "color": _STATUS_COLOR.get(status, 0x95A5A6),
+        "fields": [
+            {"name": "Status", "value": status, "inline": True},
+            {"name": "Timestamp", "value": p.get("timestamp", "-"), "inline": True},
+            {"name": "Detail", "value": p.get("detail") or "-", "inline": False},
+        ],
         "footer": {"text": event.disclaimer},
     }
     return {"embeds": [embed]}

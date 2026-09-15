@@ -9,3 +9,9 @@ pytest>=8.0
 # Market structure backend (Phase 4). Wrapped behind our own adapter; the
 # native backend works without it, but it is the default structure backend.
 smartmoneyconcepts>=0.0.26
+
+# Control/status dashboard API (Phase 9) — already anticipated as the future
+# `api/` layer in ARCHITECTURE.md.
+fastapi>=0.110
+uvicorn>=0.27
+httpx>=0.27   # used by FastAPI's TestClient in tests, no real network calls

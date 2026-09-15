@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Futures Signal Engine — Control</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-border: #1f2532;
+    --text: #e6e9ef;
+    --muted: #8b93a7;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --gray: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    padding: 20px;
+  }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .grid {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--panel-border);
+    border-radius: 10px; padding: 16px;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); margin: 0 0 12px; font-weight: 600;
+  }
+  .status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px; font-weight: 600; font-size: 13px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .badge-ONLINE { background: rgba(34,197,94,.15); color: var(--green); }
+  .badge-ONLINE .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .badge-OFFLINE { background: rgba(107,114,128,.15); color: var(--gray); }
+  .badge-OFFLINE .dot { background: var(--gray); }
+  .badge-PAUSED { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .badge-PAUSED .dot { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+  .badge-ERROR { background: rgba(239,68,68,.15); color: var(--red); }
+  .badge-ERROR .dot { background: var(--red); box-shadow: 0 0 8px var(--red); }
+  .controls { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--panel-border); background: #1a2030; color: var(--text);
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.25); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  #btn-start { border-color: var(--green); color: var(--green); }
+  #btn-pause { border-color: var(--yellow); color: var(--yellow); }
+  #btn-stop { border-color: var(--red); color: var(--red); }
+  .meta-row { display: flex; justify-content: space-between; font-size: 12.5px;
+             color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--panel-border); }
+  .meta-row:last-child { border-bottom: none; }
+  .meta-row span.v { color: var(--text); }
+  .error-box {
+    background: rgba(239,68,68,.1); border: 1px solid var(--red); color: #fca5a5;
+    padding: 10px 12px; border-radius: 8px; font-size: 12.5px; margin-top: 10px;
+  }
+  .comp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .comp { display: flex; align-items: center; justify-content: space-between;
+         background: #0f1420; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+  .pill { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .pill-OK { background: rgba(34,197,94,.15); color: var(--green); }
+  .pill-DEGRADED { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .pill-DOWN { background: rgba(239,68,68,.15); color: var(--red); }
+  .pill-DISABLED { background: rgba(107,114,128,.15); color: var(--gray); }
+  .instr { display: flex; justify-content: space-between; padding: 10px 0;
+          border-bottom: 1px solid var(--panel-border); }
+  .instr:last-child { border-bottom: none; }
+  .instr .sym { font-weight: 700; }
+  .instr .px { font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 4px;
+      border-bottom: 1px solid var(--panel-border); }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--panel-border); }
+  .dir-LONG { color: var(--green); font-weight: 700; }
+  .dir-SHORT { color: var(--red); font-weight: 700; }
+  .kind-NO_TRADE { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 12.5px; padding: 8px 0; }
+  .footer-note { color: var(--muted); font-size: 11px; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <h1>🎛️ Futures Signal Engine — Control Dashboard</h1>
+  <div class="sub">ES / NQ — Signal detection only. No auto-execution.</div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>Bot Control</h2>
+      <div class="status-row">
+        <span id="status-badge" class="badge badge-OFFLINE"><span class="dot"></span><span id="status-text">OFFLINE</span></span>
+      </div>
+      <div class="controls">
+        <button id="btn-start" onclick="control('start')">🟢 Start</button>
+        <button id="btn-pause" onclick="control('pause')">🟡 Pause</button>
+        <button id="btn-stop" onclick="control('stop')">🔴 Stop</button>
+      </div>
+      <div class="meta-row"><span>Started at</span><span class="v" id="started-at">-</span></div>
+      <div class="meta-row"><span>Last heartbeat</span><span class="v" id="last-heartbeat">-</span></div>
+      <div class="meta-row"><span>Last run</span><span class="v" id="last-run">-</span></div>
+      <div id="error-box" style="display:none" class="error-box"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Instruments</h2>
+      <div id="instruments"><div class="empty">No data yet.</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>Component Health</h2>
+      <div class="comp-grid" id="components"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Today</h2>
+      <div class="meta-row"><span>Trades today</span><span class="v" id="trades-today">0</span></div>
+      <div class="meta-row"><span>Realized P&amp;L</span><span class="v" id="daily-pnl">$0.00</span></div>
+    </div>
+
+    <div class="panel" style="grid-column: 1 / -1;">
+      <h2>Recent Signals</h2>
+      <table>
+        <thead><tr><th>Time</th><th>Instrument</th><th>Setup</th><th>Kind</th><th>Entry</th><th>Stop</th></tr></thead>
+        <tbody id="signals-body"></tbody>
+      </table>
+      <div id="signals-empty" class="empty" style="display:none">No signals yet.</div>
+    </div>
+  </div>
+
+  <div class="footer-note">Read-only observability. This dashboard never places orders and never exposes webhook secrets.</div>
+
+<script>
+async function api(path, opts) {
+  const res = await fetch(path, opts || {});
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || res.statusText);
+  }
+  return res.json();
+}
+
+function fmtTime(iso) {
+  if (!iso) return "-";
+  return new Date(iso).toLocaleString();
+}
+
+async function control(action) {
+  try {
+    await api(`/api/control/${action}`, { method: "POST" });
+  } catch (e) {
+    alert(`Action failed: ${e.message}`);
+  }
+  refresh();
+}
+
+async function refresh() {
+  let status;
+  try {
+    status = await api("/api/status");
+  } catch (e) {
+    return;
+  }
+
+  const badge = document.getElementById("status-badge");
+  const text = document.getElementById("status-text");
+  badge.className = `badge badge-${status.status}`;
+  text.textContent = status.status;
+
+  document.getElementById("started-at").textContent = fmtTime(status.started_at);
+  document.getElementById("last-heartbeat").textContent = fmtTime(status.last_heartbeat_at);
+  document.getElementById("last-run").textContent = fmtTime(status.last_run_at);
+  document.getElementById("trades-today").textContent = status.trades_today;
+  document.getElementById("daily-pnl").textContent =
+    `$${Number(status.daily_realized_pnl || 0).toFixed(2)}`;
+
+  const errBox = document.getElementById("error-box");
+  if (status.status === "ERROR" && status.last_error) {
+    errBox.style.display = "block";
+    errBox.textContent = `⚠ ${status.last_error}`;
+  } else {
+    errBox.style.display = "none";
+  }
+
+  document.getElementById("btn-start").disabled = status.status === "ONLINE";
+  document.getElementById("btn-pause").disabled = status.status !== "ONLINE";
+  document.getElementById("btn-stop").disabled = status.status === "OFFLINE";
+
+  const instrDiv = document.getElementById("instruments");
+  const instruments = Object.entries(status.instruments || {});
+  instrDiv.innerHTML = instruments.length
+    ? instruments.map(([sym, i]) => `
+        <div class="instr">
+          <span class="sym">${sym}</span>
+          <span class="px">${i.last_price != null ? i.last_price.toFixed(2) : "-"}
+            <span style="color:var(--muted)"> (${i.session || "-"})</span></span>
+        </div>`).join("")
+    : '<div class="empty">No data yet.</div>';
+
+  const compDiv = document.getElementById("components");
+  compDiv.innerHTML = Object.entries(status.components || {}).map(([name, c]) => `
+    <div class="comp">
+      <span>${name}</span>
+      <span class="pill pill-${c.status}">${c.status}</span>
+    </div>`).join("");
+
+  let signals;
+  try {
+    signals = (await api("/api/signals/recent?limit=15")).signals;
+  } catch (e) {
+    signals = [];
+  }
+  const tbody = document.getElementById("signals-body");
+  const empty = document.getElementById("signals-empty");
+  if (!signals.length) {
+    tbody.innerHTML = "";
+    empty.style.display = "block";
+  } else {
+    empty.style.display = "none";
+    tbody.innerHTML = signals.map(s => `
+      <tr>
+        <td>${fmtTime(s.timestamp)}</td>
+        <td>${s.instrument}</td>
+        <td>${s.setup || "-"}</td>
+        <td class="${s.kind === 'SIGNAL' ? 'dir-' + s.direction : 'kind-NO_TRADE'}">
+          ${s.kind === 'SIGNAL' ? s.direction : 'NO TRADE'}
+        </td>
+        <td>${s.entry != null ? s.entry.toFixed(2) : "-"}</td>
+        <td>${s.stop != null ? s.stop.toFixed(2) : "-"}</td>
+      </tr>`).join("");
+  }
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>
