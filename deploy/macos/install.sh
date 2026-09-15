@@ -67,9 +67,15 @@ else
   echo "==> Keeping existing .env"
 fi
 
+# 3b) Guarantee the 24/7 service boots ONLINE (fixes a pre-existing .env that
+#     was copied from .env.example with BOT_AUTO_START=false). Non-destructive
+#     to every other key. STOP/PAUSE from the dashboard still work at runtime.
+echo "==> Ensuring autostart is enabled"
+bash "$REPO_DIR/deploy/macos/ensure-autostart.sh" "$REPO_DIR/.env"
+
 # 4) logs dir + executables ----------------------------------------------------
 mkdir -p "$LOGDIR" "$LA_DIR"
-chmod +x "$REPO_DIR/deploy/macos/run.sh" "$REPO_DIR/deploy/macos/ctl.sh" 2>/dev/null || true
+chmod +x "$REPO_DIR"/deploy/macos/*.sh 2>/dev/null || true
 
 # 5) render + install the LaunchAgent -----------------------------------------
 echo "==> Installing LaunchAgent -> $PLIST_DST"

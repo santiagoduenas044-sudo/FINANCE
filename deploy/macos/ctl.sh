@@ -42,7 +42,19 @@ case "${1:-}" in
     echo "==> deps"; "$REPO_DIR/.venv/bin/python" -m pip install --quiet -r requirements.txt
     echo "==> restart"; launchctl kickstart -k "$DOMAIN/$LABEL"; echo "updated + restarted"
     ;;
+  autostart)
+    case "${2:-}" in
+      on)  bash "$REPO_DIR/deploy/macos/ensure-autostart.sh" "$REPO_DIR/.env";
+           launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true;
+           echo "autostart ON (restarted — will boot ONLINE)";;
+      off) [ -f "$REPO_DIR/.env" ] && { sed 's|^[[:space:]]*BOT_AUTO_START=.*|BOT_AUTO_START=false|' "$REPO_DIR/.env" > "$REPO_DIR/.env.tmp" && mv "$REPO_DIR/.env.tmp" "$REPO_DIR/.env"; };
+           grep -qE '^BOT_AUTO_START=' "$REPO_DIR/.env" || echo "BOT_AUTO_START=false" >> "$REPO_DIR/.env";
+           launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true;
+           echo "autostart OFF (restarted — boots OFFLINE, use START in dashboard)";;
+      *)   echo "current: $(_get BOT_AUTO_START)"; echo "usage: ctl.sh autostart <on|off>";;
+    esac
+    ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off>" >&2
     exit 2;;
 esac

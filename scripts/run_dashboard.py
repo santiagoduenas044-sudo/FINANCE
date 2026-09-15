@@ -60,6 +60,13 @@ def main() -> None:
     service = BotService(runtime, cycle_seconds=settings.cycle_seconds,
                          auto_start=settings.auto_start, logger=logger)
     service.start_background()
+    # Make the boot state unambiguous in the (launchd/journald) logs.
+    if settings.auto_start:
+        logger.info("autostart ENABLED (BOT_AUTO_START) -> runtime is %s; "
+                    "processing closed candles automatically.", runtime.status.value)
+    else:
+        logger.info("autostart DISABLED -> runtime is %s; press START in the "
+                    "dashboard (or set BOT_AUTO_START=true) to begin.", runtime.status.value)
 
     app = create_app(runtime, settings=settings, service=service)
 

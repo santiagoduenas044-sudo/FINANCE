@@ -110,7 +110,10 @@ class ServerSettings:
             port=int(_get_float("BOT_PORT", 8000)),
             symbols=_get_list("BOT_SYMBOLS", ["ES", "NQ"]),
             cycle_seconds=_get_float("BOT_CYCLE_SECONDS", 5.0),
-            auto_start=_get_bool("BOT_AUTO_START", False),
+            # Canonical: BOT_AUTO_START. BOT_AUTOSTART is accepted as an alias
+            # (BOT_AUTO_START wins if both are set). An unset/invalid value is a
+            # safe False — a misconfigured flag never forces trading on.
+            auto_start=_get_bool("BOT_AUTO_START", _get_bool("BOT_AUTOSTART", False)),
             auth_token_env=_get("DASHBOARD_TOKEN_ENV", "DASHBOARD_TOKEN"),
             cors_origins=_get_list("BOT_CORS_ORIGINS", []),
             log_file=_get("BOT_LOG_FILE", ""),

@@ -34,11 +34,31 @@ The installer:
 - creates `.venv` and installs dependencies,
 - creates `.env` with a **generated dashboard token** (only if it doesn't
   exist — your secrets are never overwritten),
+- **ensures `BOT_AUTO_START=true`** so the service boots straight into
+  RUNNING/ONLINE (it fixes a pre-existing `.env` copied from `.env.example`
+  without touching any other key),
 - installs a LaunchAgent (`~/Library/LaunchAgents/com.finance.signal.plist`)
   that auto-starts on login and auto-restarts on failure,
 - runs the **preflight** check (real Yahoo/Discord/config verification).
 
-After it finishes the bot is already running.
+After it finishes the bot is already running **ONLINE** — no browser, no manual
+START. After any reboot / power-loss recovery, launchd starts the process and it
+comes up ONLINE automatically, connects to Yahoo delayed ES/NQ, and begins
+processing closed candles.
+
+### Autostart on/off
+
+Autostart is ON by default for the 24/7 service. To change it:
+
+```bash
+bash deploy/macos/ctl.sh autostart on     # boot ONLINE (default)
+bash deploy/macos/ctl.sh autostart off    # boot OFFLINE; press START in the dashboard
+bash deploy/macos/ctl.sh autostart        # show current setting
+```
+
+`STOP` and `PAUSE` from the dashboard keep working at runtime. Note: they are
+in-memory controls — if the process is later restarted (crash or reboot) the
+service comes back ONLINE, which is the whole point of a 24/7 deployment.
 
 ### Make it a true 24/7 server (do this once)
 
