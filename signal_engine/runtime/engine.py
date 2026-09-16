@@ -25,7 +25,7 @@ from ..data.engine import DataEngine
 from ..output.dispatcher import OutputDispatcher
 from ..output.events import OutputEvent
 from ..risk.engine import RiskEngine
-from ..risk.models import AccountState, RiskOutcome
+from ..risk.models import AccountState, RiskOutcome, RiskReasonCode
 from ..setups.engine import SetupEngine
 from ..signals.engine import SignalEngine
 from ..signals.models import NoTrade, Signal
@@ -231,23 +231,36 @@ class BotRuntime:
         return CycleResult(ran=True, timestamp=now, signals_produced=signals_produced,
                            no_trades_produced=no_trades_produced, errors=errors)
 
-    def _handle_signal(self, signal: Signal) -> None:
+    def _handle_signal(self, signal: Signal, *, _skip_risk: bool = False) -> None:
         self.recent_signals.append(signal)
         self._persist_record(signal)
         self.trades_today += 1
 
-        if self.risk_engine is not None and self.account is not None:
-            try:
-                decision = self.risk_engine.evaluate(signal, self.account)
-                status = (ComponentStatus.OK if decision.outcome is RiskOutcome.APPROVED
-                         else ComponentStatus.DEGRADED)
-                self._set_component(status, "risk",
-                                    "" if status is ComponentStatus.OK else decision.reasons[0]
-                                    if decision.reasons else "")
-            except Exception as exc:  # noqa: BLE001
-                self._set_component(ComponentStatus.DOWN, "risk", str(exc))
-        else:
-            self._set_component(ComponentStatus.DISABLED, "risk", "no RiskEngine configured")
+        if not _skip_risk:
+            if self.risk_engine is not None and self.account is not None:
+                try:
+                    decision = self.risk_engine.evaluate(signal, self.account)
+                    if decision.outcome is RiskOutcome.APPROVED:
+                        self._set_component(ComponentStatus.OK, "risk")
+                    else:
+                        # Fix 4: use a specific, actionable detail for UNVERIFIED
+                        if (len(decision.reason_codes) == 1 and
+                                decision.reason_codes[0] is RiskReasonCode.UNVERIFIED_CONTRACT_SPEC):
+                            self._set_component(
+                                ComponentStatus.DEGRADED, "risk",
+                                "CME specs unverified — dollar sizing disabled; position sizing inactive",
+                            )
+                        else:
+                            self._set_component(
+                                ComponentStatus.DEGRADED, "risk",
+                                decision.reasons[0] if decision.reasons else "",
+                            )
+                except Exception as exc:  # noqa: BLE001
+                    self._set_component(ComponentStatus.DOWN, "risk", str(exc))
+            else:
+                # Fix 4: explain why risk is disabled
+                self._set_component(ComponentStatus.DISABLED, "risk",
+                                    "no RiskEngine — not wired in bootstrap")
 
         if self.output_dispatcher is not None:
             try:
@@ -274,7 +287,18 @@ class BotRuntime:
         bars = ctx.execution.bars
         if self.paper_tracker is not None and not bars.empty:
             try:
-                self.paper_tracker.update_symbol(symbol, bars.iloc[-1], ctx.decision_time)
+                # Fix 3: capture closed trades so account state stays current.
+                just_closed = self.paper_tracker.update_symbol(
+                    symbol, bars.iloc[-1], ctx.decision_time)
+                if just_closed and self.account is not None:
+                    _pnl_delta = sum(t.pnl_points for t in just_closed)
+                    self.account = AccountState(
+                        equity=self.account.equity,
+                        trades_today=self.account.trades_today,
+                        daily_realized_pnl=self.account.daily_realized_pnl + _pnl_delta,
+                        daily_realized_risk=self.account.daily_realized_risk,
+                    )
+                    self.daily_realized_pnl += _pnl_delta
             except Exception:  # noqa: BLE001 - memory update never breaks the cycle
                 pass
 
@@ -329,6 +353,48 @@ class BotRuntime:
                     self._persist_record(nt)
                     self.paper_tracker.mark_processed(d.signal.signal_id)
                     continue
+                # Fix 1: Risk gate BEFORE opening the paper trade.
+                # UNVERIFIED_CONTRACT_SPEC -> soft WARN, paper trade still opens.
+                # Any other rejection reason -> hard block, no paper trade.
+                _risk_blocks = False
+                _risk_block_codes: list[str] = []
+                if self.risk_engine is not None and self.account is not None:
+                    _rdec = self.risk_engine.evaluate(d.signal, self.account)
+                    if _rdec.outcome is RiskOutcome.REJECTED:
+                        _only_unverified = (
+                            len(_rdec.reason_codes) == 1
+                            and _rdec.reason_codes[0] is RiskReasonCode.UNVERIFIED_CONTRACT_SPEC
+                        )
+                        if _only_unverified:
+                            self._set_component(
+                                ComponentStatus.DEGRADED, "risk",
+                                "CME specs unverified — dollar sizing disabled; paper trade opened anyway",
+                            )
+                        else:
+                            _risk_blocks = True
+                            _risk_block_codes = [r.value for r in _rdec.reason_codes]
+                            self._set_component(
+                                ComponentStatus.DEGRADED, "risk",
+                                _rdec.reasons[0] if _rdec.reasons else str(_risk_block_codes),
+                            )
+                    else:
+                        self._set_component(ComponentStatus.OK, "risk")
+
+                if _risk_blocks:
+                    rejected += 1
+                    nt = NoTrade(
+                        instrument=d.instrument, timestamp=d.timestamp,
+                        reasons=["risk_rejected"] + _risk_block_codes,
+                        setup=d.setup,
+                        timeframe=d.signal.timeframe,
+                        candidate_direction=d.signal.direction,
+                    )
+                    self.recent_signals.append(nt)
+                    self._persist_record(nt)
+                    if self.paper_tracker is not None:
+                        self.paper_tracker.mark_processed(d.signal.signal_id)
+                    continue
+
                 # Open the PaperTrade FIRST so it is the source of truth for
                 # "this trade actually happened". If the tracker declines
                 # (already processed / restart-safe duplicate), Discord and the
@@ -358,8 +424,9 @@ class BotRuntime:
                     self.paper_tracker.mark_processed(d.signal.signal_id)
                     continue
                 approved += 1
-                # Now (and only now) fire outputs. Same signal_id, same plan.
-                self._handle_signal(d.signal)
+                # Now (and only now) fire outputs. Risk was already checked above,
+                # so pass _skip_risk=True to avoid a redundant second evaluation.
+                self._handle_signal(d.signal, _skip_risk=True)
             else:
                 rejected += 1
                 # A rejected decision is a first-class outcome — record it in
@@ -431,6 +498,7 @@ class BotRuntime:
         self.component_health["risk"] = ComponentHealth(
             "risk",
             ComponentStatus.OK if self.risk_engine is not None else ComponentStatus.DISABLED,
+            "" if self.risk_engine is not None else "no RiskEngine — not wired in bootstrap",
         )
         if self.ghost is not None:
             self.component_health["ghost"] = ComponentHealth("ghost", ComponentStatus.OK)

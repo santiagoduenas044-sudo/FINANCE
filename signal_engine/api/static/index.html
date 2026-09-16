@@ -250,8 +250,9 @@
   }
 
   /* ---------- Signals table ---------- */
-  .sig-wrap { max-height: 360px; overflow-y: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  /* Fix 7: overflow-x: auto makes tables scroll sideways on mobile */
+  .sig-wrap { max-height: 360px; overflow-y: auto; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 560px; }
   thead th {
     position: sticky; top: 0; background: var(--panel-2); z-index: 1;
     text-align: left; color: var(--muted-2); font-weight: 700; padding: 9px 10px;
@@ -312,8 +313,13 @@
     .wrap { padding: 12px 12px 30px; }
     .grid-4 { grid-template-columns: 1fr; }
     .chart-host { height: 400px; }
+    /* Fix 7: chart canvas is already 100% width; ensure it doesn't overflow */
+    #chart { max-width: 100%; }
     .price-now { font-size: 22px; }
     .brand .tag { display: none; }
+    /* Fix 7: 14px minimum for table cells on mobile */
+    tbody td { font-size: 14px; }
+    table { font-size: 14px; }
   }
 </style>
 </head>
@@ -393,13 +399,14 @@
     </div>
 
     <div class="card">
-      <div class="card-h"><h2>Risk Today</h2></div>
+      <div class="card-h"><h2>P&amp;L Today</h2></div>
       <div class="card-b">
         <div class="big-num" id="trades-today">0</div>
         <div class="big-sub">trades today</div>
-        <div class="stat-row" style="margin-top:12px"><span class="k">Realized P&amp;L</span><span class="v" id="daily-pnl">$0.00</span></div>
-        <div class="stat-row"><span class="k">$ risk sizing</span><span class="v" style="color:var(--yellow)">BLOCKED</span></div>
-        <div class="big-sub" style="margin-top:8px">CME specs unverified — dollar sizing disabled.</div>
+        <div class="stat-row" style="margin-top:12px"><span class="k">Realized P&amp;L (pts)</span><span class="v" id="daily-pnl">0.00</span></div>
+        <div class="stat-row"><span class="k">Unrealized P&amp;L (pts)</span><span class="v" id="unrealized-pnl">0.00</span></div>
+        <div class="stat-row"><span class="k">Win rate</span><span class="v" id="win-rate-today">—</span></div>
+        <div class="stat-row"><span class="k">Daily R</span><span class="v" id="daily-r">—</span></div>
       </div>
     </div>
 
@@ -553,6 +560,7 @@ const COL = {
 const state = {
   symbols: [], symbol: null, chart: null, status: null,
   limit: 200, selectedId: null, hoverX: null,
+  activeTrades: [],   // Fix 5/6: active paper trades for chart lines + P&L panel
   layers: { vwap:true, ema9:true, ema20:true, liquidity:true, fvg:true, structure:true, signals:true },
 };
 
@@ -608,7 +616,8 @@ async function refreshStatus() {
   $("conn-text").textContent = conn;
 
   $("trades-today").textContent = s.trades_today ?? 0;
-  $("daily-pnl").textContent = `$${Number(s.daily_realized_pnl || 0).toFixed(2)}`;
+  const _rpnl = Number(s.daily_realized_pnl || 0);
+  $("daily-pnl").textContent = (_rpnl >= 0 ? "+" : "") + _rpnl.toFixed(2);
   $("last-update").textContent = ago(mostRecent(s.feed_last_update_at));
 
   const eb = $("error-box");
@@ -993,6 +1002,9 @@ function drawChart() {
   // ---- signal markers + level lines
   if (state.layers.signals) drawSignals(d.signals || [], geom);
 
+  // ---- Fix 5: active paper trade price lines (Entry / Stop / TP1/TP2/TP3)
+  if (state.activeTrades && state.activeTrades.length) drawActiveTradeLines(state.activeTrades, geom);
+
   // ---- crosshair + tooltip
   if (state.hoverX != null) drawCrosshair();
 }
@@ -1034,6 +1046,34 @@ function drawSignals(signals, g) {
     ctx.closePath(); ctx.fill();
     if (sel) { ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); }
   }
+}
+
+// Fix 5: horizontal price lines for active paper trades
+function drawActiveTradeLines(trades, g) {
+  const mf = CSS.getPropertyValue("--mono").trim() || "monospace";
+  ctx.font = "9px " + mf;
+  for (const t of trades) {
+    const drawLevel = (price, color, label) => {
+      if (price == null) return;
+      const y = g.yAt(price);
+      if (y < g.priceTop - 2 || y > g.priceBot + 2) return;
+      ctx.strokeStyle = color; ctx.globalAlpha = 0.82;
+      ctx.setLineDash([5, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(g.plotL, y); ctx.lineTo(g.plotR, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      // label inside chart, right-aligned near the right edge
+      const txt = label + " " + price.toFixed(2);
+      ctx.fillStyle = color; ctx.textAlign = "right"; ctx.textBaseline = "bottom";
+      ctx.fillText(txt, g.plotR - 3, y - 1);
+    };
+    drawLevel(t.entry, "rgba(255,255,255,0.85)", "Entry");
+    drawLevel(t.stop, "rgba(255,92,114,0.9)", "Stop");
+    if (t.tp1 != null) drawLevel(t.tp1, "rgba(47,212,139,0.9)", "TP1");
+    if (t.tp2 != null) drawLevel(t.tp2, "rgba(100,220,160,0.8)", "TP2");
+    if (t.tp3 != null) drawLevel(t.tp3, "rgba(150,235,185,0.7)", "TP3");
+  }
+  ctx.textBaseline = "middle"; ctx.textAlign = "left";
+  ctx.font = "11px " + mf;
 }
 
 function drawCrosshair() {
@@ -1164,6 +1204,15 @@ async function refreshGhost() {
   // --- active trade ---
   let act = { trades: [] };
   try { act = await api(`/api/ghost/trades/active?symbol=${state.symbol}`); } catch (e) {}
+  // Fix 5: store active trades for chart drawing
+  state.activeTrades = act.trades || [];
+  drawChart();
+
+  // Fix 6: unrealized P&L from active trades
+  const _unrealPnl = (act.trades || []).reduce((s, t) => s + (t.pnl_points || 0), 0);
+  $("unrealized-pnl").textContent = (_unrealPnl >= 0 ? "+" : "") + _unrealPnl.toFixed(2);
+  $("unrealized-pnl").style.color = _unrealPnl >= 0 ? "var(--green)" : "var(--red)";
+
   const ael = $("active-trade"), astatus = $("active-status");
   if (act.trades && act.trades.length) {
     const t = act.trades[0];
@@ -1221,6 +1270,22 @@ async function refreshGhost() {
   } else { pbody.innerHTML = ""; pempty.style.display = "block"; }
   // Refresh recent-signals rendering now that the cache is warm.
   refreshHistory();
+
+  // Fix 6: populate win rate + daily R in the P&L Today card
+  if (s.enabled && s.total_trades > 0) {
+    const _wr = (s.win_rate * 100).toFixed(0) + "%";
+    $("win-rate-today").textContent = _wr;
+    $("win-rate-today").style.color = s.win_rate >= 0.5 ? "var(--green)" : "var(--muted)";
+    // Daily R: use today's closed trades from history (filter by today's date)
+    const _todayStr = new Date().toDateString();
+    const _todayTrades = (h.trades || []).filter(t => {
+      const d = t.closed_at ? new Date(t.closed_at) : null;
+      return d && d.toDateString() === _todayStr;
+    });
+    const _dailyR = _todayTrades.reduce((sum, t) => sum + (t.r_multiple || 0), 0);
+    $("daily-r").textContent = (_dailyR >= 0 ? "+" : "") + _dailyR.toFixed(2) + "R";
+    $("daily-r").style.color = _dailyR >= 0 ? "var(--green)" : "var(--red)";
+  }
 
   const sel = $("ghost-stats");
   if (s.enabled && s.total_trades > 0) {

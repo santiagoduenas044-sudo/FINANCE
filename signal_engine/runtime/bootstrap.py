@@ -150,8 +150,36 @@ def build_runtime(
         if gcfg.paper_enabled:
             paper_tracker = PaperTradeTracker(store_dir=DEFAULT_PAPER_DIR)
 
+    # Phase 16 Fix 1: Wire RiskEngine so the dashboard shows a real risk status
+    # instead of "DISABLED". The CME require_verified() guard remains intact —
+    # see signal_engine/runtime/engine.py _run_ghost() for the soft bypass when
+    # specs are unverified (paper trade still opens, sized with zero dollars).
+    from ..risk.engine import RiskEngine
+    from ..risk.models import AccountState
+    risk_engine = RiskEngine(data_engine.cfg.risk, registry)
+
+    # Phase 16 Fix 2: Seed daily P&L and trade count from paper_tracker's
+    # already-closed trades so account state survives a restart.
+    if paper_tracker is not None:
+        from datetime import date as _date
+        _today = _date.today()
+        _today_closed = [
+            t for t in paper_tracker.closed_trades
+            if (t.closed_at is not None
+                and hasattr(t.closed_at, "date")
+                and t.closed_at.date() == _today)
+        ]
+        account = AccountState(
+            equity=100_000.0,
+            trades_today=len(_today_closed),
+            daily_realized_pnl=sum(t.pnl_points for t in _today_closed),
+        )
+    else:
+        account = AccountState(equity=100_000.0)
+
     runtime = BotRuntime(
         data_engine, setup_engine, signal_engine, registry,
+        risk_engine=risk_engine, account=account,
         output_dispatcher=dispatcher, live_feeds=live_feeds,
         signal_log_path=signal_log_path,
         ghost=ghost, paper_tracker=paper_tracker, ghost_log_path=ghost_log,
