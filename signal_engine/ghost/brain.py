@@ -60,10 +60,13 @@ class GhostBrain:
                  base_results: list[Signal | NoTrade], *,
                  data_stale: bool = False,
                  has_active: Callable[[str, str, str], bool] | None = None,
+                 cooldown_check: Callable[[str], tuple[bool, dict] | tuple[bool, None]] | None = None,
+                 duplicate_check: Callable[[str], bool] | None = None,
                  ) -> tuple[MarketState, list[GhostDecision]]:
-        """Return (market_state, decisions). `data_stale` and `has_active` are
-        supplied by the runtime (feed status / paper tracker) — the brain stays
-        pure and side-effect free."""
+        """Return (market_state, decisions). `data_stale`, `has_active`,
+        `cooldown_check` and `duplicate_check` are supplied by the runtime
+        (feed status / paper tracker) — the brain stays pure and side-effect
+        free. Signature is backward-compatible: any of the callables may be None."""
         ms = self.market_state(ctx, analysis)
         exec_ta = analysis.by_timeframe.get(ctx.execution.timeframe)
 
@@ -84,16 +87,23 @@ class GhostBrain:
                 continue
 
             decisions.append(self._decide_signal(res, ms, exec_ta, ctx,
-                                                  data_stale, conflicting, has_active))
+                                                  data_stale, conflicting, has_active,
+                                                  cooldown_check, duplicate_check))
         return ms, decisions
 
     # ------------------------------------------------------------------ #
     def _decide_signal(self, sig: Signal, ms: MarketState, exec_ta,
                        ctx: AnalysisContext, data_stale: bool, conflicting: bool,
-                       has_active) -> GhostDecision:
+                       has_active, cooldown_check=None,
+                       duplicate_check=None) -> GhostDecision:
         cfg = self.cfg
         direction = sig.direction.value
         reasons: list[NoTradeReason] = []
+        extra: dict = {}
+
+        # Phase 15: restart-safe duplicate — same signal_id already processed.
+        if duplicate_check is not None and duplicate_check(sig.signal_id):
+            reasons.append(NoTradeReason.DUPLICATE)
 
         if data_stale:
             reasons.append(NoTradeReason.STALE_DATA)
@@ -101,8 +111,25 @@ class GhostBrain:
             reasons.append(NoTradeReason.INVALID_SESSION)
         if conflicting:
             reasons.append(NoTradeReason.CONFLICTING_SETUPS)
+        # Phase 15: max_open_per_symbol=1 => any open trade on the symbol blocks.
         if has_active is not None and has_active(sig.instrument, direction, sig.setup):
-            reasons.append(NoTradeReason.DUPLICATE_ACTIVE_TRADE)
+            reasons.append(NoTradeReason.ACTIVE_TRADE)
+        # Phase 15: cooldown after STOP/INVALIDATION.
+        if cooldown_check is not None:
+            in_cd, cd_info = cooldown_check(sig.instrument)
+            if in_cd:
+                reasons.append(NoTradeReason.COOLDOWN)
+                if cd_info:
+                    extra["cooldown"] = cd_info
+        # Phase 15: invalid trade plan (defensive; setups should never emit this).
+        if sig.stop == sig.entry or not sig.take_profits:
+            reasons.append(NoTradeReason.INVALID_TRADE_PLAN)
+        # Phase 15: stop-too-tight — |entry-stop| vs ATR14 on execution tf.
+        stop_info = _stop_context(sig, exec_ta, cfg)
+        if stop_info.get("too_tight"):
+            reasons.append(NoTradeReason.STOP_TOO_TIGHT)
+        extra["stop_check"] = stop_info
+
         if ms.regime.atr_percentile is not None and \
                 ms.regime.atr_percentile > cfg.max_atr_percentile:
             reasons.append(NoTradeReason.EXCESSIVE_VOLATILITY)
@@ -117,24 +144,55 @@ class GhostBrain:
 
         confluence = score_confluence(direction, ms, sig, exec_ta, cfg)
 
+        # Attach Phase 15 diagnostics (stop_check, cooldown info) into the
+        # decision's market_context via detail — keeps GhostDecision immutable.
+        detail_extra = ""
+        if extra.get("stop_check"):
+            sc = extra["stop_check"]
+            detail_extra += (f" stop={sc.get('stop_distance')}pts atr={sc.get('atr')}"
+                             f" ratio={sc.get('ratio')}")
+        if extra.get("cooldown"):
+            cd = extra["cooldown"]
+            detail_extra += f" cooldown_until={cd.get('cooldown_until')}"
+
         if reasons:
             return GhostDecision(
                 action="NO_TRADE", instrument=sig.instrument, setup=sig.setup,
                 timestamp=sig.timestamp, market_state=ms, confluence=confluence,
                 signal=sig, no_trade_reasons=_dedup(reasons),
-                detail="hard guard(s) triggered")
+                detail=("hard guard(s) triggered" + detail_extra).strip())
 
         if not confluence.passed:
             return GhostDecision(
                 action="NO_TRADE", instrument=sig.instrument, setup=sig.setup,
                 timestamp=sig.timestamp, market_state=ms, confluence=confluence,
                 signal=sig, no_trade_reasons=[NoTradeReason.INSUFFICIENT_CONFLUENCE],
-                detail=f"score {confluence.score} < {cfg.min_confluence_score}")
+                detail=f"score {confluence.score} < {cfg.min_confluence_score}"
+                       + detail_extra)
 
         return GhostDecision(
             action=direction, instrument=sig.instrument, setup=sig.setup,
             timestamp=sig.timestamp, market_state=ms, confluence=confluence,
-            signal=sig, detail=f"confluence {confluence.score}")
+            signal=sig, detail=f"confluence {confluence.score}" + detail_extra)
+
+
+def _stop_context(sig: Signal, exec_ta, cfg) -> dict:
+    """Compute stop distance vs ATR14 on the execution timeframe. Returns
+    {stop_distance, atr, ratio, threshold, too_tight}. Never raises — a
+    missing/degenerate ATR simply reports too_tight=False (no false negative
+    that would spuriously reject a trade)."""
+    stop_dist = round(abs(sig.entry - sig.stop), 4)
+    atr = None
+    if exec_ta is not None and exec_ta.indicators is not None \
+            and "atr_14" in exec_ta.indicators:
+        s = exec_ta.indicators["atr_14"].dropna()
+        if not s.empty and float(s.iloc[-1]) > 0:
+            atr = round(float(s.iloc[-1]), 4)
+    ratio = round(stop_dist / atr, 4) if atr else None
+    threshold = cfg.min_stop_atr_mult
+    too_tight = (threshold > 0 and atr is not None and stop_dist < threshold * atr)
+    return {"stop_distance": stop_dist, "atr": atr, "ratio": ratio,
+            "threshold": threshold, "too_tight": too_tight}
 
 
 def _dedup(reasons: list[NoTradeReason]) -> list[NoTradeReason]:

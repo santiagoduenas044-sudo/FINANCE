@@ -122,11 +122,35 @@ class PaperTrade:
 
     @property
     def dedup_key(self) -> str:
-        """One open trade per (instrument, direction, setup) — this is the
-        duplicate guard so GHOST never opens the same trade every candle."""
-        return f"{self.instrument}|{self.direction}|{self.setup}"
+        """Phase 15: one open trade PER SYMBOL — max_open_per_symbol=1 blocks
+        LONG+SHORT, LONG+LONG (different setup), etc. GHOST is the gatekeeper."""
+        return self.instrument
+
+    @property
+    def tp3(self) -> float | None:
+        return self.take_profits[2] if len(self.take_profits) > 2 else None
+
+    def _dist(self, target: float | None) -> float | None:
+        """Signed distance in points from current price toward `target`
+        (positive = still to reach for the trade direction, negative = already
+        passed). None if target is missing."""
+        if target is None or self.current_price is None:
+            return None
+        d = (target - self.current_price) if self.is_long else (self.current_price - target)
+        return round(d, 4)
+
+    def _dist_stop(self) -> float:
+        """Points from current price to protective stop (always >= 0 while
+        healthy — a negative value means the stop was already breached)."""
+        d = (self.current_price - self.stop) if self.is_long else (self.stop - self.current_price)
+        return round(d, 4)
 
     def to_dict(self) -> dict:
+        risk = self.initial_risk if self.initial_risk > 0 else 1e-9
+        def _r(target):
+            if target is None:
+                return None
+            return round(abs(target - self.entry) / risk, 3)
         return {
             "signal_id": self.signal_id,
             "instrument": self.instrument,
@@ -135,8 +159,20 @@ class PaperTrade:
             "entry": self.entry,
             "stop": self.stop,
             "take_profits": list(self.take_profits),
+            # Phase 15: explicit, unambiguous target labels + R multiples so the
+            # dashboard / Discord never have to guess which number is TP1 vs TP2.
             "tp1": self.tp1,
             "tp2": self.tp2,
+            "tp3": self.tp3,
+            "tp1_r": _r(self.tp1),
+            "tp2_r": _r(self.tp2),
+            "tp3_r": _r(self.tp3),
+            # Live distances from current price toward each level (positive =
+            # target still ahead; negative = already breached).
+            "distance_to_stop": self._dist_stop(),
+            "distance_to_tp1": self._dist(self.tp1),
+            "distance_to_tp2": self._dist(self.tp2),
+            "distance_to_tp3": self._dist(self.tp3),
             "invalidation_price": self.invalidation_price,
             "timeframe": self.timeframe,
             "initial_risk": self.initial_risk,

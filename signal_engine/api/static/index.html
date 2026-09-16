@@ -722,7 +722,9 @@ async function refreshHistory() {
       <td class="dir ${isSig ? "dir-" + s.direction : "kind-NO_TRADE"}">${isSig ? s.direction : "NO TRADE"}</td>
       <td>${fmtPx(s.entry)}</td>
       <td>${fmtPx(s.stop)}</td>
-      <td>${isSig ? `<span class="st st-${st}">${st}</span>` : "—"}</td>
+      <td>${isSig
+          ? `<span class="st st-${st}">${st}</span>`
+          : `<span class="st st-INVALIDATED" title="${esc((s.reasons||[]).join(', '))}">${esc((s.reasons||['no_trade'])[0])}</span>`}</td>
     </tr>`;
   }).join("");
   body.querySelectorAll("tr").forEach(tr => tr.onclick = () => selectSignal(tr.dataset.id, tr.dataset.instr));
@@ -1089,6 +1091,15 @@ function tickClock() { $("clock").textContent = new Date().toLocaleTimeString([]
 // ------------------------------------------------------------------ GHOST brain
 const biasClass = (b) => b === "BULLISH" ? "dir-LONG" : b === "BEARISH" ? "dir-SHORT" : "dir-NONE";
 function row(k, vHtml) { return `<div class="stat-row"><span class="k">${k}</span><span class="v">${vHtml}</span></div>`; }
+function _tpRow(label, price, r, dist, hit) {
+  if (price == null) return "";
+  const hitTag = hit ? `<span style="color:var(--green);font-weight:800">✓ HIT</span>` : "";
+  const distTag = dist != null
+    ? `<span style="color:var(--muted-2);font-size:11px">· ${dist>=0?'+':''}${dist.toFixed(2)}pts</span>`
+    : "";
+  const rTag = r != null ? `<span style="color:var(--accent-2);font-size:11px">+${r.toFixed(2)}R</span>` : "";
+  return row(label, `${fmtPx(price)} ${rTag} ${distTag} ${hitTag}`);
+}
 
 async function refreshGhost() {
   if (!state.symbol) return;
@@ -1149,7 +1160,10 @@ async function refreshGhost() {
         <div class="det-cell"><div class="l">P&L (pts)</div><div class="n" style="color:${pnlCol}">${t.pnl_points>=0?'+':''}${t.pnl_points.toFixed(2)}</div></div>
         <div class="det-cell"><div class="l">R</div><div class="n" style="color:${pnlCol}">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(2)}R</div></div>
       </div>` +
-      row("Stop", fmtPx(t.stop)) + row("Targets", (t.take_profits||[]).map(fmtPx).join(" / ") || "—") +
+      row("Stop", `${fmtPx(t.stop)} <span style="color:var(--muted-2);font-size:11px">· ${t.distance_to_stop>=0?'+':''}${(t.distance_to_stop||0).toFixed(2)}pts away</span>`) +
+      _tpRow("TP1", t.tp1, t.tp1_r, t.distance_to_tp1, t.tp1_hit) +
+      _tpRow("TP2", t.tp2, t.tp2_r, t.distance_to_tp2, t.status === "TP2_HIT") +
+      _tpRow("TP3", t.tp3, t.tp3_r, t.distance_to_tp3, false) +
       row("MFE / MAE", `<span style="color:var(--green)">+${t.mfe_r.toFixed(2)}R</span> / <span style="color:var(--red)">${t.mae_r.toFixed(2)}R</span>`) +
       row("Bars held", t.bars_held);
   } else {

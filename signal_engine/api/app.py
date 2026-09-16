@@ -185,6 +185,31 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             return {"enabled": False}
         return {"enabled": True, **runtime.paper_tracker.stats()}
 
+    @app.get("/api/ghost/decisions")
+    def get_ghost_decisions(limit: int = 100) -> dict:
+        """Phase 15: EVERY GHOST decision (APPROVED + NO_TRADE) with reasons /
+        confluence / context. This is the honest audit trail — dashboard shows
+        it so the user can see the filter working."""
+        if runtime.ghost_log_path is None:
+            return {"decisions": [], "persisted": False}
+        if limit < 1 or limit > 1000:
+            raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+        path = Path(runtime.ghost_log_path)
+        if not path.exists():
+            return {"decisions": [], "persisted": True}
+        import json as _json
+        lines = path.read_text().splitlines()
+        out = []
+        for line in lines[-limit:]:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                out.append(_json.loads(line))
+            except ValueError:
+                continue
+        return {"decisions": out[::-1], "persisted": True}
+
     @app.get("/api/signals/detail/{signal_id}")
     def get_signal_detail(signal_id: str) -> dict:
         """Full detail for one signal by id. Looks in the persisted log first

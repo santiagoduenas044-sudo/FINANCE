@@ -210,6 +210,20 @@ class GhostConfig(BaseModel):
     rvol_confirm: float = 1.0              # RVOL >= this counts as volume confirmation
     valid_sessions: list[str] = Field(default_factory=lambda: ["RTH", "ETH"])
 
+    # --- Phase 15: trade management (per-symbol authority) --- #
+    # Stop-too-tight: reject when |entry-stop| < min_stop_atr_mult * ATR14 on the
+    # execution timeframe. Does NOT widen the stop silently — rejects with a
+    # concrete reason (Opción A). Set to 0 to disable the check.
+    min_stop_atr_mult: float = 0.8
+    # Max simultaneously ACTIVE paper trades per symbol. Default 1 => no
+    # LONG+LONG (different setup), no LONG+SHORT, one open per instrument.
+    max_open_per_symbol: int = 1
+    # Cooldown after a losing/invalidating close (in exec-timeframe bars).
+    # 0 disables cooldown. Applied per symbol; TP closes do NOT trigger cooldown.
+    cooldown_bars: int = 3
+    # Exit reasons that trigger cooldown (case-insensitive by value).
+    cooldown_on_reasons: list[str] = Field(default_factory=lambda: ["STOP", "INVALIDATION"])
+
     # --- paper memory --- #
     paper_enabled: bool = True             # create/track PaperTrades from decisions
 

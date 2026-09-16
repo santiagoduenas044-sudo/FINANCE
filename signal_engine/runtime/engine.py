@@ -201,22 +201,27 @@ class BotRuntime:
                 self._fail_cycle(f"signal engine error: {exc}", "signal")
                 return CycleResult(ran=False, timestamp=now, reason=str(exc), errors=[str(exc)])
 
-            for result in results:
-                if isinstance(result, Signal):
-                    signals_produced += 1
-                    self._handle_signal(result)
-                else:
-                    no_trades_produced += 1
-                    self.recent_signals.append(result)
-                    self._persist_record(result)
+            # Phase 15: when GHOST is enabled it becomes the AUTHORITY —
+            # base results do NOT reach Discord / signal log / dashboard until
+            # GHOST approves. When GHOST is disabled the legacy path runs
+            # exactly as before (Phase 9-13 behaviour, no regression).
+            if self.ghost is None:
+                for result in results:
+                    if isinstance(result, Signal):
+                        signals_produced += 1
+                        self._handle_signal(result)
+                    else:
+                        no_trades_produced += 1
+                        self.recent_signals.append(result)
+                        self._persist_record(result)
 
-        # Phase 14: GHOST intelligence + paper memory (optional, additive). Runs
-        # every cycle so active paper trades update on each closed bar, even when
-        # there were no new candidates. Never affects the base pipeline above;
-        # a failure here can never break the trading cycle.
+        # GHOST runs every cycle (updates active trades even without candidates).
+        # When enabled it also drives outputs for APPROVED decisions.
         if self.ghost is not None:
             try:
-                self._run_ghost(symbol, ctx, results)
+                approved, rejected = self._run_ghost(symbol, ctx, results)
+                signals_produced += approved
+                no_trades_produced += rejected
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DEGRADED, "ghost", str(exc))
 
@@ -251,10 +256,19 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
-    def _run_ghost(self, symbol: str, ctx, base_results: list) -> None:
-        """Phase 14 GHOST layer: interpret context, decide with confluence, and
-        keep paper-trade memory. Read-only w.r.t. the trading engines — it only
-        CALLS the analyzer and consumes the base results already produced."""
+    def _run_ghost(self, symbol: str, ctx, base_results: list) -> tuple[int, int]:
+        """Phase 15 — GHOST is the AUTHORITY when enabled. Flow:
+
+            base results  ->  update active paper trades on this closed bar
+                          ->  build MarketState + GHOST decisions
+                          ->  APPROVED: run outputs (Discord + persistence via
+                              _handle_signal) AND open PaperTrade — same signal_id
+                          ->  NO_TRADE: persist decision to ghost_log AND to
+                              recent_signals/signal_log so the dashboard shows
+                              the filter working; NO Discord, NO PaperTrade.
+
+        Returns (approved_count, rejected_count) so the CycleResult stays accurate.
+        """
         # 1) update active paper trades with this decision (closed) bar.
         exec_tf = self.data_engine.cfg.timeframe_roles.execution
         bars = ctx.execution.bars
@@ -268,32 +282,104 @@ class BotRuntime:
         analysis = self.setup_engine.analyzer.analyze(ctx)
         feed_status = self.data_feed_status.get(symbol)
         data_stale = getattr(feed_status, "value", None) == "STALE"
+
+        # Runtime-supplied callbacks (brain stays pure/side-effect-free).
+        gcfg = self.data_engine.cfg.ghost
         has_active = (self.paper_tracker.has_open if self.paper_tracker is not None else None)
+        cooldown_check = None
+        duplicate_check = None
+        if self.paper_tracker is not None:
+            bar_seconds = _tf_seconds(exec_tf)
+            def _cool(inst: str, _pt=self.paper_tracker, _cfg=gcfg, _bs=bar_seconds,
+                      _now=ctx.decision_time):
+                return _pt.is_in_cooldown(inst, _now, _cfg.cooldown_bars, _bs,
+                                          _cfg.cooldown_on_reasons)
+            cooldown_check = _cool
+            duplicate_check = self.paper_tracker.has_processed
+
         ms, decisions = self.ghost.evaluate(ctx, analysis, base_results,
-                                            data_stale=data_stale, has_active=has_active)
+                                            data_stale=data_stale,
+                                            has_active=has_active,
+                                            cooldown_check=cooldown_check,
+                                            duplicate_check=duplicate_check)
         self._set_component(ComponentStatus.OK, "ghost")
         self.ghost_market_state[symbol] = ms.to_dict()
         if decisions:
             self.ghost_last_decision[symbol] = decisions[-1].to_dict()
 
-        # 3) create paper trades for GHOST-approved decisions (dedup inside).
+        # 3) route each decision. Same signal_id end-to-end.
+        approved = rejected = 0
         for d in decisions:
             self._persist_ghost(d)
-            if d.is_trade and self.paper_tracker is not None and d.signal is not None:
-                sig = d.signal
-                self.paper_tracker.open_trade(
-                    signal_id=sig.signal_id, instrument=sig.instrument,
-                    direction=d.action, setup=sig.setup, entry=sig.entry,
-                    stop=sig.stop, take_profits=list(sig.take_profits),
-                    opened_at=sig.timestamp, invalidation_price=sig.invalidation_price,
-                    timeframe=sig.timeframe,
-                    context={
-                        "regime": ms.regime.regime.value,
-                        "session": ms.session,
-                        "mtf": ms.mtf.alignment.value,
-                        "confluence": d.confluence.score if d.confluence else None,
-                    },
+            if d.is_trade and d.signal is not None:
+                # Same-bar race guard: if multiple APPROVED decisions arrive on
+                # one bar, only the first actually opens a trade (max 1 per
+                # symbol). The rest reclassify as ACTIVE_TRADE so outputs stay
+                # consistent (Discord = PaperTrades = final approvals).
+                if self.paper_tracker is not None and \
+                        self.paper_tracker.has_open(d.signal.instrument):
+                    rejected += 1
+                    nt = NoTrade(
+                        instrument=d.instrument, timestamp=d.timestamp,
+                        reasons=["active_trade"], setup=d.setup,
+                        timeframe=d.signal.timeframe,
+                        candidate_direction=d.signal.direction,
+                    )
+                    self.recent_signals.append(nt)
+                    self._persist_record(nt)
+                    self.paper_tracker.mark_processed(d.signal.signal_id)
+                    continue
+                # Open the PaperTrade FIRST so it is the source of truth for
+                # "this trade actually happened". If the tracker declines
+                # (already processed / restart-safe duplicate), Discord and the
+                # signal log must NOT fire either — invariant: approved ==
+                # Discord == PaperTrades.
+                paper_trade = None
+                if self.paper_tracker is not None:
+                    sig = d.signal
+                    paper_trade = self.paper_tracker.open_trade(
+                        signal_id=sig.signal_id, instrument=sig.instrument,
+                        direction=d.action, setup=sig.setup, entry=sig.entry,
+                        stop=sig.stop, take_profits=list(sig.take_profits),
+                        opened_at=sig.timestamp,
+                        invalidation_price=sig.invalidation_price,
+                        timeframe=sig.timeframe,
+                        context={
+                            "regime": ms.regime.regime.value,
+                            "session": ms.session,
+                            "mtf": ms.mtf.alignment.value,
+                            "confluence": d.confluence.score if d.confluence else None,
+                        },
+                    )
+                if self.paper_tracker is not None and paper_trade is None:
+                    # tracker refused (duplicate signal_id after restart, or a
+                    # freshly-opened trade on the same symbol earlier this bar)
+                    rejected += 1
+                    self.paper_tracker.mark_processed(d.signal.signal_id)
+                    continue
+                approved += 1
+                # Now (and only now) fire outputs. Same signal_id, same plan.
+                self._handle_signal(d.signal)
+            else:
+                rejected += 1
+                # A rejected decision is a first-class outcome — record it in
+                # recent_signals + signal_log (as an enriched NoTrade) so the
+                # dashboard shows GHOST's filter working. No Discord, no paper.
+                nt = NoTrade(
+                    instrument=d.instrument,
+                    timestamp=d.timestamp,
+                    reasons=[r.value for r in d.no_trade_reasons] or ["insufficient_confluence"],
+                    setup=d.setup,
+                    timeframe=(d.signal.timeframe if d.signal else None),
+                    candidate_direction=(d.signal.direction if d.signal else None),
                 )
+                self.recent_signals.append(nt)
+                self._persist_record(nt)
+                # Mark the base signal_id as processed so a re-poll never
+                # reconsiders the same opportunity (restart-safe dedup).
+                if d.signal is not None and self.paper_tracker is not None:
+                    self.paper_tracker.mark_processed(d.signal.signal_id)
+        return approved, rejected
 
     def _persist_ghost(self, decision) -> None:
         if self.ghost_log_path is None:
@@ -535,6 +621,11 @@ def _record_to_dict(r: Signal | NoTrade) -> dict:
         "timeframe": r.timeframe,
         "candidate_direction": r.candidate_direction.value if r.candidate_direction else None,
     }
+
+
+_TF_SECS = {"1m": 60, "5m": 300, "15m": 900, "1H": 3600, "1h": 3600, "4H": 14400}
+def _tf_seconds(tf: str) -> float:
+    return float(_TF_SECS.get(tf, 300))
 
 
 def _ghost_log_entry(decision) -> dict:

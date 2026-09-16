@@ -30,6 +30,9 @@ class PaperTradeTracker:
     def __init__(self, store_dir: str | Path | None = None):
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
+        # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
+        # and remember all signal_ids we have ever processed (approved or not).
+        self._processed_signal_ids: set[str] = set()
         self._store_dir = Path(store_dir) if store_dir else None
         if self._store_dir is not None:
             self._load()
@@ -37,19 +40,65 @@ class PaperTradeTracker:
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
     # ------------------------------------------------------------------ #
-    def has_open(self, instrument: str, direction: str, setup: str) -> bool:
-        key = f"{instrument}|{direction}|{setup}"
-        return any(t.dedup_key == key and t.is_open for t in self.open_trades)
+    def has_open(self, instrument: str, direction: str | None = None,
+                 setup: str | None = None) -> bool:
+        """Phase 15: max_open_per_symbol=1 semantics — an open trade for the
+        symbol (any direction/setup) blocks new ones. The direction/setup
+        parameters are kept for backward compatibility with existing callers
+        but are ignored: one open trade per instrument is the invariant."""
+        return any(t.instrument == instrument and t.is_open for t in self.open_trades)
+
+    def last_closed(self, instrument: str) -> PaperTrade | None:
+        """Most recently closed trade for the symbol (any reason). Used for
+        cooldown gating."""
+        recent = [t for t in self.closed_trades if t.instrument == instrument
+                  and t.closed_at is not None]
+        return max(recent, key=lambda t: t.closed_at) if recent else None
+
+    def is_in_cooldown(self, instrument: str, now: pd.Timestamp,
+                       cooldown_bars: int, bar_seconds: float,
+                       trigger_reasons: list[str]) -> tuple[bool, dict]:
+        """Deterministic cooldown check. Returns (in_cooldown, info) with the
+        previous trade id, its closed_at, cooldown_until, bars remaining. Never
+        raises — returns (False, {}) when disabled or no history exists."""
+        if cooldown_bars <= 0 or bar_seconds <= 0:
+            return False, {}
+        last = self.last_closed(instrument)
+        if last is None or last.exit_reason is None:
+            return False, {}
+        if last.exit_reason.value.upper() not in {r.upper() for r in trigger_reasons}:
+            return False, {}
+        window = cooldown_bars * bar_seconds
+        elapsed = (now - last.closed_at).total_seconds()
+        if elapsed >= window:
+            return False, {}
+        remaining = window - elapsed
+        return True, {
+            "previous_trade_id": last.signal_id,
+            "closed_at": last.closed_at.isoformat(),
+            "cooldown_until": (last.closed_at + pd.Timedelta(seconds=window)).isoformat(),
+            "bars_remaining": round(remaining / bar_seconds, 2),
+        }
+
+    def has_processed(self, signal_id: str) -> bool:
+        """Phase 15: has this exact signal_id already been evaluated (approved
+        or rejected) since we started? Survives restart via _load()."""
+        return signal_id in self._processed_signal_ids
+
+    def mark_processed(self, signal_id: str) -> None:
+        self._processed_signal_ids.add(signal_id)
 
     def open_trade(self, *, signal_id: str, instrument: str, direction: str,
                    setup: str, entry: float, stop: float, take_profits: list[float],
                    opened_at: pd.Timestamp, invalidation_price: float = 0.0,
                    timeframe: str | None = None, context: dict | None = None,
                    fill: str = "immediate") -> PaperTrade | None:
-        """Create a PaperTrade. Returns None (no trade) if an identical open
-        trade already exists — the duplicate guard so GHOST never re-opens the
-        same trade on every candle."""
-        if self.has_open(instrument, direction, setup):
+        """Create a PaperTrade. Returns None if the symbol already has an open
+        trade or if this exact signal_id was already processed (restart-safe
+        duplicate guard)."""
+        if self.has_processed(signal_id):
+            return None
+        if self.has_open(instrument):
             return None
         risk = abs(entry - stop)
         trade = PaperTrade(
@@ -65,6 +114,7 @@ class PaperTradeTracker:
         trade.updated_at = opened_at
         trade.last_bar_time = opened_at
         self.open_trades.append(trade)
+        self.mark_processed(signal_id)
         self._save_open()
         return trade
 
@@ -250,6 +300,10 @@ class PaperTradeTracker:
                                       for line in cp.read_text().splitlines() if line.strip()]
             except (OSError, ValueError):
                 self.closed_trades = []
+        # Phase 15: restart-safe duplicate guard — remember every signal_id we
+        # ever accepted (whether the trade is still open or already closed).
+        for t in list(self.open_trades) + list(self.closed_trades):
+            self._processed_signal_ids.add(t.signal_id)
 
 
 def _closer_to_entry(trade: PaperTrade, a: float, b: float) -> bool:

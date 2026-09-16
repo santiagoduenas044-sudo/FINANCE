@@ -200,8 +200,9 @@ def test_no_trade_target_too_close():
 def test_no_trade_stale_and_duplicate():
     d1 = _decide(_mk_state(), _mk_signal("LONG"), data_stale=True)
     assert NoTradeReason.STALE_DATA in d1.no_trade_reasons
+    # Phase 15: per-symbol semantic — an open trade blocks with ACTIVE_TRADE
     d2 = _decide(_mk_state(), _mk_signal("LONG"), has_active=lambda *a: True)
-    assert NoTradeReason.DUPLICATE_ACTIVE_TRADE in d2.no_trade_reasons
+    assert NoTradeReason.ACTIVE_TRADE in d2.no_trade_reasons
 
 
 def test_no_trade_insufficient_confluence():
