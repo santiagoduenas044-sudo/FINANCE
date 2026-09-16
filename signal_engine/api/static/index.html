@@ -457,7 +457,7 @@
       </div>
       <div class="sig-wrap">
         <table>
-          <thead><tr><th>Time</th><th>Instr</th><th>Setup</th><th>Dir</th><th>Entry</th><th>Stop</th><th>Status</th></tr></thead>
+          <thead><tr><th>Time</th><th>Instr</th><th>Setup</th><th>Dir</th><th>Entry</th><th>Stop</th><th>TP1</th><th>TP2</th><th>P&L</th><th>R</th><th>Status</th></tr></thead>
           <tbody id="signals-body"></tbody>
         </table>
         <div id="signals-empty" class="detail-empty" style="display:none">
@@ -480,7 +480,7 @@
       <div class="card-h"><h2>Paper Trades <span style="color:var(--muted-2);text-transform:none;font-weight:400;font-size:10px">(simulated · no orders)</span></h2></div>
       <div class="sig-wrap">
         <table>
-          <thead><tr><th>Opened</th><th>Instr</th><th>Dir</th><th>Setup</th><th>Entry</th><th>Exit</th><th>R</th><th>Result</th></tr></thead>
+          <thead><tr><th>Opened</th><th>Instr</th><th>Dir</th><th>Setup</th><th>Entry</th><th>Stop</th><th>TP1</th><th>TP2</th><th>Exit</th><th>P&L</th><th>R</th><th>MFE</th><th>MAE</th><th>Result</th></tr></thead>
           <tbody id="paper-body"></tbody>
         </table>
         <div id="paper-empty" class="detail-empty" style="display:none"><span class="ico">🗂️</span>No closed paper trades yet.</div>
@@ -696,6 +696,11 @@ function renderPrice(d) {
   el.style.color = up ? "var(--green)" : "var(--red)";
 }
 
+// Phase 15b: cache PaperTrade snapshots (active + closed) so the Recent Signals
+// table can enrich SIGNAL rows with LIVE P&L / R / MFE / MAE by joining on
+// signal_id. Refreshed once per refreshGhost tick.
+const paperCache = new Map();   // signal_id -> paper dict
+
 // ------------------------------------------------------------------ recent signals table + history
 async function refreshHistory() {
   let hist, persisted = false;
@@ -715,6 +720,14 @@ async function refreshHistory() {
     const isSig = s.kind === "SIGNAL";
     const st = isSig ? (statusById[s.signal_id] || "ACTIVE") : "";
     const sel = s.signal_id && s.signal_id === state.selectedId ? "sel" : "";
+    // Join with the PaperTrade cache to show live P&L / R for approved trades.
+    const paper = isSig ? paperCache.get(s.signal_id) : null;
+    const tps = (isSig ? (s.take_profits || []) : []);
+    const tp1 = paper ? paper.tp1 : (tps[0] ?? null);
+    const tp2 = paper ? paper.tp2 : (tps[1] ?? null);
+    const pnl = paper ? paper.pnl_points : null;
+    const rM  = paper ? paper.r_multiple : null;
+    const pnlCol = pnl == null ? "" : (pnl >= 0 ? "var(--green)" : "var(--red)");
     return `<tr class="${sel}" data-id="${s.signal_id || ""}" data-instr="${s.instrument}">
       <td>${fmtTime(s.timestamp)}</td>
       <td>${s.instrument}</td>
@@ -722,6 +735,10 @@ async function refreshHistory() {
       <td class="dir ${isSig ? "dir-" + s.direction : "kind-NO_TRADE"}">${isSig ? s.direction : "NO TRADE"}</td>
       <td>${fmtPx(s.entry)}</td>
       <td>${fmtPx(s.stop)}</td>
+      <td>${fmtPx(tp1)}</td>
+      <td>${fmtPx(tp2)}</td>
+      <td style="color:${pnlCol};font-weight:700">${pnl==null?"—":(pnl>=0?"+":"")+pnl.toFixed(2)}</td>
+      <td style="color:${pnlCol};font-weight:700">${rM==null?"—":(rM>=0?"+":"")+rM.toFixed(2)+"R"}</td>
       <td>${isSig
           ? `<span class="st st-${st}">${st}</span>`
           : `<span class="st st-INVALIDATED" title="${esc((s.reasons||[]).join(', '))}">${esc((s.reasons||['no_trade'])[0])}</span>`}</td>
@@ -1175,17 +1192,35 @@ async function refreshGhost() {
   let h = { trades: [] }, s = {};
   try { h = await api("/api/ghost/trades/history?limit=40"); } catch (e) {}
   try { s = await api("/api/ghost/stats"); } catch (e) {}
+
+  // Refresh the Recent-Signals join cache with every known PaperTrade (open + closed).
+  paperCache.clear();
+  for (const t of (act.trades || [])) paperCache.set(t.signal_id, t);
+  for (const t of (h.trades || [])) paperCache.set(t.signal_id, t);
+
   const pbody = $("paper-body"), pempty = $("paper-empty");
   if (h.trades && h.trades.length) {
     pempty.style.display = "none";
-    pbody.innerHTML = h.trades.map(t => `<tr>
+    pbody.innerHTML = h.trades.map(t => {
+      const pnlCol = t.pnl_points >= 0 ? 'var(--green)' : 'var(--red)';
+      return `<tr>
       <td>${fmtTime(t.opened_at)}</td><td>${t.instrument}</td>
       <td class="dir dir-${t.direction}">${t.direction}</td><td>${esc(t.setup)}</td>
-      <td>${fmtPx(t.entry)}</td><td>${fmtPx(t.exit_price)}</td>
-      <td style="color:${t.r_multiple>=0?'var(--green)':'var(--red)'}">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(2)}</td>
+      <td>${fmtPx(t.entry)}</td>
+      <td style="color:var(--red)">${fmtPx(t.stop)}</td>
+      <td style="color:var(--green)">${fmtPx(t.tp1)}</td>
+      <td style="color:var(--green)">${fmtPx(t.tp2)}</td>
+      <td>${fmtPx(t.exit_price)}</td>
+      <td style="color:${pnlCol};font-weight:700">${(t.pnl_points||0)>=0?'+':''}${(t.pnl_points||0).toFixed(2)}</td>
+      <td style="color:${pnlCol};font-weight:700">${t.r_multiple>=0?'+':''}${t.r_multiple.toFixed(2)}</td>
+      <td style="color:var(--green)">+${(t.mfe_r||0).toFixed(2)}R</td>
+      <td style="color:var(--red)">${(t.mae_r||0).toFixed(2)}R</td>
       <td><span class="st st-${t.exit_reason==='TP1'||t.exit_reason==='TP2'?'WIN':t.exit_reason==='STOP'?'LOSS':'INVALIDATED'}">${esc(t.exit_reason||t.status)}</span></td>
-    </tr>`).join("");
+    </tr>`;
+    }).join("");
   } else { pbody.innerHTML = ""; pempty.style.display = "block"; }
+  // Refresh recent-signals rendering now that the cache is warm.
+  refreshHistory();
 
   const sel = $("ghost-stats");
   if (s.enabled && s.total_trades > 0) {
