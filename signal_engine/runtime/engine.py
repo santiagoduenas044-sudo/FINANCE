@@ -12,6 +12,7 @@ are — no changes to their logic.
 from __future__ import annotations
 
 import json
+import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -38,6 +39,8 @@ from .models import (
 # tf_bars passed explicitly to run_cycle()) when no live_feeds are configured.
 from ..live.feed import LiveFeed
 from ..live.models import DataFeedStatus
+
+log = logging.getLogger("signal_engine.runtime.engine")
 
 _DEFAULT_MAX_EVENTS = 200
 _DEFAULT_MAX_SIGNALS = 100
@@ -269,6 +272,27 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
+    def _on_trade_opened(self, signal: Signal, paper_trade) -> None:
+        """Record-keeping + Discord for a GHOST-approved, paper-trade-opened event.
+        Called instead of _handle_signal in the GHOST path so the Discord message
+        is a rich 'Trade Opened' embed (with full TradePlan) rather than the
+        generic 'Signal' embed used by the non-GHOST path."""
+        self.recent_signals.append(signal)
+        self._persist_record(signal)
+        self.trades_today += 1
+
+        if self.output_dispatcher is not None:
+            try:
+                log.info("DISCORD SEND signal_id=%.8s… instrument=%s direction=%s",
+                         signal.signal_id, signal.instrument,
+                         getattr(paper_trade, "direction", "?"))
+                self.output_dispatcher.publish_trade_opened(paper_trade.to_dict())
+                self._update_discord_health()
+            except Exception as exc:            # noqa: BLE001
+                log.warning("Discord send failed (%s) signal_id=%.8s…",
+                            type(exc).__name__, signal.signal_id)
+                self._set_component(ComponentStatus.DOWN, "discord", str(exc))
+
     def _run_ghost(self, symbol: str, ctx, base_results: list) -> tuple[int, int]:
         """Phase 15 — GHOST is the AUTHORITY when enabled. Flow:
 
@@ -332,9 +356,13 @@ class BotRuntime:
             self.ghost_last_decision[symbol] = decisions[-1].to_dict()
 
         # 3) route each decision. Same signal_id end-to-end.
+        log.info("GHOST cycle instrument=%s decisions=%d", symbol, len(decisions))
         approved = rejected = 0
         for d in decisions:
             self._persist_ghost(d)
+            log.info("GHOST decision instrument=%s action=%s signal_id=%s",
+                     d.instrument, d.action,
+                     d.signal.signal_id[:8] + "…" if d.signal else "none")
             if d.is_trade and d.signal is not None:
                 # Same-bar race guard: if multiple APPROVED decisions arrive on
                 # one bar, only the first actually opens a trade (max 1 per
@@ -381,6 +409,8 @@ class BotRuntime:
                         self._set_component(ComponentStatus.OK, "risk")
 
                 if _risk_blocks:
+                    log.info("RISK BLOCKED signal_id=%.8s… codes=%s",
+                             d.signal.signal_id, _risk_block_codes)
                     rejected += 1
                     nt = NoTrade(
                         instrument=d.instrument, timestamp=d.timestamp,
@@ -420,13 +450,18 @@ class BotRuntime:
                 if self.paper_tracker is not None and paper_trade is None:
                     # tracker refused (duplicate signal_id after restart, or a
                     # freshly-opened trade on the same symbol earlier this bar)
+                    log.info("PAPERTRADE SKIP (dup/active) signal_id=%.8s… instrument=%s",
+                             d.signal.signal_id, d.signal.instrument)
                     rejected += 1
                     self.paper_tracker.mark_processed(d.signal.signal_id)
                     continue
+                log.info("PAPERTRADE OPEN signal_id=%.8s… instrument=%s direction=%s "
+                         "entry=%.2f stop=%.2f",
+                         d.signal.signal_id, d.signal.instrument, d.action,
+                         d.signal.entry, d.signal.stop)
                 approved += 1
-                # Now (and only now) fire outputs. Risk was already checked above,
-                # so pass _skip_risk=True to avoid a redundant second evaluation.
-                self._handle_signal(d.signal, _skip_risk=True)
+                # Fire record-keeping + Discord with rich "Trade Opened" embed.
+                self._on_trade_opened(d.signal, paper_trade)
             else:
                 rejected += 1
                 # A rejected decision is a first-class outcome — record it in

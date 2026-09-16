@@ -374,6 +374,7 @@
         <button data-n="100">100</button>
         <button data-n="200" class="active">200</button>
         <button data-n="400">400</button>
+        <button data-n="reset" title="Reset pan to latest bar">↺</button>
       </div>
     </div>
     <div class="chart-host">
@@ -562,6 +563,10 @@ const state = {
   limit: 200, selectedId: null, hoverX: null,
   activeTrades: [],   // Fix 5/6: active paper trades for chart lines + P&L panel
   layers: { vwap:true, ema9:true, ema20:true, liquidity:true, fvg:true, structure:true, signals:true },
+  // Pan/zoom state: panOffset = bars to skip from the right end (0 = latest candles)
+  panOffset: 0,
+  _dragStartX: null,
+  _dragStartOffset: null,
 };
 
 // ------------------------------------------------------------------ controls
@@ -578,10 +583,16 @@ $("legend").addEventListener("click", (e) => {
   leg.classList.toggle("off", !state.layers[k]);
   drawChart();
 });
-// zoom
+// zoom / reset pan
 $("zoom").addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.n === "reset") {
+    state.panOffset = 0;
+    drawChart();
+    return;
+  }
   state.limit = parseInt(b.dataset.n, 10);
+  state.panOffset = 0;
   [...$("zoom").children].forEach(c => c.classList.toggle("active", c === b));
   refreshChart();
 });
@@ -652,9 +663,13 @@ function mostRecent(map) {
 async function refreshChart() {
   if (!state.symbol) return;
   let d;
-  try { d = await api(`/api/chart/${state.symbol}?limit=${state.limit}`); }
+  // Fetch 3× the displayed limit so the user can pan back into history.
+  const fetchLimit = Math.min(state.limit * 3, 900);
+  try { d = await api(`/api/chart/${state.symbol}?limit=${fetchLimit}`); }
   catch (e) { return; }
   state.chart = d;
+  // Reset pan when data refreshes so we always show the latest bar on a fresh fetch.
+  state.panOffset = 0;
 
   // header
   $("price-tf").textContent = d.timeframe || "5m";
@@ -823,7 +838,16 @@ function drawChart() {
   const d = state.chart;
   if (!d || !d.candles || !d.candles.length) { geom = null; return; }
 
-  const candles = d.candles;
+  // Apply pan/zoom view window: show `state.limit` candles offset by panOffset from end.
+  const allC = d.candles;
+  const N = allC.length;
+  const visible = Math.min(state.limit, N);
+  const maxOffset = Math.max(0, N - visible);
+  const safeOffset = Math.max(0, Math.min(state.panOffset, maxOffset));
+  const viewEnd   = N - safeOffset;
+  const viewStart = Math.max(0, viewEnd - visible);
+  const candles = allC.slice(viewStart, viewEnd);
+  if (!candles.length) { geom = null; return; }
   const padL = 12, padR = 62, padT = 14, padB = 26;
   const volH = Math.max(50, h * 0.18);
   const gap = 10;
@@ -1048,30 +1072,93 @@ function drawSignals(signals, g) {
   }
 }
 
-// Fix 5: horizontal price lines for active paper trades
+// TradingView-style filled zones for active paper trades (entry/stop/TP zones)
 function drawActiveTradeLines(trades, g) {
+  if (!trades || !trades.length) return;
   const mf = CSS.getPropertyValue("--mono").trim() || "monospace";
-  ctx.font = "9px " + mf;
+  ctx.save();
+
   for (const t of trades) {
-    const drawLevel = (price, color, label) => {
-      if (price == null) return;
+    const long = t.direction === "LONG";
+    const xL = g.plotL, xR = g.plotR;
+
+    const safeY = (price) => {
+      if (price == null) return null;
       const y = g.yAt(price);
-      if (y < g.priceTop - 2 || y > g.priceBot + 2) return;
-      ctx.strokeStyle = color; ctx.globalAlpha = 0.82;
-      ctx.setLineDash([5, 4]); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(g.plotL, y); ctx.lineTo(g.plotR, y); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = 1;
-      // label inside chart, right-aligned near the right edge
-      const txt = label + " " + price.toFixed(2);
-      ctx.fillStyle = color; ctx.textAlign = "right"; ctx.textBaseline = "bottom";
-      ctx.fillText(txt, g.plotR - 3, y - 1);
+      return (y >= g.priceTop - 4 && y <= g.priceBot + 4) ? y : null;
     };
-    drawLevel(t.entry, "rgba(255,255,255,0.85)", "Entry");
-    drawLevel(t.stop, "rgba(255,92,114,0.9)", "Stop");
-    if (t.tp1 != null) drawLevel(t.tp1, "rgba(47,212,139,0.9)", "TP1");
-    if (t.tp2 != null) drawLevel(t.tp2, "rgba(100,220,160,0.8)", "TP2");
-    if (t.tp3 != null) drawLevel(t.tp3, "rgba(150,235,185,0.7)", "TP3");
+
+    const entryY = safeY(t.entry);
+    const stopY  = safeY(t.stop);
+    const tp1Y   = safeY(t.tp1);
+    const tp2Y   = safeY(t.tp2);
+    const tp3Y   = safeY(t.tp3);
+
+    // ── filled risk zone (entry → stop) ──────────────────────────────────
+    if (entryY != null && stopY != null) {
+      const yt = Math.min(entryY, stopY), yb = Math.max(entryY, stopY);
+      ctx.fillStyle = "rgba(255,92,114,0.13)";
+      ctx.fillRect(xL, yt, xR - xL, yb - yt);
+    }
+
+    // ── filled target zone(s) (entry → TP1 → TP2) ────────────────────────
+    if (entryY != null && tp1Y != null) {
+      const yt = Math.min(entryY, tp1Y), yb = Math.max(entryY, tp1Y);
+      ctx.fillStyle = "rgba(47,212,139,0.11)";
+      ctx.fillRect(xL, yt, xR - xL, yb - yt);
+    }
+    if (tp1Y != null && tp2Y != null) {
+      const yt = Math.min(tp1Y, tp2Y), yb = Math.max(tp1Y, tp2Y);
+      ctx.fillStyle = "rgba(47,212,139,0.16)";
+      ctx.fillRect(xL, yt, xR - xL, yb - yt);
+    }
+    if (tp2Y != null && tp3Y != null) {
+      const yt = Math.min(tp2Y, tp3Y), yb = Math.max(tp2Y, tp3Y);
+      ctx.fillStyle = "rgba(47,212,139,0.20)";
+      ctx.fillRect(xL, yt, xR - xL, yb - yt);
+    }
+
+    // ── horizontal price lines ────────────────────────────────────────────
+    const solidLine = (y, color, lw, dash = []) => {
+      if (y == null) return;
+      ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.globalAlpha = 0.92;
+      ctx.setLineDash(dash);
+      ctx.beginPath(); ctx.moveTo(xL, y); ctx.lineTo(xR, y); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+    };
+    solidLine(stopY,  "rgba(255,92,114,0.95)", 1.5);
+    solidLine(entryY, "rgba(255,255,255,0.85)", 1.5, [4, 3]);
+    solidLine(tp1Y,   "rgba(47,212,139,0.95)",  1.5);
+    solidLine(tp2Y,   "rgba(100,220,160,0.85)", 1.2, [3, 3]);
+    solidLine(tp3Y,   "rgba(150,235,185,0.75)", 1, [3, 3]);
+
+    // ── price labels (right edge) ─────────────────────────────────────────
+    ctx.font = "9px " + mf;
+    ctx.textAlign = "right"; ctx.textBaseline = "bottom"; ctx.globalAlpha = 0.92;
+    const lbl = (y, color, text, price) => {
+      if (y == null || price == null) return;
+      ctx.fillStyle = color;
+      ctx.fillText(text + " " + price.toFixed(2), xR - 3, y - 1);
+    };
+    lbl(stopY,  "rgba(255,92,114,0.9)",  "STOP", t.stop);
+    lbl(entryY, "rgba(255,255,255,0.85)","ENTRY", t.entry);
+    lbl(tp1Y,   "rgba(47,212,139,0.9)",  "TP1", t.tp1);
+    lbl(tp2Y,   "rgba(100,220,160,0.85)","TP2", t.tp2);
+    lbl(tp3Y,   "rgba(150,235,185,0.75)","TP3", t.tp3);
+    ctx.globalAlpha = 1;
+
+    // ── direction badge (left side at entry) ─────────────────────────────
+    if (entryY != null) {
+      const dirCol  = long ? "rgba(47,212,139,0.92)" : "rgba(255,92,114,0.92)";
+      const dirArrow = long ? "▲ LONG" : "▼ SHORT";
+      ctx.font = "bold 10px " + mf;
+      ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.globalAlpha = 0.95;
+      ctx.fillStyle = dirCol;
+      ctx.fillText(dirArrow + " · " + t.instrument, xL + 7, entryY - 8);
+      ctx.globalAlpha = 1;
+    }
   }
+  ctx.restore();
   ctx.textBaseline = "middle"; ctx.textAlign = "left";
   ctx.font = "11px " + mf;
 }
@@ -1104,13 +1191,54 @@ function drawCrosshair() {
   tip.style.top = (g.priceTop + 6) + "px";
 }
 
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  state._dragStartX = e.clientX;
+  state._dragStartOffset = state.panOffset;
+  canvas.style.cursor = "grabbing";
+});
 canvas.addEventListener("mousemove", (e) => {
+  if (state._dragStartX != null && geom) {
+    // Pan: drag right = go back in time (increase offset), drag left = forward.
+    const dx = e.clientX - state._dragStartX;
+    const barsPerPx = geom.n / geom.plotW;
+    const allN = (state.chart && state.chart.candles) ? state.chart.candles.length : geom.n;
+    const maxOffset = Math.max(0, allN - state.limit);
+    state.panOffset = Math.max(0, Math.min(maxOffset, Math.round(state._dragStartOffset - dx * barsPerPx)));
+    drawChart();
+    return;
+  }
   const r = canvas.getBoundingClientRect();
   state.hoverX = e.clientX - r.left;
   drawChart();
 });
-canvas.addEventListener("mouseleave", () => { state.hoverX = null; tip.style.display = "none"; drawChart(); });
+canvas.addEventListener("mouseup", () => {
+  state._dragStartX = null;
+  state._dragStartOffset = null;
+  canvas.style.cursor = "crosshair";
+});
+canvas.addEventListener("mouseleave", () => {
+  state._dragStartX = null;
+  state._dragStartOffset = null;
+  state.hoverX = null;
+  tip.style.display = "none";
+  canvas.style.cursor = "crosshair";
+  drawChart();
+});
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  // Zoom: scroll up = fewer bars (zoom in), scroll down = more bars (zoom out).
+  const delta = e.deltaY > 0 ? 20 : -20;
+  state.limit = Math.max(50, Math.min(800, state.limit + delta));
+  // Sync zoom buttons to nearest preset.
+  const presets = [100, 200, 400];
+  const nearest = presets.reduce((a, b) => Math.abs(b - state.limit) < Math.abs(a - state.limit) ? b : a);
+  [...$("zoom").children].forEach(c => c.classList.toggle("active", parseInt(c.dataset.n, 10) === nearest));
+  drawChart();
+}, { passive: false });
 canvas.addEventListener("click", (e) => {
+  // Only fire click if no drag occurred.
+  if (state._dragStartX != null) return;
   const g = geom; if (!g || !state.chart) return;
   const r = canvas.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -1127,6 +1255,28 @@ canvas.addEventListener("click", (e) => {
   }
   if (best) selectSignal(best.signal_id, best.instrument);
 });
+// Touch pan support (mobile)
+canvas.addEventListener("touchstart", (e) => {
+  if (e.touches.length === 1) {
+    state._dragStartX = e.touches[0].clientX;
+    state._dragStartOffset = state.panOffset;
+  }
+}, { passive: true });
+canvas.addEventListener("touchmove", (e) => {
+  if (e.touches.length === 1 && state._dragStartX != null && geom) {
+    e.preventDefault();
+    const dx = e.touches[0].clientX - state._dragStartX;
+    const barsPerPx = geom.n / geom.plotW;
+    const allN = (state.chart && state.chart.candles) ? state.chart.candles.length : geom.n;
+    const maxOffset = Math.max(0, allN - state.limit);
+    state.panOffset = Math.max(0, Math.min(maxOffset, Math.round(state._dragStartOffset - dx * barsPerPx)));
+    drawChart();
+  }
+}, { passive: false });
+canvas.addEventListener("touchend", () => {
+  state._dragStartX = null;
+  state._dragStartOffset = null;
+}, { passive: true });
 window.addEventListener("resize", () => drawChart());
 
 // ------------------------------------------------------------------ boot + loops

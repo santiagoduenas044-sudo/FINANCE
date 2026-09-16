@@ -120,6 +120,8 @@ def build_discord_payload(event: OutputEvent) -> dict:
     """Pure function: OutputEvent -> Discord webhook JSON payload (embed)."""
     if event.kind == "runtime_status":
         return _build_runtime_status_payload(event)
+    if event.kind == "trade_opened":
+        return _build_trade_opened_payload(event)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
@@ -137,6 +139,65 @@ def build_discord_payload(event: OutputEvent) -> dict:
 
 
 _SIGNAL_COLOR = {"LONG": 0x2ECC71, "SHORT": 0xE74C3C}
+_TRADE_COLOR  = {"LONG": 0x00C851, "SHORT": 0xFF4444}
+
+
+def _build_trade_opened_payload(event: OutputEvent) -> dict:
+    """Rich "Trade Opened" embed for GHOST-approved simulated paper trades.
+    Includes full TradePlan: direction, entry, stop, TPs, R multiples, setup,
+    regime, session, signal_id (first 8 chars for readability). No secrets."""
+    p = event.status_payload or {}
+    direction = p.get("direction", "LONG")
+    instrument = p.get("instrument", "?")
+    entry = p.get("entry")
+    stop  = p.get("stop")
+    tp1   = p.get("tp1")
+    tp2   = p.get("tp2")
+    tp3   = p.get("tp3")
+    tp1_r = p.get("tp1_r")
+    tp2_r = p.get("tp2_r")
+    setup = p.get("setup", "—")
+    tf    = p.get("timeframe", "—")
+    risk  = p.get("initial_risk", 0)
+    ctx   = p.get("context") or {}
+    regime  = ctx.get("regime", "—")
+    session = ctx.get("session", "—")
+    mtf     = ctx.get("mtf", "—")
+    sig_id  = p.get("signal_id", "")[:8]
+
+    def fp(v): return f"{v:.2f}" if v is not None else "—"
+    def fr(v): return f"+{v:.2f}R" if v is not None else "—"
+
+    fields = [
+        {"name": "Instrument", "value": instrument, "inline": True},
+        {"name": "Direction",  "value": direction,  "inline": True},
+        {"name": "Setup",      "value": setup,      "inline": True},
+        {"name": "Entry",      "value": fp(entry),  "inline": True},
+        {"name": "Stop",       "value": fp(stop),   "inline": True},
+        {"name": "Risk (pts)", "value": fp(risk),   "inline": True},
+    ]
+    if tp1 is not None:
+        fields.append({"name": "TP1", "value": f"{fp(tp1)} ({fr(tp1_r)})", "inline": True})
+    if tp2 is not None:
+        fields.append({"name": "TP2", "value": f"{fp(tp2)} ({fr(tp2_r)})", "inline": True})
+    if tp3 is not None:
+        fields.append({"name": "TP3", "value": fp(tp3), "inline": True})
+    fields += [
+        {"name": "Timeframe", "value": tf,      "inline": True},
+        {"name": "Regime",    "value": regime,  "inline": True},
+        {"name": "Session",   "value": session, "inline": True},
+        {"name": "MTF",       "value": mtf,     "inline": True},
+        {"name": "Signal ID", "value": sig_id + "…", "inline": True},
+    ]
+    color = _TRADE_COLOR.get(direction, 0x2ECC71)
+    embed = {
+        "title": event.title,
+        "description": f"**{event.disclaimer}**",
+        "color": color,
+        "fields": fields,
+        "footer": {"text": "GHOST paper trade · " + event.disclaimer},
+    }
+    return {"embeds": [embed]}
 
 
 def _build_signal_payload(event: OutputEvent) -> dict:
@@ -214,17 +275,25 @@ class DiscordOutputAdapter(OutputAdapter):
 
     def emit(self, event: OutputEvent) -> bool:
         if not self.config.enabled:
+            log.debug("Discord emit skipped: adapter disabled. kind=%s", event.kind)
             return False
         if not self._webhook:
-            log.warning("Discord webhook not configured (env %s unset); skipping.",
-                        self.config.webhook_env)
+            log.warning("Discord emit skipped: webhook env=%s not set. kind=%s",
+                        self.config.webhook_env, event.kind)
             return False
         if self.config.deduplication_enabled and event.dedup_key in self._seen:
+            log.debug("Discord emit dedup: already sent dedup_key=%.8s… kind=%s",
+                      event.dedup_key, event.kind)
             return False
+        log.info("Discord SEND kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
         payload = build_discord_payload(event)
         ok = self._send_with_retry(payload)
-        if ok and self.config.deduplication_enabled:
-            self._seen.add(event.dedup_key)
+        if ok:
+            log.info("Discord SENT OK kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
+            if self.config.deduplication_enabled:
+                self._seen.add(event.dedup_key)
+        else:
+            log.warning("Discord FAILED kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
         return ok
 
     def _send_with_retry(self, payload: dict) -> bool:
@@ -249,11 +318,13 @@ class DiscordOutputAdapter(OutputAdapter):
                 continue
 
             if 200 <= status < 300:
+                log.debug("Discord HTTP %d (attempt %d).", status, i + 1)
                 return True
             if status in _RETRYABLE and not last:
+                log.warning("Discord HTTP %d (attempt %d), retrying…", status, i + 1)
                 self._backoff(i)
                 continue
-            log.warning("Discord returned HTTP %d; giving up.", status)
+            log.warning("Discord HTTP %d (attempt %d); giving up.", status, i + 1)
             return False
         return False
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import Any
 
 from ..setups.models import SetupCandidate
 from ..signals.models import Signal
@@ -80,4 +81,21 @@ class OutputEvent:
             disclaimer="Automated runtime notification — not a trading signal.",
             status_payload={"status": status, "detail": detail,
                             "timestamp": timestamp.isoformat()},
+        )
+
+    @classmethod
+    def from_trade_opened(cls, paper_trade_dict: dict) -> "OutputEvent":
+        """GHOST opened a simulated paper trade — the primary Discord notification.
+        Uses signal_id as dedup_key (same invariant: one notification per trade).
+        status_payload contains the full PaperTrade.to_dict() — JSON-safe, no
+        secrets. Never logs or includes the webhook URL."""
+        direction = paper_trade_dict.get("direction", "LONG")
+        instrument = paper_trade_dict.get("instrument", "?")
+        arrow = "📈" if direction == "LONG" else "📉"
+        return cls(
+            kind="trade_opened",
+            dedup_key=paper_trade_dict["signal_id"],
+            title=f"{arrow} {direction} OPENED — {instrument}",
+            disclaimer="Simulated paper trade — no real money, no broker connection.",
+            status_payload=paper_trade_dict,
         )

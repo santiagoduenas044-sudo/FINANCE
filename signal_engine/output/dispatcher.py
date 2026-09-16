@@ -91,3 +91,14 @@ class OutputDispatcher:
             except Exception as exc:            # defensive: adapters shouldn't raise
                 log.warning("Output adapter %r raised (%s); ignored.",
                             getattr(adapter, "name", "?"), type(exc).__name__)
+
+    def publish_trade_opened(self, paper_trade_dict: dict) -> None:
+        """Send a rich 'Trade Opened' notification (GHOST-approved paper trade).
+        Uses the trade's signal_id as dedup_key — one notification per trade."""
+        event = OutputEvent.from_trade_opened(paper_trade_dict)
+        for adapter in self.adapters:
+            try:
+                adapter.emit(event)
+            except Exception as exc:            # defensive: adapters shouldn't raise
+                log.warning("Output adapter %r raised on trade_opened (%s); ignored.",
+                            getattr(adapter, "name", "?"), type(exc).__name__)
