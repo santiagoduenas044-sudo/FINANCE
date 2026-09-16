@@ -44,16 +44,30 @@ class OutputDispatcher:
         adapters: list[OutputAdapter] = []
         discord = adapter_overrides.get("discord")
         env_flag = _env_bool("BOT_DISCORD_ENABLED")
+        raw = os.environ.get("BOT_DISCORD_ENABLED", "")
         enabled = env_flag if env_flag is not None else config.output.discord.enabled
+        webhook_env = config.output.discord.webhook_env
+        webhook_present = bool(os.environ.get(webhook_env))
+        # Phase 15c: log the decision path (never the webhook itself) so
+        # startup log shows exactly why Discord was or wasn't attached.
+        log.info("Discord dispatcher decision: env_flag_raw=%r env_flag=%s "
+                 "yaml_enabled=%s enabled=%s ${%s}_present=%s",
+                 raw, env_flag, config.output.discord.enabled, enabled,
+                 webhook_env, webhook_present)
         if discord is not None:
             adapters.append(discord)
         elif enabled:
+            if not webhook_present:
+                log.warning("Discord enabled but $%s is not set — the adapter "
+                            "will be attached but emit() will skip until the "
+                            "webhook is provided.", webhook_env)
             # If the env flag overrode a YAML `enabled: false`, pass a shallow
             # copy with enabled=True so the adapter's own guard doesn't re-drop.
             dc = config.output.discord
             if not dc.enabled:
                 dc = dc.model_copy(update={"enabled": True})
             adapters.append(DiscordOutputAdapter(dc))
+            log.info("Discord adapter attached.")
         return cls(adapters)
 
     def publish_candidate(self, candidate: SetupCandidate) -> None:

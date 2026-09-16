@@ -42,6 +42,45 @@ case "${1:-}" in
     echo "==> deps"; "$REPO_DIR/.venv/bin/python" -m pip install --quiet -r requirements.txt
     echo "==> restart"; launchctl kickstart -k "$DOMAIN/$LABEL"; echo "updated + restarted"
     ;;
+  discord)
+    # Phase 15c: standalone diagnostic. Reports what the running process would
+    # see without sending anything. Never prints the webhook value itself.
+    cd "$REPO_DIR"
+    # Reuse the same robust .env parser run.sh uses, so this shows exactly
+    # what run.sh will pass to Python.
+    if [ -f "$REPO_DIR/.env" ]; then
+      while IFS= read -r _raw || [ -n "$_raw" ]; do
+        _line="${_raw#$'\xef\xbb\xbf'}"; _line="${_line%$'\r'}"
+        _line="${_line#"${_line%%[![:space:]]*}"}"
+        case "$_line" in ''|'#'*) continue ;; esac
+        case "$_line" in export\ *) _line="${_line#export }" ;; esac
+        case "$_line" in *=*) : ;; *) continue ;; esac
+        _key="${_line%%=*}"; _val="${_line#*=}"
+        _key="${_key%"${_key##*[![:space:]]}"}"; _key="${_key#"${_key%%[![:space:]]*}"}"
+        _val="${_val#"${_val%%[![:space:]]*}"}"
+        case "$_val" in \"*\") _val="${_val#\"}"; _val="${_val%\"}" ;; esac
+        case "$_key" in ''|*[!A-Za-z0-9_]*|[0-9]*) continue ;; esac
+        export "$_key=$_val"
+      done < "$REPO_DIR/.env"
+    fi
+    PYTHONPATH="$REPO_DIR" "$REPO_DIR/.venv/bin/python" - <<'PYEOF'
+import os
+from signal_engine.config.schema import EngineConfig
+from signal_engine.output.dispatcher import OutputDispatcher, _env_bool
+cfg = EngineConfig.load()
+raw = os.environ.get("BOT_DISCORD_ENABLED", "")
+webhook_env = cfg.output.discord.webhook_env
+print("BOT_DISCORD_ENABLED   raw=" + repr(raw) + "   parsed=" + str(_env_bool("BOT_DISCORD_ENABLED")))
+print("cfg.output.discord.enabled (YAML) =", cfg.output.discord.enabled)
+print("$" + webhook_env + " set in this shell =", bool(os.environ.get(webhook_env)))
+d = OutputDispatcher.from_config(cfg)
+print("adapters attached =", [a.name for a in d.adapters])
+if d.adapters:
+    a = d.adapters[0]
+    print("  config.enabled =", a.config.enabled)
+    print("  configured (webhook resolvable) =", a.configured)
+PYEOF
+    ;;
   autostart)
     case "${2:-}" in
       on)  bash "$REPO_DIR/deploy/macos/ensure-autostart.sh" "$REPO_DIR/.env";
@@ -55,6 +94,6 @@ case "${1:-}" in
     esac
     ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord>" >&2
     exit 2;;
 esac

@@ -437,10 +437,31 @@ class BotRuntime:
         self._update_discord_health()
 
     def _update_discord_health(self) -> None:
+        # Phase 15c: when no adapter is attached, report WHY — env flag off,
+        # YAML off, or webhook missing — so the dashboard says exactly what to
+        # fix. Never returns the webhook itself, only its presence (yes/no).
         if self.output_dispatcher is None or not self.output_dispatcher.adapters:
+            import os
+            cfg = self.data_engine.cfg.output.discord
+            env_raw = os.environ.get("BOT_DISCORD_ENABLED")
+            env_flag = None
+            if env_raw is not None and env_raw != "":
+                env_flag = env_raw.strip().lower() in {"1", "true", "yes", "on"}
+            webhook_present = bool(os.environ.get(cfg.webhook_env))
+            if env_flag is False:
+                detail = f"BOT_DISCORD_ENABLED={env_raw!r} evaluated to false"
+            elif env_flag is None and not cfg.enabled:
+                detail = ("BOT_DISCORD_ENABLED not set and "
+                          "output.discord.enabled=false in config")
+            elif not webhook_present:
+                detail = f"${cfg.webhook_env} is not set in the process env"
+            else:
+                # Flag/YAML say enabled, webhook present, but no adapter — an
+                # unexpected import/build failure. Point the operator to logs.
+                detail = ("adapter not built by dispatcher — check startup logs "
+                          "(dashboard.err.log)")
             self.component_health["discord"] = ComponentHealth(
-                "discord", ComponentStatus.DISABLED,
-                "no Discord adapter attached (disabled or not configured)")
+                "discord", ComponentStatus.DISABLED, detail)
             return
         discord_adapter = next(
             (a for a in self.output_dispatcher.adapters if a.name == "discord"), None)
