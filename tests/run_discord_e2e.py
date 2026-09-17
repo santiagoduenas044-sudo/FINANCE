@@ -146,7 +146,10 @@ http_error: str | None = None
 data = json.dumps(payload).encode("utf-8")
 req  = urllib.request.Request(
     WEBHOOK, data=data, method="POST",
-    headers={"Content-Type": "application/json"},
+    headers={
+        "Content-Type": "application/json",
+        "User-Agent": "DiscordBot (https://github.com/santiagoduenas044-sudo/FINANCE, 1.0)",
+    },
 )
 
 http_attempted = True
