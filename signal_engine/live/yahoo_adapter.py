@@ -44,7 +44,8 @@ _USER_AGENT = "Mozilla/5.0 (compatible; signal-engine/1.0)"
 
 
 def _urllib_transport(ticker: str, timeout: float) -> bytes:
-    url = f"{_CHART_URL.format(ticker=ticker)}?interval=1m&range=1d"
+    # 5d gives ~115 hourly bars after resample — enough to warm EMA-50 on 1H.
+    url = f"{_CHART_URL.format(ticker=ticker)}?interval=1m&range=5d"
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()

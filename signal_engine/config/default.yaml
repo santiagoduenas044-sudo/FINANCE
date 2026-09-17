@@ -111,3 +111,19 @@ output:                             # Phase 5.5 — external observability adapt
     timeout_seconds: 5.0
     retry_count: 2
     deduplication_enabled: true
+
+ghost:                              # Phase 14 — GHOST intelligence layer
+  enabled: true
+  # Lowered from the Python default (55) so trades can be approved even when
+  # EMA-50 hasn't fully warmed up and HTF bias is NEUTRAL (0 pts from the
+  # 20-pt htf_alignment factor). A score of 40 requires at least structure +
+  # VWAP + volume + R:R confluence, which is a meaningful bar to clear.
+  min_confluence_score: 40.0
+  # These two hard-blocks are converted to soft penalties only: they still
+  # subtract -25 / -20 pts from the confluence score, but they no longer
+  # reject the trade outright before scoring runs. A conflicting setup will
+  # score too low to pass; a marginal one without conflicts can still pass.
+  block_htf_conflict: false
+  block_against_structure: false
+  # All other parameters use Python defaults (see config/schema.py).
+  paper_enabled: true

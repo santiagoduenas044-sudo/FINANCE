@@ -160,19 +160,28 @@ def build_runtime(
 
     # Phase 16 Fix 2: Seed daily P&L and trade count from paper_tracker's
     # already-closed trades so account state survives a restart.
+    # Dates are compared in the trading timezone (not UTC) to avoid a
+    # mismatch when the server clock crosses midnight UTC while the trading
+    # calendar is still on the previous day in New York (UTC-4/5).
     if paper_tracker is not None:
-        from datetime import date as _date
-        _today = _date.today()
-        _today_closed = [
-            t for t in paper_tracker.closed_trades
-            if (t.closed_at is not None
-                and hasattr(t.closed_at, "date")
-                and t.closed_at.date() == _today)
-        ]
+        import pandas as _pd
+        _tz = data_engine.cfg.data.timezone   # "America/New_York"
+        _today = _pd.Timestamp.now(tz=_tz).date()
+        _today_closed = []
+        for _ct in paper_tracker.closed_trades:
+            if _ct.closed_at is None:
+                continue
+            try:
+                _ca = _pd.Timestamp(_ct.closed_at)
+                _ca = _ca.tz_localize(_tz) if _ca.tzinfo is None else _ca.tz_convert(_tz)
+                if _ca.date() == _today:
+                    _today_closed.append(_ct)
+            except Exception:  # noqa: BLE001
+                pass
         account = AccountState(
             equity=100_000.0,
             trades_today=len(_today_closed),
-            daily_realized_pnl=sum(t.pnl_points for t in _today_closed),
+            daily_realized_pnl=float(sum(t.pnl_points for t in _today_closed)),
         )
     else:
         account = AccountState(equity=100_000.0)
