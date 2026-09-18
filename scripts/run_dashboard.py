@@ -41,6 +41,12 @@ def _port_in_use(host: str, port: int) -> bool:
 
 
 def main() -> None:
+    # Dashboard default: START the bot automatically so signals start flowing
+    # without needing to press the START button first. Local mode is loopback
+    # only, so nothing is exposed. Override with BOT_AUTO_START=false in .env.
+    import os as _os
+    if "BOT_AUTO_START" not in _os.environ and "BOT_AUTOSTART" not in _os.environ:
+        _os.environ["BOT_AUTO_START"] = "true"
     settings = ServerSettings.from_env()
     settings.validate()  # refuse an unsafe public server (remote mode needs auth)
     logger = configure_logging(settings.log_file)
