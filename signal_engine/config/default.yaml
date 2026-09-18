@@ -114,16 +114,29 @@ output:                             # Phase 5.5 — external observability adapt
 
 ghost:                              # Phase 14 — GHOST intelligence layer
   enabled: true
-  # Lowered from the Python default (55) so trades can be approved even when
-  # EMA-50 hasn't fully warmed up and HTF bias is NEUTRAL (0 pts from the
-  # 20-pt htf_alignment factor). A score of 40 requires at least structure +
-  # VWAP + volume + R:R confluence, which is a meaningful bar to clear.
-  min_confluence_score: 40.0
-  # These two hard-blocks are converted to soft penalties only: they still
-  # subtract -25 / -20 pts from the confluence score, but they no longer
-  # reject the trade outright before scoring runs. A conflicting setup will
-  # score too low to pass; a marginal one without conflicts can still pass.
+  # Lowered from 40 -> 30. With 5 soft-guard categories rewarded at
+  # 10-20 pts, 30 still requires 2-3 real confluences (typically structure
+  # + VWAP + volume, or HTF + R:R), so trades only fire when at least a
+  # couple of things line up — but it stops rejecting every marginal-but-
+  # reasonable setup as "not confluent enough".
+  min_confluence_score: 30.0
+  # HTF/structure conflicts stay as soft penalties (not hard blocks) so
+  # scoring runs and the diagnostic UI shows the full picture.
   block_htf_conflict: false
   block_against_structure: false
-  # All other parameters use Python defaults (see config/schema.py).
+  # STOP_TOO_TIGHT is the silent killer for scalp setups (ORB with a
+  # 2-tick buffer vs an ATR-heavy 5m bar). 0.8 * ATR was rejecting most
+  # ORB signals outright. 0.30 lets scalp-scale stops through while still
+  # blocking obviously degenerate 1-tick stops.
+  min_stop_atr_mult: 0.30
+  # min_rr 1.0 rejects any signal whose TP1 sits just short of 1R —
+  # common for ORB when the opening range is wide vs the current 5m ATR.
+  # 0.7 keeps the requirement meaningful but lets these through.
+  min_rr: 0.7
+  # Excessive-volatility guard: 0.97 was already lenient; 0.99 makes it
+  # effectively "top-1% ATR only" so normal high-vol sessions aren't cut.
+  max_atr_percentile: 0.99
+  # RVOL >= 0.8 (was 1.0) counts as volume confirmation; below-average
+  # bars still don't score, but a 0.85 bar in a quiet session does.
+  rvol_confirm: 0.8
   paper_enabled: true
