@@ -198,4 +198,28 @@ def build_runtime(
     runtime.feed_info = {s: {"source": i.source, "delayed": i.delayed,
                              "simulated": i.simulated}
                          for s, i in feed_info.items()}
+
+    # Emit a one-shot config summary so operators see exactly what GHOST and
+    # the risk engine will enforce on this run (no secrets, no PII).
+    if logger is not None:
+        g, r = data_engine.cfg.ghost, data_engine.cfg.risk
+        logger.info(
+            "GHOST: score>=%.0f | stop>=%.2f*ATR | R:R>=%.2f | atr<=%.0f%% | "
+            "rvol>=%.2f | cooldown=%d bars | max_open/sym=%d",
+            g.min_confluence_score, g.min_stop_atr_mult, g.min_rr,
+            g.max_atr_percentile * 100, g.rvol_confirm, g.cooldown_bars,
+            g.max_open_per_symbol)
+        logger.info(
+            "RISK: %s | risk=%s | daily_loss_limit=$%.0f | max_trades/day=%d | "
+            "max_contracts=%d",
+            r.risk_mode,
+            f"{r.risk_pct*100:.2f}%" if r.risk_mode == "percent"
+                else f"${r.fixed_risk_dollar:.0f}",
+            r.daily_loss_limit_dollar, r.max_trades_per_day, r.max_contracts)
+        disc = data_engine.cfg.output.discord
+        logger.info(
+            "DISCORD: %s | webhook_env=%s (value not logged) | dedup=%s",
+            "ENABLED" if disc.enabled else "DISABLED",
+            disc.webhook_env, disc.deduplication_enabled)
+
     return runtime, feed_info

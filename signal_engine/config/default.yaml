@@ -67,15 +67,20 @@ setups:                             # Phase 5 — each setup toggled independent
     timeframe: "5m"
     stop_buffer_ticks: 2.0
     rr_targets: [1.0, 2.0]          # R multiples for TP1/TP2 (not optimized)
-    expiration_bars: 6
+    # 6 bars = 30 min was too tight for NQ where sweep-reclaim setups
+    # take longer to resolve into a proper reversal move. 10 bars = 50 min.
+    expiration_bars: 10
     use_opposing_liquidity_target: true
   vwap_reclaim:
     enabled: true
     timeframe: "5m"
-    lookback_bars: 12
+    # 12 -> 16 gives the reclaim detector 20 more min of price action
+    # to confirm a clean cross-back on NQ's faster tempo.
+    lookback_bars: 16
     stop_buffer_ticks: 2.0
     rr_targets: [1.0, 2.0]
-    expiration_bars: 6
+    # Same NQ-tempo reasoning as liquidity_sweep.
+    expiration_bars: 10
   orb:
     enabled: true
     timeframe: "5m"
