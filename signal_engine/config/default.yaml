@@ -79,10 +79,16 @@ setups:                             # Phase 5 — each setup toggled independent
   orb:
     enabled: true
     timeframe: "5m"
-    opening_range_minutes: 30
+    # NQ's opening range tends to be wide and choppy in the first 15 min
+    # (US pre-market unwind, futures gap absorption). 45 minutes gives
+    # the range time to establish before we look for a break, which
+    # dramatically cuts whipsaw entries.
+    opening_range_minutes: 45
     session: "RTH"
     rr_targets: [1.0, 2.0]          # multiples of the OR range
-    expiration_bars: 12
+    # NQ trends persist longer than ES; 12 bars (60 min) was cutting
+    # setups short. 18 bars = 90 min gives momentum time to develop.
+    expiration_bars: 18
 
 signals:                             # Phase 6 — SetupCandidate -> Signal | NoTrade
   min_risk_reward: 1.0               # nearest-TP R:R threshold (not optimized)
@@ -101,7 +107,11 @@ risk:                                 # Phase 7 — Signal -> Risk Validation ->
   risk_pct: 0.01                      # 1% of account equity (percent mode, not optimized)
   max_risk_per_trade_dollar: null     # optional extra hard ceiling on top of the mode above
   daily_loss_limit_dollar: 1000.0
-  max_trades_per_day: 5
+  # Was 5 — that cap silently blocked signals in an active NQ session
+  # where GHOST could easily generate 6-8 valid setups per day. Bumped
+  # to 10 so paper trades track a realistic session count. Paper only:
+  # no real money at risk.
+  max_trades_per_day: 10
   max_contracts: 10
 
 output:                             # Phase 5.5 — external observability adapters
@@ -139,4 +149,8 @@ ghost:                              # Phase 14 — GHOST intelligence layer
   # RVOL >= 0.8 (was 1.0) counts as volume confirmation; below-average
   # bars still don't score, but a 0.85 bar in a quiet session does.
   rvol_confirm: 0.8
+  # Cooldown after a losing/invalidating close. 3 bars = 15 min on 5m
+  # was excessive for NQ where momentum re-develops quickly. 2 bars =
+  # 10 min lets the bot re-engage without stacking losses back-to-back.
+  cooldown_bars: 2
   paper_enabled: true
