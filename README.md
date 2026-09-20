@@ -50,9 +50,23 @@ bash deploy/macos/ctl.sh discord       # Discord activation diagnostic
 
 ## Dashboard
 
-`http://localhost:8000` — candlestick chart, GHOST decisions, paper trades, P&L, R-multiples.
+`http://localhost:8000` — **GHOST OPS**, a five-view signal-intelligence terminal:
 
-Set `DASHBOARD_TOKEN` in `.env` for token-auth (required for remote access).
+| Vista | Qué muestra |
+|---|---|
+| **Tape** | Velas + VWAP/EMA, estructura (BOS/CHoCH, FVG, liquidez), zonas de la operación abierta, sesgo multi-timeframe y escalera de niveles clave |
+| **Cerebro** | La cascada de confluencia: cada factor que suma o resta puntos, con su aportación exacta y el umbral marcado |
+| **Embudo** | Conversión candidato → señal → aprobada, con la pérdida de cada etapa y su motivo |
+| **Trades** | Curva de capital en R, distribución de resultados, operaciones abiertas y cerradas |
+| **Auditoría** | Registro completo de decisiones GHOST + salud del motor |
+
+Solo lectura salvo start/pause/stop. Set `DASHBOARD_TOKEN` in `.env` for token-auth
+(required for remote access).
+
+## Auditoría del motor de señales
+
+`docs/SIGNAL_ENGINE_AUDIT.md` — qué usa el bot para buscar señales (spoiler: **no** cruces
+de EMAs), y nueve hallazgos verificados empíricamente sobre dónde se pierden las señales.
 
 ## GHOST Authority
 
