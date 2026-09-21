@@ -25,14 +25,25 @@ from .regime import classify_regime
 # --------------------------------------------------------------------------- #
 # Bias helpers
 # --------------------------------------------------------------------------- #
-def _ema_bias(ta: TimeframeAnalysis) -> Bias:
+def _last(ind, col: str) -> float | None:
+    if ind is None or col not in ind:
+        return None
+    s = ind[col].dropna()
+    return float(s.iloc[-1]) if not s.empty else None
+
+
+def _ema_bias(ta: TimeframeAnalysis, dead_zone_atr: float = 0.0) -> Bias:
     ind = ta.indicators
-    if ind is None or "ema_20" not in ind or "ema_50" not in ind:
+    fast, slow = _last(ind, "ema_20"), _last(ind, "ema_50")
+    if fast is None or slow is None:
         return Bias.NEUTRAL
-    f, s = ind["ema_20"].dropna(), ind["ema_50"].dropna()
-    if f.empty or s.empty:
-        return Bias.NEUTRAL
-    d = float(f.iloc[-1]) - float(s.iloc[-1])
+    d = fast - slow
+    # Without a dead zone a 0.01-point EMA gap casts a full directional vote.
+    # Scale the threshold by ATR so it means the same on ES and NQ.
+    if dead_zone_atr > 0:
+        atr = _last(ind, "atr_14")
+        if atr is not None and atr > 0 and abs(d) < dead_zone_atr * atr:
+            return Bias.NEUTRAL
     if d > 0:
         return Bias.BULLISH
     if d < 0:
@@ -63,10 +74,10 @@ def _swing_bias(ta: TimeframeAnalysis) -> Bias:
     return Bias.NEUTRAL
 
 
-def timeframe_bias(ta: TimeframeAnalysis) -> Bias:
+def timeframe_bias(ta: TimeframeAnalysis, dead_zone_atr: float = 0.0) -> Bias:
     """Majority vote of EMA / last-structure-event / swing biases. A tie or no
     majority is NEUTRAL — GHOST never guesses a direction it cannot justify."""
-    votes = [_ema_bias(ta), _event_bias(ta), _swing_bias(ta)]
+    votes = [_ema_bias(ta, dead_zone_atr), _event_bias(ta), _swing_bias(ta)]
     bull = votes.count(Bias.BULLISH)
     bear = votes.count(Bias.BEARISH)
     if bull >= 2 and bull > bear:
@@ -90,7 +101,7 @@ def _recent_choch(ta: TimeframeAnalysis, lookback_bars: int) -> tuple[bool, obje
 
 
 def structure_state(ta: TimeframeAnalysis, cfg: GhostConfig) -> StructureState:
-    bias = timeframe_bias(ta)
+    bias = timeframe_bias(ta, cfg.ema_bias_dead_zone_atr)
     changed, last = _recent_choch(ta, cfg.transition_lookback)
     last_type = last.type.value if last is not None else None
     last_dir = None
@@ -105,9 +116,10 @@ def mtf_context(ma: MarketAnalysis, ctx: AnalysisContext, cfg: GhostConfig) -> M
     htf = ma.by_timeframe.get(ctx.htf.timeframe)
     stf = ma.by_timeframe.get(ctx.structure.timeframe)
     etf = ma.by_timeframe.get(ctx.execution.timeframe)
-    cb = timeframe_bias(htf) if htf else Bias.NEUTRAL
-    sb = timeframe_bias(stf) if stf else Bias.NEUTRAL
-    eb = timeframe_bias(etf) if etf else Bias.NEUTRAL
+    dz = cfg.ema_bias_dead_zone_atr
+    cb = timeframe_bias(htf, dz) if htf else Bias.NEUTRAL
+    sb = timeframe_bias(stf, dz) if stf else Bias.NEUTRAL
+    eb = timeframe_bias(etf, dz) if etf else Bias.NEUTRAL
 
     def opp(a: Bias, b: Bias) -> bool:
         return {a, b} == {Bias.BULLISH, Bias.BEARISH}
@@ -132,9 +144,16 @@ def mtf_context(ma: MarketAnalysis, ctx: AnalysisContext, cfg: GhostConfig) -> M
     )
 
 
-def liquidity_state(ta: TimeframeAnalysis, price: float | None) -> LiquidityState:
+def liquidity_state(ta: TimeframeAnalysis, price: float | None,
+                    max_age_bars: int = 0) -> LiquidityState:
     levels = ta.liquidity_levels
     swept = [lv for lv in levels if lv.swept_at is not None]
+    # A sweep from hours ago is not confluence for this bar: with price far past
+    # the level, `reclaimed` becomes trivially true and hands out free points.
+    if max_age_bars > 0 and ta.indicators is not None and len(ta.indicators.index) > 0:
+        idx = ta.indicators.index
+        cutoff = idx[max(0, len(idx) - max_age_bars)]
+        swept = [lv for lv in swept if lv.swept_at >= cutoff]
     last = max(swept, key=lambda lv: lv.swept_at) if swept else None
     last_dir = last_price = last_time = None
     reclaimed = False
@@ -244,7 +263,7 @@ def build_market_state(ctx: AnalysisContext, ma: MarketAnalysis,
     structure = structure_state(exec_ta, cfg) if exec_ta \
         else StructureState(Bias.NEUTRAL, False, None, None, "")
     mtf = mtf_context(ma, ctx, cfg)
-    liq = liquidity_state(exec_ta, price) if exec_ta \
+    liq = liquidity_state(exec_ta, price, cfg.liquidity_max_age_bars) if exec_ta \
         else LiquidityState(None, None, None, False, None, None, "")
     swept_prices = {float(lv.level) for lv in (exec_ta.liquidity_levels if exec_ta else [])
                     if lv.swept_at is not None}

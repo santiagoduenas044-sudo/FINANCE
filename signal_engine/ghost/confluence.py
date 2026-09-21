@@ -32,6 +32,13 @@ def _rvol(exec_ta: TimeframeAnalysis) -> float | None:
     return float(s.iloc[-1]) if not s.empty else None
 
 
+def _structural_penalty_scale(setup: str, cfg: GhostConfig) -> float:
+    """Reversion setups are *designed* to fire against the prevailing structure —
+    that is their thesis, not a defect. Charging them the full trend-penalty
+    double-counts the setup's own premise, so they pay a reduced rate."""
+    return cfg.reversion_penalty_scale if setup in _REVERSION_SETUPS else 1.0
+
+
 def _regime_fit(regime: MarketRegime, direction: str, setup: str) -> tuple[float, str]:
     """Return a factor in [-1, 1] for how well the regime fits this
     direction/setup, plus a short note."""
@@ -59,6 +66,8 @@ def score_confluence(direction: str, ms: MarketState, signal,
     want = Bias.BULLISH if direction == "LONG" else Bias.BEARISH
     opp = Bias.BEARISH if direction == "LONG" else Bias.BULLISH
     contribs: list[ConfluenceContribution] = []
+    setup = getattr(signal, "setup", "") or ""
+    pen = _structural_penalty_scale(setup, cfg)
 
     def add(name: str, pts: float, detail: str) -> None:
         if pts != 0:
@@ -68,7 +77,8 @@ def score_confluence(direction: str, ms: MarketState, signal,
     if ms.mtf.context.bias is want:
         add("htf_alignment", w.htf_alignment, f"HTF {ms.mtf.context.bias.value}")
     elif ms.mtf.context.bias is opp:
-        add("htf_conflict", -w.htf_conflict_penalty, f"HTF {ms.mtf.context.bias.value}")
+        add("htf_conflict", round(-w.htf_conflict_penalty * pen, 2),
+            f"HTF {ms.mtf.context.bias.value}")
 
     # structure-timeframe (e.g. 15m) alignment
     if ms.mtf.structure.bias is want:
@@ -80,7 +90,7 @@ def score_confluence(direction: str, ms: MarketState, signal,
         add("structure_alignment", w.structure_alignment,
             f"structure {ms.structure.bias.value} ({ms.structure.swing_summary})")
     elif ms.structure.opposes(direction):
-        add("against_structure", -w.against_structure_penalty,
+        add("against_structure", round(-w.against_structure_penalty * pen, 2),
             f"structure {ms.structure.bias.value}")
 
     # liquidity: a sweep against the trade's stops that then reclaimed is supportive
@@ -101,16 +111,20 @@ def score_confluence(direction: str, ms: MarketState, signal,
     if rvol is not None and rvol >= cfg.rvol_confirm:
         add("volume_confirmation", w.volume_confirmation, f"RVOL {rvol:.2f}")
 
-    # R:R quality
+    # R:R quality. NOTE: while every setup builds targets as exact R multiples
+    # of rr_targets (nearest = 1.0R by construction), this factor has zero
+    # variance and acts as a constant offset — it cannot rank anything. It only
+    # discriminates once targets become level-based. Budget the threshold
+    # accordingly: min_confluence_score minus this constant is the real bar.
     rr = _nearest_rr(signal)
     if rr is not None:
-        if rr >= 1.5:
+        if rr >= 1.2:
             add("rr_quality", w.rr_quality, f"R:R {rr:.2f}")
         elif rr >= 1.0:
             add("rr_quality", w.rr_quality * 0.5, f"R:R {rr:.2f}")
 
     # regime fit
-    factor, note = _regime_fit(ms.regime.regime, direction, getattr(signal, "setup", ""))
+    factor, note = _regime_fit(ms.regime.regime, direction, setup)
     if factor != 0:
         add("regime_alignment", round(w.regime_alignment * factor, 2), note)
 

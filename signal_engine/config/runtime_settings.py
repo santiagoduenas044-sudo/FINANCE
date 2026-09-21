@@ -58,7 +58,7 @@ class ServerSettings:
     host: str = "127.0.0.1"
     port: int = 8000
     # Trading symbols to run. Comma-separated env, e.g. "ES,NQ".
-    symbols: list[str] = field(default_factory=lambda: ["ES", "NQ"])
+    symbols: list[str] = field(default_factory=lambda: ["NQ"])
     # Seconds between poll/cycle ticks in the runtime loop.
     cycle_seconds: float = 5.0
     # Start the trading pipeline automatically on boot (headless 24/7 use).
@@ -108,7 +108,7 @@ class ServerSettings:
             mode=mode,
             host=_get("BOT_HOST", default_host),
             port=int(_get_float("BOT_PORT", 8000)),
-            symbols=_get_list("BOT_SYMBOLS", ["ES", "NQ"]),
+            symbols=_get_list("BOT_SYMBOLS", ["NQ"]),
             cycle_seconds=_get_float("BOT_CYCLE_SECONDS", 5.0),
             # Canonical: BOT_AUTO_START. BOT_AUTOSTART is accepted as an alias
             # (BOT_AUTO_START wins if both are set). An unset/invalid value is a

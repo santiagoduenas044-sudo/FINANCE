@@ -68,7 +68,7 @@ setups:                             # Phase 5 — each setup toggled independent
     stop_buffer_ticks: 2.0
     rr_targets: [1.0, 2.0]          # R multiples for TP1/TP2 (not optimized)
     expiration_bars: 6
-    use_opposing_liquidity_target: true
+    use_opposing_liquidity_target: false
   vwap_reclaim:
     enabled: true
     timeframe: "5m"

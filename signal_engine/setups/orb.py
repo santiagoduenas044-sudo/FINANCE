@@ -21,7 +21,7 @@ from ..data.models import CLOSE, HIGH, LOW, SESSION, TRADING_DATE
 from ..data.sessions import SessionClassifier
 from ..features.analyzer import MarketAnalysis
 from ..features.market_structure.models import Direction
-from ._helpers import horizon, view_for
+from ._helpers import build_targets, horizon, view_for
 from .base import SetupDetector
 from .models import LevelRef, SetupCandidate, SetupStatus, risk_reward
 
@@ -78,11 +78,7 @@ class OrbDetector(SetupDetector):
     def _make(self, ctx, tf, N, direction, entry, or_high, or_low, or_range) -> SetupCandidate:
         bullish = direction is Direction.BULLISH
         stop = or_low if bullish else or_high            # opposite OR boundary
-        # ORB convention: targets are OR-range measured moves (context-based)
-        targets = sorted({round(entry + r * or_range if bullish else entry - r * or_range, 6)
-                          for r in self.p.rr_targets})
-        if not bullish:
-            targets = sorted(targets, reverse=True)
+        targets = build_targets(entry, stop, self.p.rr_targets, bullish)
         rr = risk_reward(entry, stop, targets)
         reasons = [
             f"Opening range [{or_low:.2f}, {or_high:.2f}] fully formed",

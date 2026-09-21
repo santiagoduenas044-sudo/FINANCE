@@ -43,8 +43,19 @@ def test_breakout_after_or_complete(det):
     assert c.direction is Direction.BULLISH
     assert c.entry == 106.0
     assert c.stop_loss == 99.0                       # OR low
-    assert c.take_profits == [112.0, 118.0]          # entry + [1,2]*range(6)
+    assert c.take_profits == [113.0, 120.0]          # entry + [1,2]*risk(7)
     assert c.market_context["or_high"] == 105.0 and c.market_context["or_low"] == 99.0
+
+
+def test_targets_are_risk_multiples_not_or_range(det):
+    """Targets measured off the OR range make R:R(TP1) < 1 for ANY breakout,
+    since entry is outside the range: risk = or_range + overshoot > or_range.
+    Measuring off risk (as the other setups do) keeps R:R at the configured
+    multiples regardless of how far price overshot."""
+    bars = _bars_with_breakout()
+    c = det.detect(make_ctx(bars), _analysis(bars))[0]
+    assert c.risk_reward == [1.0, 2.0]
+    assert min(c.risk_reward) >= EngineConfig.load().signals.min_risk_reward
 
 
 def test_no_breakout_before_or_formed(det):

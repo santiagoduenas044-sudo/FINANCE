@@ -108,7 +108,7 @@ class OrbParams(BaseModel):
     timeframe: str = "5m"
     opening_range_minutes: int = 30
     session: str = "RTH"
-    rr_targets: list[float] = Field(default_factory=lambda: [1.0, 2.0])  # multiples of OR range
+    rr_targets: list[float] = Field(default_factory=lambda: [1.0, 2.0])  # R multiples
     expiration_bars: int = 12
 
 
@@ -201,13 +201,29 @@ class GhostConfig(BaseModel):
     high_vol_pct: float = 0.80             # ATR percentile above => HIGH volatility
     low_vol_pct: float = 0.20              # below => LOW volatility
 
+    # Reversion setups (liquidity_sweep, vwap_reclaim) fire against the
+    # prevailing structure by design — that is their thesis. Charging them the
+    # full trend-penalty double-counts the setup's own premise, so the two
+    # structural penalties are scaled by this factor for them. 1.0 = no relief.
+    reversion_penalty_scale: float = 0.5
+    # Ignore swept liquidity older than N execution bars when scoring. 0 = no
+    # limit (a sweep from any point in the buffer can still score).
+    liquidity_max_age_bars: int = 16
+    # EMA bias is NEUTRAL while |ema20-ema50| < this multiple of ATR14, so a
+    # hair-thin gap no longer casts a full directional vote. 0 = no dead zone.
+    ema_bias_dead_zone_atr: float = 0.15
+
     # --- NO_TRADE guards --- #
     block_htf_conflict: bool = True        # HTF strongly opposes => NO_TRADE
     block_against_structure: bool = True   # execution structure opposes => NO_TRADE
     max_atr_percentile: float = 0.97       # above => excessive_volatility NO_TRADE
     min_rr: float = 1.0                    # below nearest-target R:R => target_too_close
     stale_after_bars: int = 3              # decision bar older than N bars => stale_data
-    rvol_confirm: float = 1.0              # RVOL >= this counts as volume confirmation
+    # RVOL >= this counts as volume confirmation. 1.0 = "above its own 20-bar
+    # average", which splits real volume roughly in half. Do NOT calibrate this
+    # against tests/data_samples: that fixture has synthetic volume (3 distinct
+    # values), so RVOL there is pinned at 1.000 and tells you nothing.
+    rvol_confirm: float = 1.0
     valid_sessions: list[str] = Field(default_factory=lambda: ["RTH", "ETH"])
 
     # --- Phase 15: trade management (per-symbol authority) --- #
