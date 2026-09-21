@@ -58,7 +58,7 @@ class ServerSettings:
     host: str = "127.0.0.1"
     port: int = 8000
     # Trading symbols to run. Comma-separated env, e.g. "ES,NQ".
-    symbols: list[str] = field(default_factory=lambda: ["NQ"])
+    symbols: list[str] = field(default_factory=lambda: ["ES"])
     # Seconds between poll/cycle ticks in the runtime loop.
     cycle_seconds: float = 5.0
     # Start the trading pipeline automatically on boot (headless 24/7 use).
