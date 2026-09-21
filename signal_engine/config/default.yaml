@@ -106,7 +106,7 @@ risk:                                 # Phase 7 — Signal -> Risk Validation ->
 
 output:                             # Phase 5.5 — external observability adapters
   discord:
-    enabled: false                  # off by default; core does not depend on it
+    enabled: true                   # enabled for live notifications
     webhook_env: "DISCORD_WEBHOOK_URL"   # env var NAME (never the value)
     timeout_seconds: 5.0
     retry_count: 2
