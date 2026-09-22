@@ -122,6 +122,12 @@ def build_discord_payload(event: OutputEvent) -> dict:
         return _build_runtime_status_payload(event)
     if event.kind == "trade_opened":
         return _build_trade_opened_payload(event)
+    if event.kind == "trade_closed":
+        return _build_trade_closed_payload(event)
+    if event.kind == "trade_progress":
+        return _build_trade_progress_payload(event)
+    if event.kind == "status_digest":
+        return _build_status_digest_payload(event)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
@@ -196,6 +202,107 @@ def _build_trade_opened_payload(event: OutputEvent) -> dict:
         "color": color,
         "fields": fields,
         "footer": {"text": "GHOST paper trade · " + event.disclaimer},
+    }
+    return {"embeds": [embed]}
+
+
+_WIN_COLOR  = 0x00C851
+_LOSS_COLOR = 0xFF4444
+_FLAT_COLOR = 0x95A5A6
+
+
+def _pts(v) -> str:
+    return f"{v:+.2f}" if v is not None else "—"
+
+
+def _rmult(v) -> str:
+    return f"{v:+.2f}R" if v is not None else "—"
+
+
+def _build_trade_closed_payload(event: OutputEvent) -> dict:
+    """Realised outcome of a paper trade: exit reason, P&L in points and R, and
+    how far it ran in each direction before closing (MFE/MAE)."""
+    p = event.status_payload or {}
+    r = p.get("r_multiple")
+    color = _FLAT_COLOR if not r else (_WIN_COLOR if r > 0 else _LOSS_COLOR)
+    fields = [
+        {"name": "Instrument", "value": p.get("instrument", "—"), "inline": True},
+        {"name": "Direction",  "value": p.get("direction", "—"),  "inline": True},
+        {"name": "Setup",      "value": p.get("setup", "—"),      "inline": True},
+        {"name": "Entry",      "value": _fmt_price(p.get("entry")),     "inline": True},
+        {"name": "Exit",       "value": _fmt_price(p.get("exit_price")), "inline": True},
+        {"name": "Exit reason", "value": (p.get("exit_reason") or "—"), "inline": True},
+        {"name": "P&L (pts)",  "value": _pts(p.get("pnl_points")), "inline": True},
+        {"name": "Result",     "value": _rmult(r),                 "inline": True},
+        {"name": "Bars held",  "value": str(p.get("bars_held", "—")), "inline": True},
+        {"name": "Best (MFE)", "value": _rmult(p.get("mfe_r")),    "inline": True},
+        {"name": "Worst (MAE)", "value": _rmult(p.get("mae_r")),   "inline": True},
+        {"name": "Signal ID",  "value": p.get("signal_id", "")[:8] + "…", "inline": True},
+    ]
+    embed = {
+        "title": event.title,
+        "description": f"**{event.disclaimer}**",
+        "color": color,
+        "fields": fields,
+        "footer": {"text": "GHOST paper trade · " + event.disclaimer},
+    }
+    return {"embeds": [embed]}
+
+
+def _build_trade_progress_payload(event: OutputEvent) -> dict:
+    """An open trade crossed an R milestone — a short 'where it stands now'
+    update rather than the full trade plan."""
+    p = event.status_payload or {}
+    milestone = p.get("milestone_r", 0.0)
+    color = _WIN_COLOR if milestone > 0 else 0xFFA000
+    fields = [
+        {"name": "Instrument", "value": p.get("instrument", "—"), "inline": True},
+        {"name": "Direction",  "value": p.get("direction", "—"),  "inline": True},
+        {"name": "Setup",      "value": p.get("setup", "—"),      "inline": True},
+        {"name": "Entry",      "value": _fmt_price(p.get("entry")), "inline": True},
+        {"name": "Now",        "value": _fmt_price(p.get("current_price")), "inline": True},
+        {"name": "P&L (pts)",  "value": _pts(p.get("pnl_points")), "inline": True},
+        {"name": "Open P&L",   "value": _rmult(p.get("r_multiple")), "inline": True},
+        {"name": "Best (MFE)", "value": _rmult(p.get("mfe_r")),   "inline": True},
+        {"name": "Stop",       "value": _fmt_price(p.get("stop")), "inline": True},
+        {"name": "TP1",        "value": _fmt_price(p.get("tp1")),  "inline": True},
+        {"name": "TP2",        "value": _fmt_price(p.get("tp2")),  "inline": True},
+        {"name": "TP1 hit",    "value": "yes" if p.get("tp1_hit") else "no", "inline": True},
+    ]
+    embed = {
+        "title": event.title,
+        "description": f"**{event.disclaimer}**",
+        "color": color,
+        "fields": fields,
+        "footer": {"text": "GHOST paper trade · " + event.disclaimer},
+    }
+    return {"embeds": [embed]}
+
+
+def _build_status_digest_payload(event: OutputEvent) -> dict:
+    """Periodic summary so the operator can confirm the bot is alive and see
+    where the day stands without reaching the dashboard."""
+    p = event.status_payload or {}
+    open_lines = p.get("open_trades") or []
+    body = "\n".join(open_lines) if open_lines else "_no open trades_"
+    fields = [
+        {"name": "Bot",          "value": p.get("status", "—"),  "inline": True},
+        {"name": "Uptime",       "value": p.get("uptime", "—"),  "inline": True},
+        {"name": "Data feed",    "value": p.get("feed", "—"),    "inline": True},
+        {"name": "Trades today", "value": str(p.get("trades_today", 0)), "inline": True},
+        {"name": "Open",         "value": str(p.get("open_count", 0)),   "inline": True},
+        {"name": "Closed today", "value": str(p.get("closed_today", 0)), "inline": True},
+        {"name": "Realised today", "value": _pts(p.get("realised_points")), "inline": True},
+        {"name": "Win rate",     "value": p.get("win_rate", "—"), "inline": True},
+        {"name": "Open P&L",     "value": _rmult(p.get("open_r")), "inline": True},
+        {"name": "Open positions", "value": _truncate(body), "inline": False},
+    ]
+    embed = {
+        "title": event.title,
+        "description": f"**{event.disclaimer}**",
+        "color": 0x3498DB,
+        "fields": fields,
+        "footer": {"text": event.disclaimer},
     }
     return {"embeds": [embed]}
 

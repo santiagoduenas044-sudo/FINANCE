@@ -47,6 +47,13 @@ SAMPLES = Path(__file__).resolve().parent / "data_samples"
 # --------------------------------------------------------------------------- #
 # helpers
 # --------------------------------------------------------------------------- #
+def _opened(sent):
+    """Only the 'trade opened' notifications. A trade also emits progress and
+    close updates now; the Phase 15 authority invariant is about the OPEN —
+    one approved decision => one paper trade => one open notification."""
+    return [s for s in sent if "OPENED" in s["title"]]
+
+
 def _capturing_discord():
     """Discord adapter that CAPTURES what it would send (SIGNAL embeds only)."""
     sent: list[dict] = []
@@ -55,7 +62,8 @@ def _capturing_discord():
         embed = p.get("embeds", [{}])[0]
         fields = {f["name"]: f["value"] for f in embed.get("fields", [])}
         if fields.get("Direction") in ("LONG", "SHORT"):
-            sent.append({"payload": p, "fields": fields})
+            sent.append({"payload": p, "fields": fields,
+                         "title": embed.get("title", "")})
         return 204
     adapter = DiscordOutputAdapter(DiscordOutputConfig(enabled=True),
                                    webhook_url="https://example.invalid/hook",
@@ -143,8 +151,8 @@ def test_ghost_approve_one_paper_one_discord_same_signal_id(engine, registry, tm
         rt.run_cycle("ES")
     total = len(tracker.open_trades) + len(tracker.closed_trades)
     assert total >= 1, "permissive GHOST should approve at least one trade"
-    # Invariant: Discord sends == PaperTrades opened.
-    assert len(sent) == total, f"{len(sent)} discord vs {total} paper"
+    # Invariant: Discord OPEN notifications == PaperTrades opened.
+    assert len(_opened(sent)) == total, f"{len(_opened(sent))} discord vs {total} paper"
 
     # Same signal_id preserved end-to-end (paper trade <-> discord field)
     paper_ids = {t.signal_id for t in tracker.open_trades + tracker.closed_trades}
@@ -152,7 +160,8 @@ def test_ghost_approve_one_paper_one_discord_same_signal_id(engine, registry, tm
     # more importantly the same Signal object is passed to _handle_signal, so
     # the entry/stop/direction shown to Discord match every PaperTrade.
     for t in tracker.open_trades + tracker.closed_trades:
-        match = [s for s in sent if s["fields"]["Instrument"] == t.instrument
+        match = [s for s in _opened(sent)
+                 if s["fields"]["Instrument"] == t.instrument
                  and s["fields"]["Direction"] == t.direction
                  and abs(float(s["fields"]["Entry"]) - t.entry) < 1e-6]
         assert match, f"no Discord send matches PaperTrade {t.signal_id}"
@@ -434,10 +443,11 @@ def test_case_B_approve_end_to_end_same_plan(engine, registry, tmp_path):
     for _ in range(200):
         rt.run_cycle("ES")
     total = len(tracker.open_trades) + len(tracker.closed_trades)
-    assert total >= 1 and len(sent) == total
+    assert total >= 1 and len(_opened(sent)) == total
     t = (tracker.closed_trades + tracker.open_trades)[0]
     # Discord field values must match the PaperTrade's plan
-    matches = [s for s in sent if abs(float(s["fields"]["Entry"]) - t.entry) < 1e-6
+    matches = [s for s in _opened(sent)
+               if abs(float(s["fields"]["Entry"]) - t.entry) < 1e-6
                and s["fields"]["Direction"] == t.direction]
     assert matches, "no Discord send matches an actual PaperTrade"
 

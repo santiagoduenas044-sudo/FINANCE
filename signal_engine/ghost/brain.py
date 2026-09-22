@@ -128,6 +128,8 @@ class GhostBrain:
         stop_info = _stop_context(sig, exec_ta, cfg)
         if stop_info.get("too_tight"):
             reasons.append(NoTradeReason.STOP_TOO_TIGHT)
+        if stop_info.get("too_wide"):
+            reasons.append(NoTradeReason.STOP_TOO_WIDE)
         extra["stop_check"] = stop_info
 
         if ms.regime.atr_percentile is not None and \
@@ -178,9 +180,11 @@ class GhostBrain:
 
 def _stop_context(sig: Signal, exec_ta, cfg) -> dict:
     """Compute stop distance vs ATR14 on the execution timeframe. Returns
-    {stop_distance, atr, ratio, threshold, too_tight}. Never raises — a
-    missing/degenerate ATR simply reports too_tight=False (no false negative
-    that would spuriously reject a trade)."""
+    {stop_distance, atr, ratio, threshold, too_tight, max_threshold, too_wide,
+    max_points}. Never raises — a missing/degenerate ATR simply reports
+    too_tight/too_wide=False (no false negative that would spuriously reject a
+    trade). The absolute points ceiling does not depend on ATR, so it still
+    applies when ATR is unavailable."""
     stop_dist = round(abs(sig.entry - sig.stop), 4)
     atr = None
     if exec_ta is not None and exec_ta.indicators is not None \
@@ -191,8 +195,18 @@ def _stop_context(sig: Signal, exec_ta, cfg) -> dict:
     ratio = round(stop_dist / atr, 4) if atr else None
     threshold = cfg.min_stop_atr_mult
     too_tight = (threshold > 0 and atr is not None and stop_dist < threshold * atr)
+
+    max_threshold = cfg.max_stop_atr_mult
+    too_wide = (max_threshold > 0 and atr is not None
+                and stop_dist > max_threshold * atr)
+    max_points = (cfg.max_stop_points or {}).get(sig.instrument)
+    if max_points is not None and max_points > 0 and stop_dist > max_points:
+        too_wide = True
+
     return {"stop_distance": stop_dist, "atr": atr, "ratio": ratio,
-            "threshold": threshold, "too_tight": too_tight}
+            "threshold": threshold, "too_tight": too_tight,
+            "max_threshold": max_threshold, "max_points": max_points,
+            "too_wide": too_wide}
 
 
 def _dedup(reasons: list[NoTradeReason]) -> list[NoTradeReason]:

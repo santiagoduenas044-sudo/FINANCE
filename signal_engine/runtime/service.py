@@ -80,6 +80,9 @@ class BotService:
                 for symbol in list((self.runtime.live_feeds or {}).keys()):
                     self._refresh_feed(symbol)
                 self.runtime.heartbeat()
+            # Runs in both states on purpose: a digest saying the bot is PAUSED
+            # is exactly the one the operator needs while away from home.
+            self.runtime.maybe_send_status_digest()
         except Exception:  # noqa: BLE001 - the loop must survive anything
             self.errors += 1
             self.logger.exception("unexpected error in service tick (loop continues)")

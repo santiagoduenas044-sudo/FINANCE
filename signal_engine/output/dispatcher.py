@@ -95,10 +95,26 @@ class OutputDispatcher:
     def publish_trade_opened(self, paper_trade_dict: dict) -> None:
         """Send a rich 'Trade Opened' notification (GHOST-approved paper trade).
         Uses the trade's signal_id as dedup_key — one notification per trade."""
-        event = OutputEvent.from_trade_opened(paper_trade_dict)
+        self._emit(OutputEvent.from_trade_opened(paper_trade_dict))
+
+    def publish_trade_closed(self, paper_trade_dict: dict) -> None:
+        """Realised outcome of a paper trade (TP/stop/invalidation)."""
+        self._emit(OutputEvent.from_trade_closed(paper_trade_dict))
+
+    def publish_trade_progress(self, paper_trade_dict: dict,
+                               milestone_r: float) -> None:
+        """An open trade crossed an R milestone."""
+        self._emit(OutputEvent.from_trade_progress(paper_trade_dict, milestone_r))
+
+    def publish_status_digest(self, payload: dict, timestamp) -> None:
+        """Periodic 'where we stand' summary for remote monitoring."""
+        self._emit(OutputEvent.from_status_digest(payload, timestamp))
+
+    def _emit(self, event: OutputEvent) -> None:
         for adapter in self.adapters:
             try:
                 adapter.emit(event)
             except Exception as exc:            # defensive: adapters shouldn't raise
-                log.warning("Output adapter %r raised on trade_opened (%s); ignored.",
-                            getattr(adapter, "name", "?"), type(exc).__name__)
+                log.warning("Output adapter %r raised on %s (%s); ignored.",
+                            getattr(adapter, "name", "?"), event.kind,
+                            type(exc).__name__)

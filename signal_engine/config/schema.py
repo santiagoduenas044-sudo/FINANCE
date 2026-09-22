@@ -167,8 +167,30 @@ class DiscordOutputConfig(BaseModel):
     deduplication_enabled: bool = True
 
 
+class NotificationsConfig(BaseModel):
+    """Which trade-lifecycle events reach the operator's phone. Adapter-agnostic
+    (Discord today, Telegram tomorrow) — the runtime only decides WHAT to
+    announce; adapters decide how to render it."""
+    # Announce a trade closing (TP1/TP2/STOP/INVALIDATION) with realised P&L.
+    trade_closed: bool = True
+    # Announce a trade crossing an R milestone while still open, so the
+    # operator knows how far up or down it is without opening the dashboard.
+    trade_progress: bool = True
+    # R multiples that trigger a progress notification the first time the trade
+    # crosses them. Kept deliberately coarse: an alert on every bar is noise the
+    # operator will mute, which defeats the point. -1R needs no entry here — a
+    # stop-out is a close, not a milestone.
+    progress_milestones_r: list[float] = Field(
+        default_factory=lambda: [-0.5, 0.5, 1.0, 1.5, 2.0, 3.0])
+    # Periodic "everything is fine / here is where we stand" digest, so the
+    # operator can confirm the bot is alive while away from home.
+    status_digest: bool = True
+    status_digest_minutes: float = 60.0      # 0 disables the timer
+
+
 class OutputConfig(BaseModel):
     discord: DiscordOutputConfig = Field(default_factory=DiscordOutputConfig)
+    notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
 
 
 class ConfluenceWeights(BaseModel):
@@ -236,6 +258,22 @@ class GhostConfig(BaseModel):
     # execution timeframe. Does NOT widen the stop silently — rejects with a
     # concrete reason (Opción A). Set to 0 to disable the check.
     min_stop_atr_mult: float = 0.8
+    # Stop-too-wide: reject when |entry-stop| > max_stop_atr_mult * ATR14. A
+    # reversion setup anchored to a 12-bar swing (vwap_reclaim) can place its
+    # stop 7+ ATRs away; at 1:2 R:R that asks price to travel ~15 ATRs, which
+    # no intraday bar sequence delivers. Measured on the ES sample, the widest
+    # approved stops were 7.56x ATR / 47.8 pts — on NQ (ATR ~20pts) that is the
+    # ~150-point stop the operator reported. Set to 0 to disable the check.
+    max_stop_atr_mult: float = 1.75
+    # Absolute per-symbol ceiling on |entry-stop|, in index points, applied on
+    # top of the ATR-relative cap above. The ATR rule self-scales with
+    # volatility but has no notion of account risk; this one bounds the worst
+    # case in dollars (NQ: 50pts x $20 = $1000/contract). It is a backstop for
+    # an ATR spike, not the binding constraint — at 1.75x ATR the ATR rule
+    # already caps NQ near 35pts. Symbols absent from the mapping are governed
+    # by the ATR rule alone.
+    max_stop_points: dict[str, float] = Field(
+        default_factory=lambda: {"NQ": 50.0, "MNQ": 50.0, "ES": 15.0, "MES": 15.0})
     # Max simultaneously ACTIVE paper trades per symbol. Default 1 => no
     # LONG+LONG (different setup), no LONG+SHORT, one open per instrument.
     max_open_per_symbol: int = 1

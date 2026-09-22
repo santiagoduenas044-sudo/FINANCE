@@ -15,7 +15,7 @@ import json
 import logging
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -93,6 +93,8 @@ class BotRuntime:
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
     feed_info: dict[str, dict] = field(default_factory=dict, init=False)
+    # When the last periodic status digest went out (None => none sent yet).
+    last_digest_at: datetime | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
         self._init_component_health()
@@ -293,6 +295,82 @@ class BotRuntime:
                             type(exc).__name__, signal.signal_id)
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
+    def _notify_trade_updates(self, symbol: str, just_closed: list,
+                              before_r: dict[str, float]) -> None:
+        """Tell the operator how a trade is going without them opening the
+        dashboard: a close with realised P&L, and an R milestone crossed by a
+        still-open trade. Never raises — a notification is not worth a cycle."""
+        if self.output_dispatcher is None or self.paper_tracker is None:
+            return
+        ncfg = self.data_engine.cfg.output.notifications
+        try:
+            if ncfg.trade_closed:
+                for t in just_closed:
+                    self.output_dispatcher.publish_trade_closed(t.to_dict())
+            if ncfg.trade_progress:
+                for t in self.paper_tracker.open_trades:
+                    if not t.is_open or t.instrument != symbol:
+                        continue
+                    prev = before_r.get(t.signal_id)
+                    if prev is None:
+                        continue   # opened on this bar — the open event covers it
+                    for m in _crossed_milestones(prev, t.r_multiple,
+                                                 ncfg.progress_milestones_r):
+                        self.output_dispatcher.publish_trade_progress(t.to_dict(), m)
+            self._update_discord_health()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("trade notification failed (%s)", type(exc).__name__)
+
+    def maybe_send_status_digest(self, now: datetime | None = None) -> bool:
+        """Push a periodic 'where we stand' summary so the operator can confirm
+        the bot is alive while away from home. Returns True if one was sent.
+        Called from the service tick; the interval lives in config."""
+        ncfg = self.data_engine.cfg.output.notifications
+        if (self.output_dispatcher is None or not ncfg.status_digest
+                or ncfg.status_digest_minutes <= 0):
+            return False
+        now = now or datetime.now(timezone.utc)
+        due = timedelta(minutes=ncfg.status_digest_minutes)
+        if self.last_digest_at is not None and now - self.last_digest_at < due:
+            return False
+        self.last_digest_at = now
+        try:
+            self.output_dispatcher.publish_status_digest(self.status_digest_payload(), now)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("status digest failed (%s)", type(exc).__name__)
+            return False
+
+    def status_digest_payload(self) -> dict:
+        """Flat, JSON-safe summary of the day. No secrets — the webhook URL and
+        env values never appear here."""
+        open_trades = [t for t in (self.paper_tracker.open_trades
+                                   if self.paper_tracker else []) if t.is_open]
+        closed = list(self.paper_tracker.closed_trades) if self.paper_tracker else []
+        wins = [t for t in closed if t.pnl_points > 0]
+        open_r = sum(t.r_multiple for t in open_trades) if open_trades else None
+        uptime = "—"
+        if self.started_at is not None:
+            secs = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
+            uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
+        return {
+            "status": self.status.value,
+            "uptime": uptime,
+            "feed": self.connection_state(),
+            "trades_today": self.trades_today,
+            "open_count": len(open_trades),
+            "closed_today": len(closed),
+            "realised_points": round(self.daily_realized_pnl, 2),
+            "win_rate": (f"{len(wins) / len(closed):.0%}" if closed else "—"),
+            "open_r": round(open_r, 2) if open_r is not None else None,
+            "open_trades": [
+                f"{t.instrument} {t.direction} @ {t.entry:.2f} → "
+                f"{(t.current_price or t.entry):.2f} "
+                f"({t.pnl_points:+.2f} pts, {t.r_multiple:+.2f}R)"
+                for t in open_trades
+            ],
+        }
+
     def _run_ghost(self, symbol: str, ctx, base_results: list) -> tuple[int, int]:
         """Phase 15 — GHOST is the AUTHORITY when enabled. Flow:
 
@@ -310,6 +388,12 @@ class BotRuntime:
         exec_tf = self.data_engine.cfg.timeframe_roles.execution
         bars = ctx.execution.bars
         if self.paper_tracker is not None and not bars.empty:
+            # R reading of every open trade BEFORE this bar is applied, so a
+            # milestone is detected as a crossing rather than as "currently
+            # above" — a restart therefore never replays an old milestone.
+            before_r = {t.signal_id: t.r_multiple
+                        for t in self.paper_tracker.open_trades if t.is_open}
+            just_closed = []
             try:
                 # Fix 3: capture closed trades so account state stays current.
                 just_closed = self.paper_tracker.update_symbol(
@@ -325,6 +409,7 @@ class BotRuntime:
                     self.daily_realized_pnl += _pnl_delta
             except Exception:  # noqa: BLE001 - memory update never breaks the cycle
                 pass
+            self._notify_trade_updates(symbol, just_closed, before_r)
 
         # 2) build market state + GHOST decisions (same analysis the setups saw).
         analysis = self.setup_engine.analyzer.analyze(ctx)
@@ -750,6 +835,18 @@ def _record_to_dict(r: Signal | NoTrade) -> dict:
 _TF_SECS = {"1m": 60, "5m": 300, "15m": 900, "1H": 3600, "1h": 3600, "4H": 14400}
 def _tf_seconds(tf: str) -> float:
     return float(_TF_SECS.get(tf, 300))
+
+
+def _crossed_milestones(prev: float, now: float,
+                        milestones: list[float]) -> list[float]:
+    """R milestones crossed between two readings of the same open trade.
+
+    A positive milestone fires on the way UP through it and a negative one on
+    the way DOWN, so a trade hovering around a level announces it once rather
+    than on every bar. Returned in the order price passed them."""
+    out = [m for m in milestones
+           if (m > 0 and prev < m <= now) or (m < 0 and prev > m >= now)]
+    return sorted(out, reverse=now < prev)
 
 
 def _ghost_log_entry(decision) -> dict:

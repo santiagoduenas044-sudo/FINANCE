@@ -113,6 +113,15 @@ output:                             # Phase 5.5 — external observability adapt
     timeout_seconds: 5.0
     retry_count: 2
     deduplication_enabled: true
+  notifications:                  # what reaches the operator's phone
+    trade_closed: true            # realised P&L when a trade hits TP/stop
+    trade_progress: true          # "how far up/down is it" while still open
+    # Coarse on purpose: an alert every bar is noise that gets muted, which
+    # defeats the point. -1R is absent because a stop-out is a close, not a
+    # milestone.
+    progress_milestones_r: [-0.5, 0.5, 1.0, 1.5, 2.0, 3.0]
+    status_digest: true           # periodic "bot is alive, here's the day"
+    status_digest_minutes: 60.0   # 0 disables the timer
 
 ghost:                              # Phase 14 — GHOST intelligence layer
   enabled: true
@@ -128,6 +137,21 @@ ghost:                              # Phase 14 — GHOST intelligence layer
   # Note ~16 of these points are a constant offset (volume_confirmation and
   # rr_quality fire on every signal), so the real discriminating bar is ~19.
   min_confluence_score: 35.0
+  # Reject trades whose stop sits more than this many ATR14 away. Without it,
+  # vwap_reclaim anchors its stop to a 12-bar swing and can ask for a 7.5x-ATR
+  # stop — on NQ (ATR ~20pts) that is a ~150-point stop with a ~300-point TP2,
+  # which no intraday sequence delivers. Measured on the ES sample:
+  #   no cap  -> 55 trades, exp_R 0.243, PF 1.64, net  9.0R, worst stop 23.9pts
+  #   2.00x   -> 41 trades, exp_R 0.235, PF 1.62, net  8.0R, worst stop  6.4pts
+  #   1.75x   -> 37 trades, exp_R 0.400, PF 2.33, net 12.0R, worst stop  5.9pts  <- best
+  #   1.50x   -> 30 trades, exp_R 0.417, PF 2.43, net 10.0R, worst stop  4.9pts
+  # Wide stops were destroying edge, not just comfort: 1.75x wins on net return
+  # AND expectancy while cutting the worst stop 4x. 1.50x has a hair more
+  # expectancy but too few trades to beat it on total return.
+  # Caveat: calibrated in-sample on the ES fixture. The mechanism is
+  # instrument-independent (a 7-ATR stop at 1:2 R:R needs a 15-ATR move), so
+  # this is not purely curve-fitting — but it is not walk-forward validated.
+  max_stop_atr_mult: 1.75
   # These two hard-blocks are converted to soft penalties only: they still
   # subtract -25 / -20 pts from the confluence score, but they no longer
   # reject the trade outright before scoring runs. A conflicting setup will

@@ -99,3 +99,53 @@ class OutputEvent:
             disclaimer="Simulated paper trade — no real money, no broker connection.",
             status_payload=paper_trade_dict,
         )
+
+    @classmethod
+    def from_trade_closed(cls, paper_trade_dict: dict) -> "OutputEvent":
+        """A paper trade reached TP/stop/invalidation. Carries realised P&L so
+        the operator sees the outcome without opening the dashboard.
+        dedup_key is signal_id + ":closed" — distinct from the open event, so a
+        trade produces exactly one open and one close notification."""
+        instrument = paper_trade_dict.get("instrument", "?")
+        reason = (paper_trade_dict.get("exit_reason") or "CLOSED").upper()
+        r = paper_trade_dict.get("r_multiple")
+        won = r is not None and r > 0
+        mark = "✅" if won else ("➖" if r == 0 else "🛑")
+        return cls(
+            kind="trade_closed",
+            dedup_key=f"{paper_trade_dict.get('signal_id', '')}:closed",
+            title=f"{mark} {reason} — {instrument}",
+            disclaimer="Simulated paper trade — no real money, no broker connection.",
+            status_payload=paper_trade_dict,
+        )
+
+    @classmethod
+    def from_trade_progress(cls, paper_trade_dict: dict,
+                            milestone_r: float) -> "OutputEvent":
+        """An OPEN trade crossed an R milestone. dedup_key pins the milestone so
+        a trade oscillating around +1R cannot re-announce it."""
+        instrument = paper_trade_dict.get("instrument", "?")
+        direction = paper_trade_dict.get("direction", "LONG")
+        up = milestone_r > 0
+        mark = "🟢" if up else "🟠"
+        label = f"{milestone_r:+g}R"
+        return cls(
+            kind="trade_progress",
+            dedup_key=f"{paper_trade_dict.get('signal_id', '')}:r{milestone_r:g}",
+            title=f"{mark} {instrument} {direction} at {label}",
+            disclaimer="Simulated paper trade update — no real money, no broker connection.",
+            status_payload={**paper_trade_dict, "milestone_r": milestone_r},
+        )
+
+    @classmethod
+    def from_status_digest(cls, payload: dict, timestamp) -> "OutputEvent":
+        """Periodic 'here is where we stand' summary. dedup_key includes the
+        timestamp so each digest is its own event."""
+        raw = f"status_digest|{timestamp.isoformat()}"
+        return cls(
+            kind="status_digest",
+            dedup_key=hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+            title="📊 Bot status",
+            disclaimer="Automated status digest — not a trading signal.",
+            status_payload={**payload, "timestamp": timestamp.isoformat()},
+        )

@@ -64,6 +64,7 @@ class NoTradeReason(str, Enum):
     ACTIVE_TRADE = "active_trade"           # symbol already has an open PaperTrade
     COOLDOWN = "cooldown"                    # symbol in post-loss cooldown window
     STOP_TOO_TIGHT = "stop_too_tight"        # |entry-stop| < min_stop_atr_mult * ATR
+    STOP_TOO_WIDE = "stop_too_wide"          # |entry-stop| > max_stop_atr_mult * ATR
     INVALID_TRADE_PLAN = "invalid_trade_plan"  # entry/stop/tp inconsistent
     DUPLICATE = "duplicate"                  # same signal_id already processed
 
