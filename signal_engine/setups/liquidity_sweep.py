@@ -47,16 +47,31 @@ class LiquiditySweepDetector(SetupDetector):
         h, l, c = float(row[HIGH]), float(row[LOW]), float(row[CLOSE])
         out: list[SetupCandidate] = []
 
+        # One bar's wick can pierce several stacked levels at once. They all
+        # describe the SAME physical sweep and yield an identical trade plan
+        # (entry=close, stop=the wick extreme), so emitting one candidate per
+        # level produced pure duplicates — and, when both sides were pierced,
+        # a self-blocking LONG+SHORT pair. Keep the deepest level per side:
+        # the furthest-pierced level is the one the move actually ran.
+        swept_bull: LiquidityLevel | None = None   # sell-side swept -> BULLISH
+        swept_bear: LiquidityLevel | None = None   # buy-side swept -> BEARISH
         for lvl in ta.liquidity_levels:
             if lvl.timestamp >= N:            # level must pre-exist bar N
                 continue
             L = lvl.level
             if lvl.direction is Direction.BEARISH and l < L and c > L:
-                out.append(self._make(ctx, tf, N, Direction.BULLISH, entry=c,
-                                      stop=l - buf, swept=lvl, ta=ta))
+                if swept_bull is None or L > swept_bull.level:
+                    swept_bull = lvl
             elif lvl.direction is Direction.BULLISH and h > L and c < L:
-                out.append(self._make(ctx, tf, N, Direction.BEARISH, entry=c,
-                                      stop=h + buf, swept=lvl, ta=ta))
+                if swept_bear is None or L < swept_bear.level:
+                    swept_bear = lvl
+
+        if swept_bull is not None:
+            out.append(self._make(ctx, tf, N, Direction.BULLISH, entry=c,
+                                  stop=l - buf, swept=swept_bull, ta=ta))
+        if swept_bear is not None:
+            out.append(self._make(ctx, tf, N, Direction.BEARISH, entry=c,
+                                  stop=h + buf, swept=swept_bear, ta=ta))
         return out
 
     def _make(self, ctx, tf, N, direction, entry, stop, swept, ta) -> SetupCandidate:

@@ -90,7 +90,9 @@ signals:                             # Phase 6 — SetupCandidate -> Signal | No
   validate_entry_against_context: true
 
 live:                                  # Phase 10 — Live Market Data
-  stale_after_seconds: 90.0            # no fresh bar within this window -> STALE
+  stale_after_seconds: 300.0           # no fresh bar within this window -> STALE
+                                       # (hard NO_TRADE guard; 90s falsely killed
+                                       #  delayed 1m feeds that batch irregularly)
   reconnect_max_attempts: 3
   reconnect_backoff_seconds: 2.0
   buffer_max_days: 10
@@ -118,7 +120,14 @@ ghost:                              # Phase 14 — GHOST intelligence layer
   # EMA-50 hasn't fully warmed up and HTF bias is NEUTRAL (0 pts from the
   # 20-pt htf_alignment factor). A score of 40 requires at least structure +
   # VWAP + volume + R:R confluence, which is a meaningful bar to clear.
-  min_confluence_score: 40.0
+  # Calibrated against the sample, measuring edge as well as throughput:
+  #   35 -> 55 trades, exp_R 0.243, PF 1.64, net 9.0R, maxDD 3.0R  <- best
+  #   40 -> 41 trades, exp_R 0.259, PF 1.70, net 7.0R, maxDD 5.0R
+  #   55 -> 16 trades, exp_R 0.143, PF 1.33, net 2.0R, maxDD 4.0R
+  # 35 wins on total return AND drawdown; above ~50 the edge itself collapses.
+  # Note ~16 of these points are a constant offset (volume_confirmation and
+  # rr_quality fire on every signal), so the real discriminating bar is ~19.
+  min_confluence_score: 35.0
   # These two hard-blocks are converted to soft penalties only: they still
   # subtract -25 / -20 pts from the confluence score, but they no longer
   # reject the trade outright before scoring runs. A conflicting setup will

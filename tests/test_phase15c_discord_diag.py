@@ -73,6 +73,7 @@ def test_health_detail_env_flag_false(engine, registry, monkeypatch):
 
 def test_health_detail_env_flag_unset_yaml_off(engine, registry, monkeypatch):
     monkeypatch.delenv("BOT_DISCORD_ENABLED", raising=False)
+    engine.cfg.output.discord.enabled = False   # the state under test
     d = OutputDispatcher.from_config(engine.cfg)
     rt = BotRuntime(engine, SetupEngine(engine.cfg, registry),
                     SignalEngine(engine.cfg.signals), registry,

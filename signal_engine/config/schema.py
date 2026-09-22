@@ -129,7 +129,12 @@ class SignalConfig(BaseModel):
 
 class LiveDataConfig(BaseModel):
     """Live Market Data (Phase 10). Reasonable, un-optimized defaults."""
-    stale_after_seconds: float = 90.0     # no fresh bar within this window -> STALE
+    # No fresh bar within this window -> STALE, which is a HARD NO_TRADE guard.
+    # It measures delivery cadence, not data age, so it must tolerate a delayed
+    # 1m feed that arrives in irregular batches: at 90s a single skipped minute
+    # marked the feed dead and blocked every signal for the rest of the session.
+    # 300s = a few missed 1m bars is survivable, a genuinely dead feed is not.
+    stale_after_seconds: float = 300.0
     reconnect_max_attempts: int = 3       # per poll() cycle, before giving up as DISCONNECTED
     reconnect_backoff_seconds: float = 2.0
     buffer_max_days: int = 10             # bound the in-memory 1m buffer size

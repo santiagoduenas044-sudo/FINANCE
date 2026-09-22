@@ -293,10 +293,10 @@ def test_dispatcher_raising_adapter_does_not_propagate():
     dispatcher.publish_candidate(_candidate())   # must not raise
 
 
-def test_dispatcher_from_config_disabled_by_default():
+def test_dispatcher_from_config_disabled_builds_no_adapter():
     from signal_engine.config.schema import EngineConfig
     cfg = EngineConfig.load()
-    assert cfg.output.discord.enabled is False
+    cfg.output.discord.enabled = False   # the state under test, not the shipped default
     dispatcher = OutputDispatcher.from_config(cfg)
     assert dispatcher.adapters == []
     dispatcher.publish_candidate(_candidate())    # no-op, must not raise

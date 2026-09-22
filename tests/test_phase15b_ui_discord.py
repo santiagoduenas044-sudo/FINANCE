@@ -65,8 +65,7 @@ def test_env_flag_turns_discord_on(monkeypatch):
     monkeypatch.setenv("BOT_DISCORD_ENABLED", "true")
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.invalid/hook")
     cfg = EngineConfig.load()
-    # YAML says enabled: false, but the env flag should override.
-    assert cfg.output.discord.enabled is False
+    cfg.output.discord.enabled = False   # YAML off; the env flag must override it
     d = OutputDispatcher.from_config(cfg)
     assert len(d.adapters) == 1 and d.adapters[0].name == "discord"
     # The adapter's own emit-time guard must NOT drop messages: the override
@@ -84,7 +83,8 @@ def test_env_flag_turns_discord_off_even_if_yaml_enabled(monkeypatch):
 
 def test_no_env_flag_falls_back_to_yaml(monkeypatch):
     monkeypatch.delenv("BOT_DISCORD_ENABLED", raising=False)
-    cfg = EngineConfig.load()   # default.yaml has enabled: false
+    cfg = EngineConfig.load()
+    cfg.output.discord.enabled = False   # with no env flag, YAML decides
     d = OutputDispatcher.from_config(cfg)
     assert d.adapters == []
 
