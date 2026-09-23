@@ -1,0 +1,112 @@
+# Stock scanner configuration. Every value can be overridden from the CLI
+# (see scripts/scan_stocks.py --help) or by passing your own YAML with --config.
+
+benchmark: SPY
+
+# Liquid US large caps across sectors. Edit freely — any Yahoo ticker works
+# (e.g. SAN.MC, AMX, BIMBOA.MX for non-US listings).
+universe:
+  # Tech / communication
+  - AAPL
+  - MSFT
+  - NVDA
+  - GOOGL
+  - META
+  - AMZN
+  - AVGO
+  - ORCL
+  - CRM
+  - ADBE
+  - AMD
+  - INTC
+  - CSCO
+  - QCOM
+  - TXN
+  - NFLX
+  - NOW
+  - IBM
+  - MU
+  - PLTR
+  # Consumer
+  - TSLA
+  - HD
+  - MCD
+  - NKE
+  - SBUX
+  - COST
+  - WMT
+  - PG
+  - KO
+  - PEP
+  - LOW
+  - TGT
+  - BKNG
+  # Financials
+  - JPM
+  - BAC
+  - WFC
+  - GS
+  - MS
+  - V
+  - MA
+  - AXP
+  - BRK.B
+  - BLK
+  # Healthcare
+  - UNH
+  - JNJ
+  - LLY
+  - ABBV
+  - MRK
+  - PFE
+  - TMO
+  - ABT
+  - ISRG
+  - AMGN
+  # Industrials / energy / materials / utilities
+  - CAT
+  - DE
+  - GE
+  - HON
+  - UNP
+  - BA
+  - LMT
+  - RTX
+  - UPS
+  - XOM
+  - CVX
+  - COP
+  - LIN
+  - NEE
+  - DUK
+  - FCX
+
+# Hard filters: a ticker failing any of these is never ranked.
+filters:
+  min_price: 5.0
+  min_avg_dollar_volume: 20000000   # 20-day average, USD
+  min_history_bars: 210
+
+# Weights of the composite score (normalized to sum 1). Each factor is a
+# cross-sectional percentile (0..1) except `trend`, which is absolute.
+weights:
+  momentum: 0.25          # 12-1 and 6-month returns
+  relative_strength: 0.20 # 6-month return vs benchmark
+  trend: 0.20             # price vs SMA50/200 and SMA50 slope
+  high_proximity: 0.10    # distance to the 52-week high
+  accumulation: 0.10      # up-day vs down-day volume
+  timing: 0.10            # not over-extended: near EMA20, RSI in a sane band
+  low_volatility: 0.05    # lower 60-day realized volatility
+
+signals:
+  buy_score: 70           # score >= this AND above SMA200 AND RSI < overbought => COMPRAR
+  watch_score: 55
+  rsi_overbought: 75
+
+# Trade plan / position sizing.
+risk:
+  capital: 10000
+  risk_per_trade_pct: 1.0   # % of capital lost if the stop is hit
+  max_position_pct: 20.0    # cap on a single position's size
+  atr_stop_mult: 2.0
+  reward_risk: 2.0

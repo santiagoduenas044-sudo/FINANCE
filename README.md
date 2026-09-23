@@ -48,6 +48,45 @@ bash deploy/macos/ctl.sh status
 bash deploy/macos/ctl.sh discord       # Discord activation diagnostic
 ```
 
+## Escáner de acciones (`stock_scanner/`)
+
+Módulo independiente del bot de futuros: analiza un universo de acciones con barras
+**diarias** y las ordena por las mejores oportunidades de compra, con un plan concreto
+(entrada, stop, objetivo y número de acciones) para cada candidata.
+
+```bash
+PYTHONPATH=. python scripts/scan_stocks.py                          # universo por defecto (~70 large caps USA)
+PYTHONPATH=. python scripts/scan_stocks.py --tickers AAPL,NVDA,AMD,MSFT
+PYTHONPATH=. python scripts/scan_stocks.py --capital 25000 --risk 0.5  # tamaño de posición a tu cuenta
+PYTHONPATH=. python scripts/scan_stocks.py --backtest                 # ¿funciona el ranking? walk-forward
+PYTHONPATH=. python scripts/scan_stocks.py --out reports/             # guarda scan.md + scan.json
+PYTHONPATH=. python scripts/scan_stocks.py --provider synthetic       # demo offline (datos falsos)
+```
+
+**Score 0-100** = suma ponderada (pesos en `stock_scanner/config.yaml`):
+
+| Factor | Peso | Qué mide |
+|---|---|---|
+| Momentum | 25% | Retorno 12-1 meses y 6 meses (percentil dentro del universo) |
+| Fuerza relativa | 20% | Retorno 6m menos el del índice (SPY) |
+| Tendencia | 20% | Precio > SMA50, > SMA200, SMA50 > SMA200, SMA50 subiendo |
+| Cerca de máximos | 10% | Distancia al máximo de 52 semanas |
+| Acumulación | 10% | Volumen en días alcistas vs bajistas (50 sesiones) |
+| Timing | 10% | Cerca de la EMA20 y RSI 40-65 (no perseguir el precio) |
+| Baja volatilidad | 5% | Volatilidad realizada 60d |
+
+**Señal:** `COMPRAR` si score ≥ 70, precio sobre la SMA200 y RSI < 75 · `VIGILAR` si score ≥ 55
+(p. ej. líderes sobrecompradas: esperar retroceso) · `EVITAR` el resto.
+**Setup:** ruptura de máximos, retroceso en tendencia, momentum alcista, rebote sobrevendido,
+sobreextendida o tendencia bajista. **Plan:** stop = entrada − 2×ATR14, objetivo a 2R, tamaño
+para arriesgar el 1% del capital (máx. 20% del capital por posición).
+
+Filtros previos: precio ≥ $5, volumen medio ≥ $20M/día, ≥ 210 sesiones de historial.
+Datos: Yahoo Finance (gratis, sin API key, ajustados por splits/dividendos); también CSV
+(`--provider csv --csv-dir carpeta/`). El backtest tiene sesgo de supervivencia (usa el
+universo actual): úsalo para comparar configuraciones, no como promesa de rentabilidad.
+Herramienta de análisis — no es asesoría financiera ni envía órdenes.
+
 ## Dashboard
 
 `http://localhost:8000` — **GHOST OPS**, a five-view signal-intelligence terminal:
