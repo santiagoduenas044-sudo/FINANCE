@@ -47,6 +47,7 @@ class ExitReason(str, Enum):
     INVALIDATION = "INVALIDATION"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
+    EOD = "EOD"           # force-flattened at the RTH close, target/stop not yet hit
 
 
 _TERMINAL = {TradeStatus.TP2_HIT, TradeStatus.STOPPED, TradeStatus.INVALIDATED,

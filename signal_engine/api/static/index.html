@@ -591,7 +591,7 @@ const STATUS_ES = { PENDING: "Pendiente", ACTIVE: "Activa", TP1_HIT: "TP1 alcanz
   TP2_HIT: "TP2 alcanzado", STOPPED: "Stop", INVALIDATED: "Invalidada",
   CANCELLED: "Cancelada", CLOSED: "Cerrada" };
 const EXIT_ES = { TP1: "TP1", TP2: "TP2", STOP: "Stop", INVALIDATION: "Invalidada",
-  CANCELLED: "Cancelada", EXPIRED: "Expirada" };
+  CANCELLED: "Cancelada", EXPIRED: "Expirada", EOD: "Cierre de sesión (16:00)" };
 const NAME = { NQ: "E-mini Nasdaq-100", ES: "E-mini S&P 500",
   MNQ: "Micro E-mini Nasdaq-100", MES: "Micro E-mini S&P 500" };
 const tFactor = n => (FACTOR_ES[n] || [n.replace(/_/g, " "), ""]);

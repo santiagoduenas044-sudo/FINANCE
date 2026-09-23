@@ -251,7 +251,12 @@ class GhostConfig(BaseModel):
     # against tests/data_samples: that fixture has synthetic volume (3 distinct
     # values), so RVOL there is pinned at 1.000 and tells you nothing.
     rvol_confirm: float = 1.0
-    valid_sessions: list[str] = Field(default_factory=lambda: ["RTH", "ETH"])
+    # RTH only by default: the operator does not want positions carried into
+    # the overnight Globex session. Combined with eod_close_enabled below, a
+    # trade can now only exist inside 09:30-16:00 ET — it opens in RTH (this
+    # guard) and is force-flattened the moment RTH ends (the other guard), so
+    # neither can be dropped without reopening the overnight-hold gap.
+    valid_sessions: list[str] = Field(default_factory=lambda: ["RTH"])
 
     # --- Phase 15: trade management (per-symbol authority) --- #
     # Stop-too-tight: reject when |entry-stop| < min_stop_atr_mult * ATR14 on the
@@ -309,6 +314,15 @@ class GhostConfig(BaseModel):
     # through the live tracker: expectancy 0.500R -> 0.583R, PF 2.00 -> 3.33,
     # net 10.0R -> 14.0R at the same drawdown. See paper/tracker.py.
     breakeven_after_tp1: bool = True
+    # Force-flatten any open position the moment the bar's session is no
+    # longer RTH (data.sessions classifies the 16:00 ET bar itself as
+    # ETH/CLOSED, so this fires AT the 4pm close using that bar's real close
+    # price — no lookahead, no invented price). Reuses sessions.rth.end as the
+    # single source of truth instead of a second hardcoded clock, so moving
+    # the RTH window in data.sessions moves this too. Exists so a trade still
+    # open at the close (target/stop not yet hit) never rides into the
+    # overnight session, regardless of valid_sessions above.
+    eod_close_enabled: bool = True
     # Cooldown after a losing/invalidating close (in exec-timeframe bars).
     # 0 disables cooldown. Applied per symbol; TP closes do NOT trigger cooldown.
     cooldown_bars: int = 3

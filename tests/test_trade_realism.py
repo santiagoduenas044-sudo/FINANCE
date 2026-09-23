@@ -655,3 +655,208 @@ def test_initial_risk_is_unchanged_by_the_stop_move():
 
 def test_shipped_config_enables_breakeven():
     assert EngineConfig.load().ghost.breakeven_after_tp1 is True
+
+
+def test_shipped_config_enables_eod_close():
+    assert EngineConfig.load().ghost.eod_close_enabled is True
+
+
+# --------------------------------------------------------------------------- #
+# Force-flatten at the RTH close (operator: no overnight/24-7 holding)
+# --------------------------------------------------------------------------- #
+def test_shipped_config_trades_rth_only():
+    """No overnight exposure: entries only happen in RTH (09:30-16:00 ET), and
+    eod_close_enabled (above) force-flattens anything still open at the close.
+    Together they guarantee a trade can never span more than one RTH session."""
+    assert EngineConfig.load().ghost.valid_sessions == ["RTH"]
+
+
+def test_eth_session_signal_is_rejected_by_default():
+    """The actual guard the RTH-only default relies on: a signal scored while
+    the market state says ETH must be refused, not merely discouraged."""
+    brain = GhostBrain(_cfg())   # _cfg() never overrides valid_sessions
+    sig = _sig("LONG", entry=5000, stop=4995, tps=(5010,))
+    dec = brain._decide_signal(sig, _state(session="ETH"), _ta(3.0), None,
+                               False, False, has_active=None)
+    assert NoTradeReason.INVALID_SESSION in dec.no_trade_reasons
+
+
+def test_rth_session_signal_is_not_rejected_for_session():
+    brain = GhostBrain(_cfg())
+    sig = _sig("LONG", entry=5000, stop=4995, tps=(5010,))
+    dec = brain._decide_signal(sig, _state(session="RTH"), _ta(3.0), None,
+                               False, False, has_active=None)
+    assert NoTradeReason.INVALID_SESSION not in dec.no_trade_reasons
+
+
+def _eod_runner(tracker, **over):
+    kw = dict(signal_id="eod", instrument="ES", direction="LONG", setup="orb",
+              entry=5000.0, stop=4990.0, take_profits=[5100.0], opened_at=_T0)
+    kw.update(over)
+    t = tracker.open_trade(**kw)
+    t.status = t.status.__class__.ACTIVE
+    return t
+
+
+def test_close_symbol_eod_flattens_an_open_trade_at_the_given_price():
+    tr = PaperTradeTracker()
+    t = _eod_runner(tr)
+    close_ts = pd.Timestamp("2026-06-15 16:00", tz="America/New_York")
+    closed = tr.close_symbol_eod("ES", 5008.0, close_ts)
+    assert closed == [t]
+    assert not t.is_open
+    assert t.exit_reason is ExitReason.EOD
+    assert t.status is t.status.__class__.CLOSED
+    assert t.exit_price == 5008.0
+    assert t.closed_at == close_ts
+    assert t.pnl_points == pytest.approx(8.0)
+    assert t.r_multiple == pytest.approx(0.8)          # 8 pts / 10 pt risk
+
+
+def test_close_symbol_eod_ignores_other_symbols():
+    tr = PaperTradeTracker()
+    t = _eod_runner(tr, signal_id="eod-nq", instrument="NQ")
+    assert tr.close_symbol_eod("ES", 5008.0, _T0) == []
+    assert t.is_open
+
+
+def test_close_symbol_eod_is_a_no_op_with_nothing_open():
+    tr = PaperTradeTracker()
+    assert tr.close_symbol_eod("ES", 5008.0, _T0) == []
+
+
+def test_close_symbol_eod_is_idempotent():
+    """Every non-RTH bar re-checks; a symbol with no open trade left must not
+    raise or double-close."""
+    tr = PaperTradeTracker()
+    _eod_runner(tr)
+    first = tr.close_symbol_eod("ES", 5008.0, _T0)
+    second = tr.close_symbol_eod("ES", 5009.0, _T0 + pd.Timedelta(minutes=5))
+    assert len(first) == 1 and second == []
+
+
+def test_close_symbol_eod_can_produce_a_loss():
+    """EOD is neutral — it reports whatever the market did, win or lose."""
+    tr = PaperTradeTracker()
+    t = _eod_runner(tr)
+    tr.close_symbol_eod("ES", 4995.0, _T0)
+    assert t.pnl_points == pytest.approx(-5.0)
+    assert t.r_multiple == pytest.approx(-0.5)
+
+
+def test_close_symbol_eod_works_for_short_trades():
+    tr = PaperTradeTracker()
+    t = tr.open_trade(signal_id="eod-short", instrument="ES", direction="SHORT",
+                      setup="orb", entry=5000.0, stop=5010.0,
+                      take_profits=[4900.0], opened_at=_T0)
+    t.status = t.status.__class__.ACTIVE
+    tr.close_symbol_eod("ES", 4990.0, _T0)
+    assert t.pnl_points == pytest.approx(10.0)
+    assert t.r_multiple == pytest.approx(1.0)
+
+
+# --------------------------------------------------------------------------- #
+# Runtime wiring — _run_ghost actually calls close_symbol_eod on the bar
+# where the session leaves RTH, not before and not silently skipped.
+#
+# Uses REAL AnalysisContext objects sliced from the ES sample rather than a
+# hand-rolled stub: _run_ghost's step 2 calls the real analyzer/GhostBrain,
+# which need genuine TimeframeView history (indicators, structure) to run at
+# all. min_confluence_score=99999 keeps GHOST from approving anything new, so
+# these contexts isolate exactly the EOD guard in step 1 without a fake ever
+# standing in for the pipeline it's meant to prove works.
+# --------------------------------------------------------------------------- #
+def _rth_then_eod_ctx(engine):
+    from pathlib import Path
+    from signal_engine.data.providers.csv_provider import CsvProvider
+    samples = Path(__file__).resolve().parent / "data_samples"
+    tf_bars = engine.build_timeframes(engine.load_contract(CsvProvider(samples), "ES", "ESM26"))
+    exec_tf = engine.cfg.timeframe_roles.execution
+    # skip the first 60 bars for indicator warmup, same convention the
+    # calibration scripts use for this fixture.
+    ctx_iter = (engine.analysis_context("ES", ts, tf_bars)
+               for ts in tf_bars[exec_tf].index[60:])
+    rth_ctx = next(c for c in ctx_iter if c.session == "RTH")
+    # continuing the SAME generator picks up right after rth_ctx, so this is
+    # the next bar whose session left RTH — no list/equality comparison on
+    # AnalysisContext needed (it holds DataFrames, which don't support ==).
+    eod_ctx = next(c for c in ctx_iter if c.session != "RTH")
+    return rth_ctx, eod_ctx
+
+
+def _eod_wiring_runtime(engine, registry, dispatcher, **ghost_over):
+    gcfg = GhostConfig(min_confluence_score=99999.0, **ghost_over)
+    from signal_engine.paper.tracker import PaperTradeTracker
+    from signal_engine.runtime.engine import BotRuntime
+    from signal_engine.setups.engine import SetupEngine
+    from signal_engine.signals.engine import SignalEngine
+    rt = BotRuntime(engine, SetupEngine(engine.cfg, registry),
+                    SignalEngine(engine.cfg.signals), registry,
+                    ghost=GhostBrain(gcfg), paper_tracker=PaperTradeTracker(),
+                    output_dispatcher=dispatcher)
+    rt.start()
+    return rt
+
+
+def _open_wide_trade(rt, ctx):
+    """A trade whose stop/target sit far outside the sample's price range, so
+    it can only ever close via the guard under test, never TP/stop."""
+    px = float(ctx.execution.bars["close"].iloc[-1])
+    t = rt.paper_tracker.open_trade(
+        signal_id="eod-wire", instrument="ES", direction="LONG", setup="orb",
+        entry=px, stop=px - 1000.0, take_profits=[px + 1000.0],
+        opened_at=ctx.decision_time)
+    t.status = t.status.__class__.ACTIVE
+    return t
+
+
+def test_run_ghost_force_closes_when_session_leaves_rth(engine, registry):
+    rth_ctx, eod_ctx = _rth_then_eod_ctx(engine)
+    rec = _Recorder()
+    rt = _eod_wiring_runtime(engine, registry, rec)
+    t = _open_wide_trade(rt, rth_ctx)
+
+    rt._run_ghost("ES", rth_ctx, [])
+    assert t.is_open, "must not close while the bar is still inside RTH"
+
+    rt._run_ghost("ES", eod_ctx, [])
+    assert not t.is_open
+    assert t.exit_reason.value == "EOD"
+    assert t.exit_price == pytest.approx(float(eod_ctx.execution.bars["close"].iloc[-1]))
+    assert len(rec.closed) == 1 and rec.closed[0]["exit_reason"] == "EOD"
+
+
+def test_run_ghost_respects_eod_close_enabled_false(engine, registry):
+    rth_ctx, eod_ctx = _rth_then_eod_ctx(engine)
+    rec = _Recorder()
+    rt = _eod_wiring_runtime(engine, registry, rec, eod_close_enabled=False)
+    t = _open_wide_trade(rt, rth_ctx)
+
+    rt._run_ghost("ES", rth_ctx, [])
+    rt._run_ghost("ES", eod_ctx, [])
+    assert t.is_open
+    assert rec.closed == []
+
+
+def test_run_ghost_reads_the_brains_own_config_not_the_data_engines():
+    """A caller can build GhostBrain from its own GhostConfig (tests do this
+    constantly). _run_ghost must honour THAT config for the EOD guard, cooldown
+    etc. — not silently fall back to data_engine.cfg.ghost because the two
+    happen to be the same object in the normal bootstrap path."""
+    from signal_engine.data.contracts import ContractRegistry
+    from signal_engine.data.engine import DataEngine
+    from signal_engine.paper.tracker import PaperTradeTracker
+    from signal_engine.runtime.engine import BotRuntime
+    from signal_engine.setups.engine import SetupEngine
+    from signal_engine.signals.engine import SignalEngine
+
+    engine = DataEngine()   # its own cfg.ghost is left at the library default
+    registry = ContractRegistry.load()
+    custom = GhostConfig(min_confluence_score=99999.0, eod_close_enabled=False)
+    assert engine.cfg.ghost.eod_close_enabled is True, \
+        "the data engine's config must stay untouched for this test to prove anything"
+    rt = BotRuntime(engine, SetupEngine(engine.cfg, registry),
+                    SignalEngine(engine.cfg.signals), registry,
+                    ghost=GhostBrain(custom), paper_tracker=PaperTradeTracker())
+    rt.start()
+    assert rt.ghost.cfg is custom

@@ -229,6 +229,21 @@ class PaperTradeTracker:
         self._reconcile()
         return closed
 
+    def close_symbol_eod(self, instrument: str, price: float,
+                         bar_time: pd.Timestamp) -> list[PaperTrade]:
+        """Force-flatten open trades for a symbol at the regular-session close.
+        Called once the bar's session is no longer RTH: neither win nor loss by
+        the strategy's own targets, just the operator's rule that nothing rides
+        into the overnight session. `price` is the real close of that bar, so
+        this is not a fabricated fill."""
+        closed = []
+        for trade in list(self.open_trades):
+            if trade.instrument == instrument and trade.is_open:
+                self._close(trade, bar_time, price, ExitReason.EOD, TradeStatus.CLOSED)
+                closed.append(trade)
+        self._reconcile()
+        return closed
+
     # ------------------------------------------------------------------ #
     def _close(self, trade: PaperTrade, when: pd.Timestamp, price: float,
                reason: ExitReason, status: TradeStatus) -> None:

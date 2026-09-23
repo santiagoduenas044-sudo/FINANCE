@@ -145,6 +145,16 @@ def test_breakeven_promise_only_when_it_will_actually_happen():
     assert "stop a la entrada" not in trade_thesis(one, breakeven_after_tp1=True)["espero"]
 
 
+def test_eod_close_promise_only_when_the_guard_is_on():
+    """The operator asked not to hold overnight — the thesis should say so
+    when the guard that actually enforces it is on, and stay silent otherwise
+    so the message never promises behaviour the bot won't deliver."""
+    d = _decision()
+    assert "4:00pm" in trade_thesis(d, eod_close_enabled=True)["espero"]
+    assert "4:00pm" not in trade_thesis(d)["espero"]
+    assert "4:00pm" not in trade_thesis(d, eod_close_enabled=False)["espero"]
+
+
 def test_negative_factors_become_risks():
     t = trade_thesis(_decision(contribs=[("htf_conflict", -12.5),
                                          ("against_structure", -7.5)]))

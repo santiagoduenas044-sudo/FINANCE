@@ -393,6 +393,14 @@ class BotRuntime:
         # 1) update active paper trades with this decision (closed) bar.
         exec_tf = self.data_engine.cfg.timeframe_roles.execution
         bars = ctx.execution.bars
+        # self.ghost.cfg, NOT self.data_engine.cfg.ghost: this function only
+        # runs when self.ghost is not None (guarded by the caller), and
+        # self.ghost.cfg is what actually drove the decisions below — the two
+        # are the same object in the normal bootstrap path, but a caller that
+        # builds GhostBrain from its own GhostConfig (as several tests do)
+        # would otherwise have every read here — eod_close_enabled included —
+        # silently fall back to the data engine's default config instead.
+        gcfg = self.ghost.cfg
         if self.paper_tracker is not None and not bars.empty:
             # R reading of every open trade BEFORE this bar is applied, so a
             # milestone is detected as a crossing rather than as "currently
@@ -404,6 +412,15 @@ class BotRuntime:
                 # Fix 3: capture closed trades so account state stays current.
                 just_closed = self.paper_tracker.update_symbol(
                     symbol, bars.iloc[-1], ctx.decision_time)
+                # Force-flatten anything still open the moment this bar falls
+                # outside RTH (data.sessions classifies the 16:00 ET bar itself
+                # as ETH/CLOSED, so this fires AT the close using that bar's
+                # real price). Runs AFTER update_symbol so a same-bar TP/stop
+                # hit is still the real outcome, not overridden by EOD.
+                if gcfg.eod_close_enabled and ctx.session != "RTH":
+                    eod_closed = self.paper_tracker.close_symbol_eod(
+                        symbol, float(bars.iloc[-1]["close"]), ctx.decision_time)
+                    just_closed = just_closed + eod_closed
                 if just_closed and self.account is not None:
                     _pnl_delta = sum(t.pnl_points for t in just_closed)
                     self.account = AccountState(
@@ -423,7 +440,6 @@ class BotRuntime:
         data_stale = getattr(feed_status, "value", None) == "STALE"
 
         # Runtime-supplied callbacks (brain stays pure/side-effect-free).
-        gcfg = self.data_engine.cfg.ghost
         has_active = (self.paper_tracker.has_open if self.paper_tracker is not None else None)
         cooldown_check = None
         duplicate_check = None
@@ -538,7 +554,8 @@ class BotRuntime:
                             "mtf": ms.mtf.alignment.value,
                             "confluence": d.confluence.score if d.confluence else None,
                             "thesis": trade_thesis(
-                                d, breakeven_after_tp1=gcfg.breakeven_after_tp1),
+                                d, breakeven_after_tp1=gcfg.breakeven_after_tp1,
+                                eod_close_enabled=gcfg.eod_close_enabled),
                         },
                     )
                 if self.paper_tracker is not None and paper_trade is None:

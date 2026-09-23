@@ -292,8 +292,20 @@ def test_runtime_ghost_and_paper_integration():
                      de.cfg.data, "1m")
     feed = LiveFeed(SimulatedLiveAdapter(hist, symbol="ES", bars_per_poll=5), "ES", de.cfg)
     tracker = PaperTradeTracker()
+    # GHOST now trades RTH only by default (valid_sessions=["RTH"]), kept as-is
+    # here deliberately — this smoke test should catch a break in that guard
+    # too. But the fixture opens Sunday 18:00 ET, so RTH (Monday 09:30) does
+    # not start until cycle ~144 of 200, leaving only ~70 RTH minutes visible
+    # — too few for the real min_confluence_score=35 to clear reliably, and
+    # running enough cycles to traverse the whole ~4140-minute fixture takes
+    # minutes (indicator recompute cost grows with accumulated history). This
+    # is a WIRING smoke test, not a threshold calibration, so lower the score
+    # bar the same way the Phase 15 authority tests do; the session guard
+    # itself is untouched.
+    gcfg = GhostConfig(min_confluence_score=0.0, block_htf_conflict=False,
+                       block_against_structure=False, min_stop_atr_mult=0.0)
     rt = BotRuntime(de, SetupEngine(de.cfg, reg), SignalEngine(de.cfg.signals), reg,
-                    live_feeds={"ES": feed}, ghost=GhostBrain(de.cfg.ghost),
+                    live_feeds={"ES": feed}, ghost=GhostBrain(gcfg),
                     paper_tracker=tracker)
     rt.start()
     for _ in range(200):

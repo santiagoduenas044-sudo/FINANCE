@@ -107,7 +107,8 @@ def market_read(ms: MarketState) -> list[str]:
     return lines
 
 
-def trade_thesis(decision, *, breakeven_after_tp1: bool = False) -> dict[str, str]:
+def trade_thesis(decision, *, breakeven_after_tp1: bool = False,
+                 eod_close_enabled: bool = False) -> dict[str, str]:
     """{veo, por_eso, espero, en_contra, confianza} for an approved decision.
     Keys with nothing honest to say are left out rather than padded."""
     sig = decision.signal
@@ -130,6 +131,9 @@ def trade_thesis(decision, *, breakeven_after_tp1: bool = False) -> dict[str, st
     if breakeven_after_tp1 and len(sig.take_profits) > 1:
         espero += (" Si toca TP1 muevo el stop a la entrada: desde ahí el trade "
                    "ya no puede perder.")
+    if eod_close_enabled:
+        espero += (" No lo dejo abierto de un día para otro: si sigue vivo a las "
+                   "4:00pm ET lo cierro al precio de ese momento.")
     out["espero"] = espero
 
     conf = decision.confluence
