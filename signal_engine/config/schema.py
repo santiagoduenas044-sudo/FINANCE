@@ -265,18 +265,50 @@ class GhostConfig(BaseModel):
     # approved stops were 7.56x ATR / 47.8 pts — on NQ (ATR ~20pts) that is the
     # ~150-point stop the operator reported. Set to 0 to disable the check.
     max_stop_atr_mult: float = 1.75
-    # Absolute per-symbol ceiling on |entry-stop|, in index points, applied on
-    # top of the ATR-relative cap above. The ATR rule self-scales with
-    # volatility but has no notion of account risk; this one bounds the worst
-    # case in dollars (NQ: 50pts x $20 = $1000/contract). It is a backstop for
-    # an ATR spike, not the binding constraint — at 1.75x ATR the ATR rule
-    # already caps NQ near 35pts. Symbols absent from the mapping are governed
-    # by the ATR rule alone.
-    max_stop_points: dict[str, float] = Field(
-        default_factory=lambda: {"NQ": 50.0, "MNQ": 50.0, "ES": 15.0, "MES": 15.0})
+    # Optional absolute per-symbol ceiling on |entry-stop|, in index points.
+    # EMPTY BY DEFAULT, deliberately: a fixed points ceiling caps how long a
+    # trade may be regardless of conditions, which is exactly what the ATR rule
+    # above exists to avoid — a quiet session should get a tight stop and a
+    # volatile trend a wide one. Dollar risk is already bounded elsewhere:
+    # RiskEngine sizes contracts as floor(max_risk / (stop_points * point_value)),
+    # so a wider stop buys fewer contracts rather than more exposure. Populate
+    # this only to enforce a hard per-symbol bound that sizing cannot express.
+    max_stop_points: dict[str, float] = Field(default_factory=dict)
+    # --- regime-adaptive targets --- #
+    # The setups build take-profits from a fixed R list, so a trend and a range
+    # ask for the same distance. When enabled, GHOST re-places the FAR target
+    # according to how well the regime fits the trade (the NEAR target is left
+    # alone — banking part of the position early is what makes a far target
+    # survivable). See ghost/targets.py.
+    # OFF by default because it was measured and it LOST. Replayed through the
+    # live tracker on the ES sample (not the TP1-only backtest simulator, which
+    # is blind to the far target entirely):
+    #   fixed [1R,2R]           20 trades, exp_R 0.500, PF 2.00, net 10.0R
+    #   adaptive 3/2/1.5/1      22 trades, exp_R 0.341, PF 1.68, net  7.5R
+    #   adaptive 4/2.5/1.5/1    22 trades, exp_R 0.432, PF 1.86, net  9.5R
+    # Stretching an aligned trade to 3-4R gives the move room to reverse before
+    # it arrives, and the extra stop-outs cost more than the extra reward pays.
+    # Kept available, and the trade LENGTH is adaptive regardless: targets are R
+    # multiples of a structure-derived stop, so a quiet session produces a short
+    # trade and a volatile one a long trade, in points.
+    adaptive_targets: bool = False
+    # Far-target R by regime-fit band. "aligned" = trading with a established
+    # trend, "counter" = against it, where the sensible plan is to take what
+    # the move gives and leave.
+    target_r_by_band: dict[str, float] = Field(
+        default_factory=lambda: {"aligned": 3.0, "favorable": 2.0,
+                                 "neutral": 1.5, "counter": 1.0})
+    # Extra R allowed when 1H, 15m and 5m all agree with an aligned trade.
+    target_r_mtf_bonus: float = 1.0
+
     # Max simultaneously ACTIVE paper trades per symbol. Default 1 => no
     # LONG+LONG (different setup), no LONG+SHORT, one open per instrument.
     max_open_per_symbol: int = 1
+    # Move the stop to entry once TP1 is reached, so a trade running on toward
+    # TP2 can no longer give the whole move back. Measured on the ES sample
+    # through the live tracker: expectancy 0.500R -> 0.583R, PF 2.00 -> 3.33,
+    # net 10.0R -> 14.0R at the same drawdown. See paper/tracker.py.
+    breakeven_after_tp1: bool = True
     # Cooldown after a losing/invalidating close (in exec-timeframe bars).
     # 0 disables cooldown. Applied per symbol; TP closes do NOT trigger cooldown.
     cooldown_bars: int = 3

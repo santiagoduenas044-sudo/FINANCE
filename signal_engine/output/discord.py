@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 
 from ..config.schema import DiscordOutputConfig
+from ..ghost.narrative import render_thesis
 from ..setups.models import SetupCandidate
 from ..signals.models import Signal
 from .base import OutputAdapter
@@ -27,6 +28,7 @@ log = logging.getLogger("signal_engine.output.discord")
 _RETRYABLE = {429, 500, 502, 503, 504}
 _EMBED_COLOR = 0xF1C40F           # yellow, matching the 🟡 marker
 _FIELD_MAX = 1024                 # Discord embed field value limit
+_DESCRIPTION_MAX = 4096           # Discord embed description limit
 
 
 def _fmt_price(x: float | None) -> str:
@@ -196,9 +198,11 @@ def _build_trade_opened_payload(event: OutputEvent) -> dict:
         {"name": "Signal ID", "value": sig_id + "…", "inline": True},
     ]
     color = _TRADE_COLOR.get(direction, 0x2ECC71)
+    thesis = ctx.get("thesis")
+    description = (render_thesis(thesis) if thesis else f"**{event.disclaimer}**")
     embed = {
         "title": event.title,
-        "description": f"**{event.disclaimer}**",
+        "description": _truncate(description, _DESCRIPTION_MAX),
         "color": color,
         "fields": fields,
         "footer": {"text": "GHOST paper trade · " + event.disclaimer},
@@ -297,6 +301,10 @@ def _build_status_digest_payload(event: OutputEvent) -> dict:
         {"name": "Open P&L",     "value": _rmult(p.get("open_r")), "inline": True},
         {"name": "Open positions", "value": _truncate(body), "inline": False},
     ]
+    for sym, lines in (p.get("market_read") or {}).items():
+        if lines:
+            fields.append({"name": f"👁 Lo que veo en {sym}",
+                           "value": _truncate("\n".join(lines)), "inline": False})
     embed = {
         "title": event.title,
         "description": f"**{event.disclaimer}**",

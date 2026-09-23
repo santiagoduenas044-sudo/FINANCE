@@ -27,7 +27,16 @@ from .models import ExitReason, PaperTrade, TradeStatus
 
 
 class PaperTradeTracker:
-    def __init__(self, store_dir: str | Path | None = None):
+    def __init__(self, store_dir: str | Path | None = None,
+                 breakeven_after_tp1: bool = False):
+        # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
+        # stop, so a winner can hand back the whole move and close at -1R. Move
+        # the stop to entry instead and that giveback becomes ~0R. Measured on
+        # the ES sample through this tracker: expectancy 0.500R -> 0.583R,
+        # profit factor 2.00 -> 3.33, net 10.0R -> 14.0R at the same 2.0R
+        # drawdown. Win rate FALLS (50% -> 42%) because breakeven exits count as
+        # non-wins — which is why win rate is the wrong thing to steer by.
+        self.breakeven_after_tp1 = breakeven_after_tp1
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
         # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
@@ -199,6 +208,11 @@ class PaperTradeTracker:
                 self._close(trade, bar_time, tp1, ExitReason.TP1, TradeStatus.TP1_HIT)
             else:
                 trade.status = TradeStatus.TP1_HIT   # partial; still open toward TP2
+                if self.breakeven_after_tp1:
+                    # Takes effect from the NEXT bar: this bar's protective
+                    # levels were already evaluated above, so the move can
+                    # never retroactively close a trade that was still alive.
+                    trade.stop = trade.entry
         self._save_open()
 
     def invalidate_symbol(self, instrument: str, price: float,

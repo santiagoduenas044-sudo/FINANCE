@@ -271,6 +271,8 @@ class GhostDecision:
     signal: object | None = None            # the underlying Signal (if a trade)
     no_trade_reasons: list[NoTradeReason] = field(default_factory=list)
     detail: str = ""
+    # Regime-adaptive target decision (ghost/targets.py), when one was made.
+    target_plan: dict | None = None
 
     @property
     def is_trade(self) -> bool:

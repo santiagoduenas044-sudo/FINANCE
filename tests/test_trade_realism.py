@@ -194,7 +194,13 @@ def test_shipped_config_caps_stop_width():
     cfg = EngineConfig.load()
     assert 0 < cfg.ghost.max_stop_atr_mult <= 2.0, \
         "a cap above 2x ATR lets the 150-point NQ trade back in"
-    assert cfg.ghost.max_stop_points.get("NQ", 0) > 0
+
+
+def test_shipped_config_does_not_fix_stop_length_in_points():
+    """Trade length must follow conditions, not a constant. The ATR rule caps
+    the RATIO; a points ceiling would cap the trade itself, and dollar risk is
+    already bounded by RiskEngine sizing contracts off the stop distance."""
+    assert EngineConfig.load().ghost.max_stop_points == {}
 
 
 def test_shipped_config_keeps_min_below_max():
@@ -497,3 +503,155 @@ def test_progress_is_scoped_to_the_symbol_being_processed(engine, registry):
     nq.r_multiple = 1.2
     rt._notify_trade_updates("ES", [], {"nq1": 0.0})
     assert rec.progress == [], "an ES bar must not report NQ's progress"
+
+
+# --------------------------------------------------------------------------- #
+# Regime-adaptive targets (shipped OFF — measured worse; mechanism kept)
+# --------------------------------------------------------------------------- #
+from signal_engine.ghost.targets import apply_plan, plan_targets  # noqa: E402
+
+
+def _state_regime(regime, alignment=MTFAlignment.ALIGNED):
+    reg = RegimeState(regime, Volatility.NORMAL, 0.5, 0.5, 100.0, 100.0, 100.0, "", None)
+    mtf = MTFContext(TimeframeBias("1H", Bias.BULLISH),
+                     TimeframeBias("15m", Bias.BULLISH),
+                     TimeframeBias("5m", Bias.BULLISH), alignment)
+    st = StructureState(Bias.BULLISH, False, "BOS", Bias.BULLISH, "")
+    liq = LiquidityState(Bias.BEARISH, 4990.0, None, True, None, None, "")
+    return MarketState("ES", pd.Timestamp("2026-06-15 10:00", tz="America/New_York"),
+                       "RTH", 100.0, 100.0, "ABOVE", reg, mtf, st, liq, [])
+
+
+def test_adaptive_targets_disabled_keeps_the_setup_plan():
+    sig = _sig("LONG", setup="orb", entry=5000, stop=4990, tps=(5010, 5020))
+    assert plan_targets(sig, _state_regime(MarketRegime.TREND_UP),
+                        _cfg(adaptive_targets=False)) is None
+
+
+def test_aligned_trend_stretches_the_far_target():
+    sig = _sig("LONG", setup="orb", entry=5000, stop=4990, tps=(5010, 5020))
+    plan = plan_targets(sig, _state_regime(MarketRegime.TREND_UP),
+                        _cfg(adaptive_targets=True, target_r_mtf_bonus=0.0))
+    assert plan.band == "aligned"
+    assert plan.take_profits == [5010, 5030]       # TP1 kept, far -> 3R
+
+
+def test_counter_trend_collapses_to_the_near_target():
+    sig = _sig("LONG", setup="orb", entry=5000, stop=4990, tps=(5010, 5020))
+    plan = plan_targets(sig, _state_regime(MarketRegime.TREND_DOWN),
+                        _cfg(adaptive_targets=True))
+    assert plan.band == "counter"
+    assert plan.take_profits == [5010]
+
+
+def test_mtf_bonus_only_applies_when_every_timeframe_agrees():
+    sig = _sig("LONG", setup="orb", entry=5000, stop=4990, tps=(5010, 5020))
+    c = _cfg(adaptive_targets=True, target_r_mtf_bonus=1.0)
+    aligned = plan_targets(sig, _state_regime(MarketRegime.TREND_UP), c)
+    mixed = plan_targets(sig, _state_regime(MarketRegime.TREND_UP,
+                                            MTFAlignment.MIXED), c)
+    assert aligned.far_r == 4.0 and mixed.far_r == 3.0
+
+
+def test_apply_plan_preserves_signal_identity():
+    """signal_id drives end-to-end dedup; changing targets must not change it."""
+    sig = _sig("LONG", setup="orb", entry=5000, stop=4990, tps=(5010, 5020))
+    plan = plan_targets(sig, _state_regime(MarketRegime.TREND_UP),
+                        _cfg(adaptive_targets=True))
+    out = apply_plan(sig, plan)
+    assert out.signal_id == sig.signal_id
+    assert out.take_profits != sig.take_profits
+    assert out.risk_reward == pytest.approx([1.0, plan.far_r])
+
+
+def test_short_far_target_goes_below_entry():
+    sig = _sig("SHORT", setup="orb", entry=5000, stop=5010, tps=(4990, 4980))
+    plan = plan_targets(sig, _state_regime(MarketRegime.TREND_DOWN),
+                        _cfg(adaptive_targets=True, target_r_mtf_bonus=0.0))
+    assert plan.take_profits == [4990, 4970]
+
+
+def test_shipped_config_leaves_adaptive_targets_off():
+    """Replayed through the live tracker it cut expectancy 0.500R -> 0.341R.
+    Turning it back on needs new evidence, not a config flip."""
+    assert EngineConfig.load().ghost.adaptive_targets is False
+
+
+# --------------------------------------------------------------------------- #
+# Breakeven after TP1 (shipped ON — measured better)
+# --------------------------------------------------------------------------- #
+from signal_engine.paper.models import ExitReason  # noqa: E402
+from signal_engine.paper.tracker import PaperTradeTracker  # noqa: E402
+
+_T0 = pd.Timestamp("2026-06-15 10:00", tz="America/New_York")
+
+
+def _bar(o, h, l, c):
+    return pd.Series({"open": o, "high": h, "low": l, "close": c})
+
+
+def _runner(tracker):
+    t = tracker.open_trade(signal_id="be", instrument="ES", direction="LONG",
+                           setup="orb", entry=5000.0, stop=4990.0,
+                           take_profits=[5010.0, 5020.0], opened_at=_T0)
+    t.status = t.status.__class__.ACTIVE
+    return t
+
+
+def test_breakeven_moves_stop_to_entry_once_tp1_is_reached():
+    tr = PaperTradeTracker(breakeven_after_tp1=True)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    assert t.tp1_hit and t.is_open
+    assert t.stop == 5000.0
+
+
+def test_breakeven_turns_a_full_giveback_into_a_scratch():
+    """The case it exists for: TP1 hit, then price collapses through the old
+    stop. Without breakeven that is -1R; with it, ~0R."""
+    tr = PaperTradeTracker(breakeven_after_tp1=True)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    tr.update_on_bar(t, _bar(5009, 5009, 4985, 4986), _T0 + pd.Timedelta(minutes=10))
+    assert not t.is_open
+    assert t.exit_reason is ExitReason.STOP
+    assert t.r_multiple == pytest.approx(0.0)
+
+
+def test_without_breakeven_the_same_path_loses_a_full_r():
+    tr = PaperTradeTracker(breakeven_after_tp1=False)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    tr.update_on_bar(t, _bar(5009, 5009, 4985, 4986), _T0 + pd.Timedelta(minutes=10))
+    assert t.r_multiple == pytest.approx(-1.0)
+
+
+def test_breakeven_never_closes_the_trade_on_the_tp1_bar_itself():
+    """This bar's low (4999) is below entry, but the stop move takes effect
+    from the next bar — it must not retroactively stop out a live trade."""
+    tr = PaperTradeTracker(breakeven_after_tp1=True)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    assert t.is_open
+
+
+def test_breakeven_still_lets_the_trade_reach_tp2():
+    tr = PaperTradeTracker(breakeven_after_tp1=True)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    tr.update_on_bar(t, _bar(5009, 5021, 5005, 5020), _T0 + pd.Timedelta(minutes=10))
+    assert t.exit_reason is ExitReason.TP2
+    assert t.r_multiple == pytest.approx(2.0)
+
+
+def test_initial_risk_is_unchanged_by_the_stop_move():
+    """R multiples stay measured against the ORIGINAL risk, or a TP2 win
+    would read as infinite R once the stop sits at entry."""
+    tr = PaperTradeTracker(breakeven_after_tp1=True)
+    t = _runner(tr)
+    tr.update_on_bar(t, _bar(5000, 5011, 4999, 5009), _T0 + pd.Timedelta(minutes=5))
+    assert t.initial_risk == pytest.approx(10.0)
+
+
+def test_shipped_config_enables_breakeven():
+    assert EngineConfig.load().ghost.breakeven_after_tp1 is True

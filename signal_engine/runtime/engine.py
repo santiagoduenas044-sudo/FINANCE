@@ -23,6 +23,7 @@ import pandas as pd
 
 from ..data.contracts import ContractRegistry
 from ..data.engine import DataEngine
+from ..ghost.narrative import market_read, trade_thesis
 from ..output.dispatcher import OutputDispatcher
 from ..output.events import OutputEvent
 from ..risk.engine import RiskEngine
@@ -89,6 +90,9 @@ class BotRuntime:
     # the dashboard. Populated only when `ghost` is configured.
     ghost_market_state: dict[str, dict] = field(default_factory=dict, init=False)
     ghost_last_decision: dict[str, dict] = field(default_factory=dict, init=False)
+    # Plain-language market read per symbol (ghost/narrative.py), for the
+    # status digest and the !why command.
+    ghost_market_read: dict[str, list[str]] = field(default_factory=dict, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -369,6 +373,8 @@ class BotRuntime:
                 f"({t.pnl_points:+.2f} pts, {t.r_multiple:+.2f}R)"
                 for t in open_trades
             ],
+            "market_read": {sym: list(lines)
+                            for sym, lines in self.ghost_market_read.items()},
         }
 
     def _run_ghost(self, symbol: str, ctx, base_results: list) -> tuple[int, int]:
@@ -437,6 +443,7 @@ class BotRuntime:
                                             duplicate_check=duplicate_check)
         self._set_component(ComponentStatus.OK, "ghost")
         self.ghost_market_state[symbol] = ms.to_dict()
+        self.ghost_market_read[symbol] = market_read(ms)
         if decisions:
             self.ghost_last_decision[symbol] = decisions[-1].to_dict()
 
@@ -530,6 +537,8 @@ class BotRuntime:
                             "session": ms.session,
                             "mtf": ms.mtf.alignment.value,
                             "confluence": d.confluence.score if d.confluence else None,
+                            "thesis": trade_thesis(
+                                d, breakeven_after_tp1=gcfg.breakeven_after_tp1),
                         },
                     )
                 if self.paper_tracker is not None and paper_trade is None:

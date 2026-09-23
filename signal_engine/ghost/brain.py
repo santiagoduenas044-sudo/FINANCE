@@ -27,6 +27,7 @@ from ..signals.models import NoTrade, Signal
 from .confluence import score_confluence
 from .context import build_market_state
 from .models import GhostDecision, MarketState, NoTradeReason
+from .targets import apply_plan, plan_targets
 
 # Best-effort mapping of base-engine NoTrade reason text -> a GHOST reason.
 _BASE_REASON_MAP = {
@@ -132,6 +133,11 @@ class GhostBrain:
             reasons.append(NoTradeReason.STOP_TOO_WIDE)
         extra["stop_check"] = stop_info
 
+        # Regime-adaptive targets. Applied BEFORE the R:R guard and scoring so
+        # every check below judges the plan that would actually be traded.
+        plan = plan_targets(sig, ms, cfg)
+        sig = apply_plan(sig, plan)
+
         if ms.regime.atr_percentile is not None and \
                 ms.regime.atr_percentile > cfg.max_atr_percentile:
             reasons.append(NoTradeReason.EXCESSIVE_VOLATILITY)
@@ -145,6 +151,10 @@ class GhostBrain:
             reasons.append(NoTradeReason.AGAINST_STRUCTURE)
 
         confluence = score_confluence(direction, ms, sig, exec_ta, cfg)
+        plan_dict = ({"far_r": plan.far_r, "band": plan.band,
+                      "basis": plan.basis,
+                      "take_profits": list(plan.take_profits)}
+                     if plan is not None else None)
 
         # Attach Phase 15 diagnostics (stop_check, cooldown info) into the
         # decision's market_context via detail — keeps GhostDecision immutable.
@@ -162,6 +172,7 @@ class GhostBrain:
                 action="NO_TRADE", instrument=sig.instrument, setup=sig.setup,
                 timestamp=sig.timestamp, market_state=ms, confluence=confluence,
                 signal=sig, no_trade_reasons=_dedup(reasons),
+                target_plan=plan_dict,
                 detail=("hard guard(s) triggered" + detail_extra).strip())
 
         if not confluence.passed:
@@ -169,13 +180,15 @@ class GhostBrain:
                 action="NO_TRADE", instrument=sig.instrument, setup=sig.setup,
                 timestamp=sig.timestamp, market_state=ms, confluence=confluence,
                 signal=sig, no_trade_reasons=[NoTradeReason.INSUFFICIENT_CONFLUENCE],
+                target_plan=plan_dict,
                 detail=f"score {confluence.score} < {cfg.min_confluence_score}"
                        + detail_extra)
 
         return GhostDecision(
             action=direction, instrument=sig.instrument, setup=sig.setup,
             timestamp=sig.timestamp, market_state=ms, confluence=confluence,
-            signal=sig, detail=f"confluence {confluence.score}" + detail_extra)
+            signal=sig, target_plan=plan_dict,
+            detail=f"confluence {confluence.score}" + detail_extra)
 
 
 def _stop_context(sig: Signal, exec_ta, cfg) -> dict:
