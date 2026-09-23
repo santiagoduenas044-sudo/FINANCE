@@ -161,6 +161,7 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             "enabled": runtime.ghost is not None,
             "market_state": runtime.ghost_market_state.get(symbol),
             "last_decision": runtime.ghost_last_decision.get(symbol),
+            "market_read": runtime.ghost_market_read.get(symbol, []),
         }
 
     @app.get("/api/ghost/trades/active")

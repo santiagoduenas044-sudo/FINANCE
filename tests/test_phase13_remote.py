@@ -178,3 +178,38 @@ def test_service_endpoint_without_service(engine, registry):
     c = TestClient(create_app(_runtime(engine, registry)))
     body = c.get("/api/service").json()
     assert body["running"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Terminal UI assets
+# --------------------------------------------------------------------------- #
+def test_chart_library_is_served_without_a_token(engine, registry, monkeypatch):
+    """The terminal loads its chart engine with a plain <script src>, which
+    cannot send the bearer token. If /static ever stopped being auth-exempt the
+    chart would die silently in remote mode — so pin it."""
+    monkeypatch.setenv("DASHBOARD_TOKEN", "abc")
+    c = TestClient(create_app(_runtime(engine, registry),
+                              settings=ServerSettings(mode="remote")))
+    r = c.get("/static/vendor/lightweight-charts.standalone.production.js")
+    assert r.status_code == 200
+    assert "Lightweight Charts" in r.text[:400]
+    assert c.get("/static/vendor/lightweight-charts.LICENSE.txt").status_code == 200
+
+
+def test_index_references_the_vendored_chart_library(engine, registry):
+    html = TestClient(create_app(_runtime(engine, registry))).get("/").text
+    assert "/static/vendor/lightweight-charts.standalone.production.js" in html
+    # served locally, never from a third-party CDN
+    assert "unpkg.com" not in html and "cdn." not in html
+
+
+def test_ghost_market_exposes_the_plain_language_read(engine, registry):
+    rt = _runtime(engine, registry)
+    rt.ghost_market_read["ES"] = ["1H alcista.", "Régimen: rango."]
+    body = TestClient(create_app(rt)).get("/api/ghost/market/ES").json()
+    assert body["market_read"] == ["1H alcista.", "Régimen: rango."]
+
+
+def test_ghost_market_read_is_empty_before_any_cycle(engine, registry):
+    body = TestClient(create_app(_runtime(engine, registry))).get("/api/ghost/market/ES").json()
+    assert body["market_read"] == []
