@@ -29,6 +29,7 @@ import uvicorn
 
 from signal_engine.api.app import create_app
 from signal_engine.config.runtime_settings import ServerSettings
+from signal_engine.output.discord_bot import start_command_bot
 from signal_engine.runtime.bootstrap import build_runtime, configure_logging
 from signal_engine.runtime.service import BotService
 
@@ -60,6 +61,8 @@ def main() -> None:
     service = BotService(runtime, cycle_seconds=settings.cycle_seconds,
                          auto_start=settings.auto_start, logger=logger)
     service.start_background()
+    # Optional read-only !status bot; a no-op unless DISCORD_BOT_TOKEN is set.
+    start_command_bot(runtime, logger=logger)
     # Make the boot state unambiguous in the (launchd/journald) logs.
     if settings.auto_start:
         logger.info("autostart ENABLED (BOT_AUTO_START) -> runtime is %s; "
