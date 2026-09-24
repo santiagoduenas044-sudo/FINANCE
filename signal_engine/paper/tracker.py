@@ -28,7 +28,7 @@ from .models import ExitReason, PaperTrade, TradeStatus
 
 class PaperTradeTracker:
     def __init__(self, store_dir: str | Path | None = None,
-                 breakeven_after_tp1: bool = False):
+                 breakeven_after_tp1: bool = False, partial_at_tp1: float = 0.0):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
         # the stop to entry instead and that giveback becomes ~0R. Measured on
@@ -37,6 +37,9 @@ class PaperTradeTracker:
         # drawdown. Win rate FALLS (50% -> 42%) because breakeven exits count as
         # non-wins — which is why win rate is the wrong thing to steer by.
         self.breakeven_after_tp1 = breakeven_after_tp1
+        # Close this fraction of the position at TP1 ("take partials") and let
+        # the rest run to TP2. 0 = all-or-nothing, the previous behaviour.
+        self.partial_at_tp1 = min(max(partial_at_tp1, 0.0), 1.0)
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
         # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
@@ -177,7 +180,7 @@ class PaperTradeTracker:
         trade.mfe_r = trade.mfe_points / trade.initial_risk
         trade.mae_r = trade.mae_points / trade.initial_risk
         trade.current_price = close
-        trade.pnl_points = (close - trade.entry) if long else (trade.entry - close)
+        trade.pnl_points = trade.points_at(close)
         trade.r_multiple = trade.pnl_points / trade.initial_risk
 
         # --- exits, in a deterministic, conservative order ------------------ #
@@ -200,6 +203,7 @@ class PaperTradeTracker:
         # Targets (protective already ruled out this bar).
         if tp2 is not None and ((high >= tp2) if long else (low <= tp2)):
             trade.tp1_hit = True
+            trade.partial_fraction = self.partial_at_tp1
             self._close(trade, bar_time, tp2, ExitReason.TP2, TradeStatus.TP2_HIT)
             return
         if tp1 is not None and ((high >= tp1) if long else (low <= tp1)):
@@ -208,6 +212,9 @@ class PaperTradeTracker:
                 self._close(trade, bar_time, tp1, ExitReason.TP1, TradeStatus.TP1_HIT)
             else:
                 trade.status = TradeStatus.TP1_HIT   # partial; still open toward TP2
+                trade.partial_fraction = self.partial_at_tp1
+                trade.pnl_points = trade.points_at(close)
+                trade.r_multiple = trade.pnl_points / trade.initial_risk
                 if self.breakeven_after_tp1:
                     # Takes effect from the NEXT bar: this bar's protective
                     # levels were already evaluated above, so the move can
@@ -252,7 +259,7 @@ class PaperTradeTracker:
         trade.exit_reason = reason
         trade.closed_at = when
         trade.current_price = price
-        trade.pnl_points = (price - trade.entry) if trade.is_long else (trade.entry - price)
+        trade.pnl_points = trade.points_at(price)
         trade.r_multiple = trade.pnl_points / trade.initial_risk
         # keep MFE/MAE consistent with the realized exit
         trade.mfe_points = max(trade.mfe_points, trade.pnl_points)

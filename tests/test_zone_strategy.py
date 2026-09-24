@@ -112,3 +112,18 @@ def test_live_bot_runs_the_zone_strategy_by_default(monkeypatch):
     assert cfg.timeframe_roles.execution == "1m" and cfg.strategy == "zones"
     monkeypatch.setenv("BOT_STRATEGY", "legacy")
     assert not EngineConfig.load_active().setups.zone_retrace.enabled
+
+
+def test_partial_at_tp1_banks_half_then_breakeven(tmp_path):
+    from signal_engine.paper.tracker import PaperTradeTracker
+    tr = PaperTradeTracker(breakeven_after_tp1=True, partial_at_tp1=0.5)
+    t = tr.open_trade(signal_id="p", instrument="NQ", direction="SHORT", setup="zone_retrace",
+                      entry=100.0, stop=135.0, take_profits=[65.0, -75.0], opened_at=T0)
+    bar = lambda h, l, c: pd.Series({"open": c, "high": h, "low": l, "close": c})
+    tr.update_on_bar(t, bar(101, 60, 70), T0 + pd.Timedelta(minutes=1))   # TP1: bank half
+    assert t.is_open and t.stop == 100.0 and t.pnl_points == 0.5 * 35 + 0.5 * 30
+    tr.update_on_bar(t, bar(105, 90, 104), T0 + pd.Timedelta(minutes=2))  # back to entry
+    assert not t.is_open and t.pnl_points == 17.5                           # half of 35 kept
+    closed = build_discord_payload(OutputEvent.from_trade_closed(
+        {**t.to_dict(), "context": {"idea_number": 1}}))["embeds"][0]
+    assert closed["title"] == "✅ IDEA #1 — Stop en breakeven (parcial asegurado) · +17.50 pts"

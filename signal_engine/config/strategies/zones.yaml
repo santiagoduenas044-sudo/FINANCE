@@ -52,6 +52,7 @@ signals:
 
 ghost:
   min_rr: 0.5
+  partial_at_tp1: 0.5               # bank half at target 1, run the rest
   # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
   # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
   # Session / 15:30 cut-off / 16:00 flat / one position / cooldown still apply.

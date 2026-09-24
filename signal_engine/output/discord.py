@@ -423,15 +423,17 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
     r = p.get("r_multiple") or 0.0
     reason = (p.get("exit_reason") or "").upper()
     label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
-    if reason == "STOP" and p.get("tp1_hit") and abs(pts) < 1e-6:
-        label, mark = "Breakeven después de PT1", "➖"
-    else:
-        mark = "✅" if pts > 0 else ("➖" if pts == 0 else "🛑")
+    if reason == "STOP" and p.get("tp1_hit"):
+        label = ("Stop en breakeven (parcial asegurado)" if p.get("partial_fraction")
+                 else "Breakeven después de PT1")
+    mark = "✅" if pts > 1e-6 else ("➖" if abs(pts) <= 1e-6 else "🛑")
     return _embed(
         f"{mark} IDEA #{num} — {label} · {pts:+.2f} pts",
         f"{_side(p.get('direction', 'LONG')).capitalize()} {sym}: entrada "
         f"{_px(p.get('entry'))} → salida {_px(p.get('exit_price'))}\n"
-        f"Resultado: **{pts:+.2f} pts** ({r:+.2f}R)",
+        f"Resultado: **{pts:+.2f} pts** ({r:+.2f}R)"
+        + (f"\nIncluye el {p['partial_fraction']:.0%} cerrado en el objetivo 1."
+           if p.get("partial_fraction") and p.get("tp1_hit") else ""),
         _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
         event.disclaimer)
 
@@ -442,11 +444,14 @@ def _build_trade_tp1_payload(event: OutputEvent) -> dict:
     name = f"IDEA #{num}" if num is not None else p.get("setup", "trade")
     entry, tp1 = p.get("entry"), p.get("tp1")
     gained = abs(tp1 - entry) if entry is not None and tp1 is not None else None
+    frac = p.get("partial_fraction") or 0
+    took = (f"Tomé parciales: {frac:.0%} cerrado en {_px(tp1)}"
+            + (f" (+{gained:.2f} pts)" if gained is not None else "") + ". "
+            if frac else (f"+{gained:.2f} pts. " if gained is not None else ""))
     return _embed(
-        f"🎯 {name} — PT1 alcanzado · {p.get('instrument', '?')}",
-        (f"+{gained:.2f} pts. " if gained is not None else "")
-        + f"Stop movido a breakeven ({_px(entry)}): este trade ya no puede perder. "
-        f"Sigue abierto hacia el objetivo final {_px(p.get('tp2'))}.",
+        f"🎯 {name} — Objetivo 1 alcanzado · {p.get('instrument', '?')}",
+        took + f"Stop movido a breakeven ({_px(entry)}): este trade ya no puede perder. "
+        f"El resto sigue hacia el objetivo final {_px(p.get('tp2'))}.",
         _WIN_COLOR, event.disclaimer)
 
 

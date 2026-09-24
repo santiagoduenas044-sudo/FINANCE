@@ -111,7 +111,8 @@ def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | No
     tfs = [roles.execution, roles.structure, roles.context]
     exec_bars = tf_all[roles.execution]
 
-    tracker = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1)
+    tracker = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1,
+                               partial_at_tp1=cfg.ghost.partial_at_tp1)
     rt = BotRuntime(de, SetupEngine(cfg, reg), SignalEngine(cfg.signals), reg,
                     ghost=GhostBrain(cfg.ghost), paper_tracker=tracker)
     ideas: Counter = Counter()
@@ -168,7 +169,8 @@ def shadow(cfg, de, exec_bars, decisions):
         s = d.signal
         if s is None or d.confluence is None:
             continue
-        tr = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1)
+        tr = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1,
+                               partial_at_tp1=cfg.ghost.partial_at_tp1)
         t = tr.open_trade(signal_id=s.signal_id, instrument=s.instrument,
                           direction=s.direction.value, setup=s.setup, entry=s.entry,
                           stop=s.stop, take_profits=list(s.take_profits),

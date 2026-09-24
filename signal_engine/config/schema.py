@@ -372,6 +372,9 @@ class GhostConfig(BaseModel):
     # through the live tracker: expectancy 0.500R -> 0.583R, PF 2.00 -> 3.33,
     # net 10.0R -> 14.0R at the same drawdown. See paper/tracker.py.
     breakeven_after_tp1: bool = True
+    # Fraction of the position banked at TP1 ("took partials"); the rest runs
+    # to TP2 with the stop at breakeven. 0 = all-or-nothing.
+    partial_at_tp1: float = 0.0
     # Force-flatten any open position the moment the bar's session is no
     # longer RTH (data.sessions classifies the 16:00 ET bar itself as
     # ETH/CLOSED, so this fires AT the 4pm close using that bar's real close

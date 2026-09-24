@@ -81,6 +81,8 @@ class PaperTrade:
     mfe_r: float = 0.0
     mae_r: float = 0.0
     tp1_hit: bool = False
+    # Fraction of the position closed at TP1 (0 = none). The rest runs on.
+    partial_fraction: float = 0.0
     updated_at: pd.Timestamp | None = None
     last_bar_time: pd.Timestamp | None = None
     bars_held: int = 0
@@ -146,6 +148,16 @@ class PaperTrade:
         d = (self.current_price - self.stop) if self.is_long else (self.stop - self.current_price)
         return round(d, 4)
 
+    def points_at(self, price: float) -> float:
+        """P&L in points of the WHOLE position if the open part were closed at
+        `price`, counting the part already banked at TP1."""
+        move = (price - self.entry) if self.is_long else (self.entry - price)
+        f = self.partial_fraction
+        if f <= 0 or self.tp1 is None:
+            return move
+        banked = (self.tp1 - self.entry) if self.is_long else (self.entry - self.tp1)
+        return f * banked + (1 - f) * move
+
     def to_dict(self) -> dict:
         risk = self.initial_risk if self.initial_risk > 0 else 1e-9
         def _r(target):
@@ -187,6 +199,7 @@ class PaperTrade:
             "mfe_r": round(self.mfe_r, 4),
             "mae_r": round(self.mae_r, 4),
             "tp1_hit": self.tp1_hit,
+            "partial_fraction": self.partial_fraction,
             "bars_held": self.bars_held,
             "opened_at": _iso(self.opened_at),
             "updated_at": _iso(self.updated_at),
@@ -218,6 +231,7 @@ class PaperTrade:
         t.mfe_r = d.get("mfe_r", 0.0)
         t.mae_r = d.get("mae_r", 0.0)
         t.tp1_hit = d.get("tp1_hit", False)
+        t.partial_fraction = d.get("partial_fraction", 0.0)
         t.bars_held = d.get("bars_held", 0)
         t.updated_at = pd.Timestamp(d["updated_at"]) if d.get("updated_at") else None
         t.closed_at = pd.Timestamp(d["closed_at"]) if d.get("closed_at") else None
