@@ -102,7 +102,8 @@ def download(symbol: str, days: int) -> Path:
 # --------------------------------------------------------------------------- #
 # replay
 # --------------------------------------------------------------------------- #
-def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | None):
+def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | None,
+           start: str | None = None, end: str | None = None):
     cfg = EngineConfig.load(strategy=strategy)
     reg = ContractRegistry.load()
     de = DataEngine(cfg, reg)
@@ -149,7 +150,14 @@ def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | No
     start_at = exec_bars.index[0] + pd.Timedelta(days=history_days)
     # RTH bars only (the 16:00-labeled bar is RTH by its open instant, and is
     # where the EOD close fires); GHOST never enters outside RTH anyway.
-    steps = exec_bars.index[(exec_bars.index >= start_at) & (exec_bars[SESSION] == "RTH")]
+    tz = exec_bars.index.tz
+    if start:
+        start_at = max(start_at, pd.Timestamp(start, tz=tz))
+    stop_at = pd.Timestamp(end, tz=tz) + pd.Timedelta(days=1) if end else None
+    keep = (exec_bars.index >= start_at) & (exec_bars[SESSION] == "RTH")
+    if stop_at is not None:
+        keep &= exec_bars.index < stop_at
+    steps = exec_bars.index[keep]
     t0 = time.time()
     for i, N in enumerate(steps):
         lo = N - pd.Timedelta(days=history_days)
@@ -303,6 +311,8 @@ def main() -> None:
     ap.add_argument("--cost-points", type=float, help="costo ida y vuelta en puntos")
     ap.add_argument("--strategy", default=os.environ.get("BOT_STRATEGY", DEFAULT_STRATEGY),
                     help='estrategia (default la del bot: "zones"; "legacy" = setups 5m)')
+    ap.add_argument("--start", help="replay desde YYYY-MM-DD (datos largos: ve por tramos)")
+    ap.add_argument("--end", help="replay hasta YYYY-MM-DD, inclusive")
     a = ap.parse_args()
     strategy = None if a.strategy in ("", "legacy") else a.strategy
 
@@ -313,7 +323,7 @@ def main() -> None:
     cost = a.cost_points if a.cost_points is not None else COST_POINTS[a.symbol]
 
     cfg, de, exec_bars, steps, tracker, cands, decisions, ideas = replay(
-        a.symbol, CsvProvider(root), a.contract, strategy)
+        a.symbol, CsvProvider(root), a.contract, strategy, a.start, a.end)
     rows = shadow(cfg, de, exec_bars, decisions)
     report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas)
 
