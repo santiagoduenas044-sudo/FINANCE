@@ -9,7 +9,9 @@ from tests.conftest import FakeProvider, make_rth_1m, weekdays
 
 
 def _pipeline(engine):
-    raw = make_rth_1m(weekdays(date(2026, 6, 8), 2), seed=7)
+    # seed 8: seed 7's two days only ever re-pierce ALREADY-swept levels, which
+    # the sweep detector now (correctly) ignores, so it never fired there.
+    raw = make_rth_1m(weekdays(date(2026, 6, 8), 2), seed=8)
     provider = FakeProvider({("ES", "1m", "ESM26"): raw})
     lc = engine.load_contract(provider, "ES", "ESM26", "1m")
     engine.build_timeframes(lc)

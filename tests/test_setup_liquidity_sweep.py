@@ -81,3 +81,32 @@ def test_no_lookahead_future_bars_dont_change_candidate(det):
     c2 = det.detect(make_ctx(sliced), an2)[0]
     assert (c1.direction, c1.entry, c1.stop_loss, c1.take_profits) == \
            (c2.direction, c2.entry, c2.stop_loss, c2.take_profits)
+
+
+def test_level_already_swept_before_this_bar_is_not_a_sweep():
+    """Once a level has been pierced its stops are gone. Wicking through it
+    again later is not a liquidity sweep, however much it looks like one."""
+    from signal_engine.setups.liquidity_sweep import LiquiditySweepDetector
+    from signal_engine.config.schema import LiquiditySweepParams
+    from signal_engine.data.contracts import ContractRegistry
+    from signal_engine.features.market_structure.models import Direction, LiquidityLevel
+
+    idx = pd.date_range("2026-06-15 10:00", periods=3, freq="5min", tz="America/New_York")
+    bars = pd.DataFrame({"open": [100.0, 100.0, 100.0], "high": [100.5, 100.5, 100.5],
+                         "low": [99.5, 99.5, 98.5], "close": [100.0, 100.0, 100.2],
+                         "volume": [1.0, 1.0, 1.0]}, index=idx)
+    N = idx[-1]
+
+    def run(swept_at):
+        lvl = LiquidityLevel(idx[0], 99.0, Direction.BEARISH, swept_at)
+        ta = type("TA", (), {"liquidity_levels": [lvl], "swings": []})()
+        ctx = type("C", (), {"symbol": "ES", "session": "RTH",
+                             "execution": type("V", (), {"timeframe": "5m", "bars": bars})(),
+                             "structure": type("V", (), {"timeframe": "15m"})(),
+                             "htf": type("V", (), {"timeframe": "1H"})()})()
+        analysis = type("A", (), {"by_timeframe": {"5m": ta}})()
+        det = LiquiditySweepDetector(LiquiditySweepParams(), ContractRegistry.load())
+        return det.detect(ctx, analysis)
+
+    assert len(run(swept_at=N)) == 1          # first pierce is this bar: a real sweep
+    assert run(swept_at=idx[1]) == []         # pierced one bar earlier: stale

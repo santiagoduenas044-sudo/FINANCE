@@ -92,6 +92,16 @@ def test_yahoo_adapter_connect_and_poll_returns_closed_bars_only():
     assert calls[0] == "ES=F"      # correct ticker mapping, no TradingView anywhere
 
 
+def test_yahoo_bar_is_labeled_by_its_close_not_its_open():
+    """Yahoo stamps the interval START. LiveBar is CLOSE-labeled, so the bar
+    that traded 09:30:00-09:31:00 ET must come out as 09:31, not 09:30."""
+    base = int(pd.Timestamp("2026-06-15 09:30", tz="America/New_York").timestamp())
+    adapter = YahooDelayedAdapter(transport=lambda t, to: _chart_payload(t, base, [5000.0]))
+    adapter.connect()
+    (bar,) = adapter.poll("ES")
+    assert bar.timestamp == pd.Timestamp("2026-06-15 09:31", tz="America/New_York")
+
+
 def test_yahoo_adapter_does_not_resend_already_emitted_bars():
     base = 1_800_000_000
 

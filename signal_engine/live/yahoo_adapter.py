@@ -41,6 +41,7 @@ _SYMBOL_MAP = {"ES": "ES=F", "NQ": "NQ=F"}
 
 _CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
 _USER_AGENT = "Mozilla/5.0 (compatible; signal-engine/1.0)"
+_BAR_INTERVAL = pd.Timedelta(minutes=1)   # matches interval=1m in the request
 
 
 def _urllib_transport(ticker: str, timeout: float) -> bytes:
@@ -135,7 +136,12 @@ class YahooDelayedAdapter(LiveDataAdapter):
                              quote["close"][i], quote["volume"][i])
             if None in (o, h, l, c, v):
                 continue   # Yahoo reports gaps (e.g. maintenance break) as nulls
-            ts = pd.Timestamp(timestamps[i], unit="s", tz="UTC").tz_convert(self._timezone)
+            # Yahoo stamps each bar with its interval START; LiveBar (and the
+            # whole engine) labels bars by their CLOSE. Without this shift every
+            # live bar sat one minute early: RTH began at 09:31, the ORB window
+            # and 5m bins took the wrong minutes.
+            ts = (pd.Timestamp(timestamps[i], unit="s", tz="UTC").tz_convert(self._timezone)
+                  + _BAR_INTERVAL)
             bars.append(LiveBar(symbol=symbol, timestamp=ts, open=float(o), high=float(h),
                                 low=float(l), close=float(c), volume=float(v)))
         return bars

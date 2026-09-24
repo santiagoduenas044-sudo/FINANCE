@@ -34,7 +34,9 @@ def test_detects_bullish_reclaim(det):
     c = cands[0]
     assert c.direction is Direction.BULLISH
     assert c.entry == 101.0
-    assert c.stop_loss == pytest.approx(98.5 - 2 * 0.25)   # structure swing low - buffer
+    # lowest low of the dip below VWAP (09:40 low 98.0) - buffer. The old
+    # swing-based stop sat at 98.5, INSIDE the dip it was meant to protect.
+    assert c.stop_loss == pytest.approx(98.0 - 2 * 0.25)
     assert c.timestamp == bars.index[-1]
 
 

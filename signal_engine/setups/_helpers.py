@@ -5,7 +5,6 @@ import pandas as pd
 
 from ..data.context import AnalysisContext, TimeframeView
 from ..data.models import tf_to_timedelta
-from ..features.market_structure.models import SwingPoint, SwingType
 
 
 def view_for(ctx: AnalysisContext, tf: str) -> TimeframeView:
@@ -17,20 +16,6 @@ def view_for(ctx: AnalysisContext, tf: str) -> TimeframeView:
 
 def horizon(ts: pd.Timestamp, tf: str, n_bars: int) -> pd.Timestamp:
     return ts + n_bars * tf_to_timedelta(tf)
-
-
-def recent_swing_low_below(swings: list[SwingPoint], price: float,
-                           before: pd.Timestamp) -> SwingPoint | None:
-    cands = [s for s in swings if s.type is SwingType.LOW
-             and s.price < price and s.timestamp < before]
-    return max(cands, key=lambda s: s.timestamp) if cands else None
-
-
-def recent_swing_high_above(swings: list[SwingPoint], price: float,
-                            before: pd.Timestamp) -> SwingPoint | None:
-    cands = [s for s in swings if s.type is SwingType.HIGH
-             and s.price > price and s.timestamp < before]
-    return max(cands, key=lambda s: s.timestamp) if cands else None
 
 
 def build_targets(entry: float, stop: float, rr_list: list[float], bullish: bool,

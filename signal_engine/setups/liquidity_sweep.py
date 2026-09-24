@@ -21,7 +21,7 @@ from ..data.contracts import ContractRegistry
 from ..data.models import CLOSE, HIGH, LOW, OPEN, SESSION
 from ..features.analyzer import MarketAnalysis
 from ..features.market_structure.models import Direction, LiquidityLevel
-from ._helpers import build_targets, horizon, recent_swing_high_above, recent_swing_low_below, view_for
+from ._helpers import build_targets, horizon, view_for
 from .base import SetupDetector
 from .models import LevelRef, SetupCandidate, SetupStatus, risk_reward
 
@@ -57,6 +57,11 @@ class LiquiditySweepDetector(SetupDetector):
         swept_bear: LiquidityLevel | None = None   # buy-side swept -> BEARISH
         for lvl in ta.liquidity_levels:
             if lvl.timestamp >= N:            # level must pre-exist bar N
+                continue
+            # A level first pierced BEFORE N has already had its stops taken;
+            # wicking through it again is not a sweep of fresh liquidity.
+            # swept_at == N is the sweep we are looking at right now.
+            if lvl.swept_at is not None and lvl.swept_at < N:
                 continue
             L = lvl.level
             if lvl.direction is Direction.BEARISH and l < L and c > L:

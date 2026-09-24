@@ -323,6 +323,11 @@ class GhostConfig(BaseModel):
     # open at the close (target/stop not yet hit) never rides into the
     # overnight session, regardless of valid_sessions above.
     eod_close_enabled: bool = True
+    # No new RTH entries at or after this ET time. With the 16:00 force-close
+    # above, a 15:50 entry gets 10 minutes to reach targets sized for a normal
+    # intraday move — it is closed by the clock, not by the market. None
+    # disables the guard.
+    last_entry_time: Optional[str] = "15:30"
     # Cooldown after a losing/invalidating close (in exec-timeframe bars).
     # 0 disables cooldown. Applied per symbol; TP closes do NOT trigger cooldown.
     cooldown_bars: int = 3

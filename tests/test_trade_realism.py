@@ -860,3 +860,24 @@ def test_run_ghost_reads_the_brains_own_config_not_the_data_engines():
                     ghost=GhostBrain(custom), paper_tracker=PaperTradeTracker())
     rt.start()
     assert rt.ghost.cfg is custom
+
+
+def _sig_at(hhmm):
+    s = _sig("LONG", entry=5000, stop=4995, tps=(5010,))
+    from dataclasses import replace
+    return replace(s, timestamp=pd.Timestamp(f"2026-06-15 {hhmm}", tz="America/New_York"))
+
+
+def test_no_new_rth_entry_in_the_last_half_hour():
+    """A 15:50 entry would be flattened by the 16:00 close before its targets
+    could possibly be reached."""
+    brain = GhostBrain(_cfg())
+    late = brain._decide_signal(_sig_at("15:30"), _state(), _ta(3.0), None,
+                                False, False, has_active=None)
+    ok = brain._decide_signal(_sig_at("15:25"), _state(), _ta(3.0), None,
+                              False, False, has_active=None)
+    assert NoTradeReason.TOO_LATE in late.no_trade_reasons
+    assert NoTradeReason.TOO_LATE not in ok.no_trade_reasons
+    off = GhostBrain(_cfg(last_entry_time=None))._decide_signal(
+        _sig_at("15:50"), _state(), _ta(3.0), None, False, False, has_active=None)
+    assert NoTradeReason.TOO_LATE not in off.no_trade_reasons

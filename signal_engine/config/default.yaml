@@ -133,6 +133,7 @@ ghost:                              # Phase 14 — GHOST intelligence layer
   # knob helps/hurts), not the exact count today's RTH-only population gives.
   valid_sessions: ["RTH"]
   eod_close_enabled: true
+  last_entry_time: "15:30"          # no new entries after this (ET); EOD would close them
   # Lowered from the Python default (55) so trades can be approved even when
   # EMA-50 hasn't fully warmed up and HTF bias is NEUTRAL (0 pts from the
   # 20-pt htf_alignment factor). A score of 40 requires at least structure +

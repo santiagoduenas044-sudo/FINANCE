@@ -110,6 +110,9 @@ class GhostBrain:
             reasons.append(NoTradeReason.STALE_DATA)
         if ms.session not in cfg.valid_sessions:
             reasons.append(NoTradeReason.INVALID_SESSION)
+        if (cfg.last_entry_time and ms.session == "RTH"
+                and sig.timestamp.strftime("%H:%M") >= cfg.last_entry_time):
+            reasons.append(NoTradeReason.TOO_LATE)
         if conflicting:
             reasons.append(NoTradeReason.CONFLICTING_SETUPS)
         # Phase 15: max_open_per_symbol=1 => any open trade on the symbol blocks.
