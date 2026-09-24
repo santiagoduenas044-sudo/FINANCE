@@ -149,3 +149,26 @@ class OutputEvent:
             disclaimer="Automated status digest — not a trading signal.",
             status_payload={**payload, "timestamp": timestamp.isoformat()},
         )
+
+    @classmethod
+    def from_trade_idea(cls, idea: dict) -> "OutputEvent":
+        """Zone strategy: {"event": "idea"} = heads-up before a possible trade,
+        {"event": "cancelled"} = it will not happen. One of each per zone."""
+        kind = "trade_idea" if idea.get("event") == "idea" else "trade_idea_cancelled"
+        return cls(
+            kind=kind,
+            dedup_key=f"{idea.get('zone_id', '')}:{idea.get('event', '')}",
+            title=f"IDEA #{idea.get('number', '?')}",
+            disclaimer="Simulated paper trading — not financial advice.",
+            status_payload=dict(idea),
+        )
+
+    @classmethod
+    def from_trade_tp1(cls, paper_trade_dict: dict) -> "OutputEvent":
+        return cls(
+            kind="trade_tp1",
+            dedup_key=f"{paper_trade_dict.get('signal_id', '')}:tp1",
+            title="TP1",
+            disclaimer="Simulated paper trade — no real money, no broker connection.",
+            status_payload=paper_trade_dict,
+        )

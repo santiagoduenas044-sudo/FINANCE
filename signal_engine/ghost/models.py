@@ -247,7 +247,7 @@ class ConfluenceContribution:
 class ConfluenceResult:
     direction: str                 # "LONG" / "SHORT"
     score: float
-    threshold: float
+    threshold: float | None        # None = no gate configured
     passed: bool
     contributions: list[ConfluenceContribution] = field(default_factory=list)
 

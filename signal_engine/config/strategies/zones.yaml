@@ -1,0 +1,55 @@
+# Zone-retrace strategy (the live bot's default; BOT_STRATEGY=zones).
+# Overlay on default.yaml: only what this strategy changes is listed here.
+#
+# Model: mark a fresh fair-value-gap zone on 5m, warn when price is coming back
+# to it ("get ready"), and only trade the FIRST retrace if price reacts there on
+# 1m. Stop = zone midpoint -/+ 20 pts; stop to breakeven at TP1; final target
+# at the nearest untaken swing (2R-5R) or 3R. Cut through without a reaction ->
+# the idea is cancelled.
+#
+# NOT calibrated on real data yet: run scripts/audit_real_data.py on the Mac
+# (it uses this same strategy) before trusting the numbers.
+
+timeframe_roles:
+  context: "1H"
+  structure: "5m"
+  execution: "1m"
+
+analysis:
+  max_bars: 1440                    # 24h of 1m: a whole trade date (VWAP), fast
+
+setups:
+  liquidity_sweep: {enabled: false}
+  vwap_reclaim: {enabled: false}
+  orb: {enabled: false}
+  zone_retrace:
+    enabled: true
+    timeframe: "1m"
+    zone_timeframe: "5m"
+    zone_lookback_bars: 36          # zones from the last 3 hours
+    min_zone_points: 3.0
+    max_zone_points: 40.0
+    stop_points: 20.0
+    max_risk_points: 35.0
+    arm_distance_points: 30.0
+    confirm_bars: 5
+    tp1_r: 1.25
+    min_target_r: 2.0
+    max_target_r: 5.0
+    fallback_target_r: 3.0
+    expiration_bars: 5
+
+ghost:
+  # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
+  # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
+  # Session / 15:30 cut-off / 16:00 flat / one position / cooldown still apply.
+  min_confluence_score: null
+  min_stop_atr_mult: 0.0
+  max_stop_atr_mult: 0.0
+  cooldown_bars: 15                 # 15 minutes after a stop-out
+
+output:
+  notifications:
+    trade_progress: false           # no R-milestone spam; TP1 + close only
+    trade_ideas: true
+    tp1_hit: true

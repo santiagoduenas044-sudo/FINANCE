@@ -43,6 +43,7 @@ SAMPLES = ROOT / "tests" / "data_samples"
 DEFAULT_SIGNAL_LOG = ROOT / "data_store" / "signal_log.jsonl"
 DEFAULT_GHOST_LOG = ROOT / "data_store" / "ghost_log.jsonl"
 DEFAULT_PAPER_DIR = ROOT / "data_store" / "paper"
+DEFAULT_IDEAS_FILE = ROOT / "data_store" / "ideas.json"
 BARS_PER_TICK = 5  # how many 1m bars the simulated fallback delivers per poll
 
 # Symbol -> bundled sample contract for the SimulatedLiveAdapter fallback.
@@ -122,7 +123,9 @@ def build_runtime(
     allow_simulated_fallback: bool = True,
 ) -> tuple[BotRuntime, dict[str, FeedInfo]]:
     """Wire a BotRuntime for `symbols`. Returns (runtime, feed_info_by_symbol)."""
-    data_engine = DataEngine(config) if config is not None else DataEngine()
+    # No explicit config -> what the live bot runs: default.yaml plus the
+    # strategy overlay named by $BOT_STRATEGY (default "zones").
+    data_engine = DataEngine(config if config is not None else EngineConfig.load_active())
     registry = ContractRegistry.load()
 
     live_feeds: dict[str, LiveFeed] = {}
@@ -195,6 +198,12 @@ def build_runtime(
         signal_log_path=signal_log_path,
         ghost=ghost, paper_tracker=paper_tracker, ghost_log_path=ghost_log,
     )
+    zr = data_engine.cfg.setups.zone_retrace
+    if zr.enabled and ghost is not None:
+        from .ideas import IdeaBoard
+        runtime.idea_board = IdeaBoard(DEFAULT_IDEAS_FILE,
+                                       timezone=data_engine.cfg.data.timezone)
+
     # Record each feed's real source on the runtime so status/chart can report
     # simulated-vs-delayed honestly (read-only metadata; no logic depends on it).
     runtime.feed_info = {s: {"source": i.source, "delayed": i.delayed,

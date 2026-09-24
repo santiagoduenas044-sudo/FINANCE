@@ -130,6 +130,10 @@ def build_discord_payload(event: OutputEvent) -> dict:
         return _build_trade_progress_payload(event)
     if event.kind == "status_digest":
         return _build_status_digest_payload(event)
+    if event.kind in ("trade_idea", "trade_idea_cancelled"):
+        return _build_trade_idea_payload(event)
+    if event.kind == "trade_tp1":
+        return _build_trade_tp1_payload(event)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
@@ -155,6 +159,8 @@ def _build_trade_opened_payload(event: OutputEvent) -> dict:
     Includes full TradePlan: direction, entry, stop, TPs, R multiples, setup,
     regime, session, signal_id (first 8 chars for readability). No secrets."""
     p = event.status_payload or {}
+    if (p.get("context") or {}).get("idea_number") is not None:
+        return _build_idea_trade_opened_payload(event)
     direction = p.get("direction", "LONG")
     instrument = p.get("instrument", "?")
     entry = p.get("entry")
@@ -227,6 +233,8 @@ def _build_trade_closed_payload(event: OutputEvent) -> dict:
     """Realised outcome of a paper trade: exit reason, P&L in points and R, and
     how far it ran in each direction before closing (MFE/MAE)."""
     p = event.status_payload or {}
+    if (p.get("context") or {}).get("idea_number") is not None:
+        return _build_idea_trade_closed_payload(event)
     r = p.get("r_multiple")
     color = _FLAT_COLOR if not r else (_WIN_COLOR if r > 0 else _LOSS_COLOR)
     fields = [
@@ -313,6 +321,130 @@ def _build_status_digest_payload(event: OutputEvent) -> dict:
         "footer": {"text": event.disclaimer},
     }
     return {"embeds": [embed]}
+
+
+# --------------------------------------------------------------------------- #
+# Zone strategy: trade-idea lifecycle (heads-up -> confirmed/direct/cancelled
+# -> outcome). Plain Spanish, numbers first, no tables: read on a phone.
+# --------------------------------------------------------------------------- #
+_IDEA_COLOR = 0xF1C40F
+_CANCEL_COLOR = 0x95A5A6
+
+
+def _px(v) -> str:
+    return f"{v:,.2f}" if v is not None else "—"
+
+
+def _side(direction: str) -> str:
+    return "COMPRA" if direction == "LONG" else "VENTA"
+
+
+def _usd(v) -> str:
+    return f" ≈ ${v:,.2f} por micro" if v is not None else ""
+
+
+def _embed(title: str, description: str, color: int, footer: str) -> dict:
+    return {"embeds": [{"title": title,
+                        "description": _truncate(description, _DESCRIPTION_MAX),
+                        "color": color, "footer": {"text": footer}}]}
+
+
+def _build_trade_idea_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    num, sym = p.get("number", "?"), p.get("symbol", "?")
+    side = _side(p.get("direction", "LONG"))
+    if event.kind == "trade_idea_cancelled":
+        return _embed(
+            f"⚪ IDEA #{num} CANCELADA — {sym}",
+            f"Posible {side.lower()} en {_px(p.get('mid'))} descartada: "
+            f"{p.get('reason', 'sin reacción')}.\nNo hubo entrada.",
+            _CANCEL_COLOR, event.disclaimer)
+    zone = "compra" if side == "COMPRA" else "venta"
+    risk = p.get("risk_points")
+    return _embed(
+        f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
+        f"**Prepárate.** El precio viene de regreso a una zona de {zone}.\n\n"
+        f"👀 **Vigila:** {_px(p.get('mid'))} "
+        f"(zona {_px(p.get('bottom'))} – {_px(p.get('top'))})\n"
+        f"🛑 **Stop si se confirma:** {_px(p.get('stop'))}\n"
+        f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(p.get('risk_usd_micro'))}\n\n"
+        f"⚠️ **NO entres todavía.** Espero que el precio reaccione en la zona. "
+        f"Si la cruza sin reaccionar, la cancelo.",
+        _IDEA_COLOR, event.disclaimer)
+
+
+def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    ctx = p.get("context") or {}
+    num, sym = ctx.get("idea_number"), p.get("instrument", "?")
+    direction = p.get("direction", "LONG")
+    side = _side(direction)
+    entry, stop, tp1, tp2 = p.get("entry"), p.get("stop"), p.get("tp1"), p.get("tp2")
+    risk = abs(entry - stop) if entry is not None and stop is not None else None
+    sign = 1 if direction == "LONG" else -1
+    if ctx.get("idea_direct"):
+        title = f"⚡ SEÑAL DIRECTA #{num} — {side} · {sym}"
+        lead = "Sin aviso previo: el precio llegó y reaccionó en la zona de golpe."
+    else:
+        title = f"🟢 IDEA #{num} — {side} confirmada · {sym}"
+        lead = "El precio reaccionó en la zona. **Entrada ahora.**"
+    lines = [lead, "",
+             f"▶️ **Entrada:** {_px(entry)}",
+             f"🛑 **Stop:** {_px(stop)} (−{risk:.2f} pts{_usd(ctx.get('risk_usd_micro'))})"
+             if risk is not None else f"🛑 **Stop:** {_px(stop)}"]
+    if tp1 is not None:
+        lines.append(f"🎯 **PT1:** {_px(tp1)} ({sign * (tp1 - entry):+.2f} pts) "
+                     f"→ ahí muevo el stop a breakeven")
+    if tp2 is not None:
+        r = abs(tp2 - entry) / risk if risk else None
+        basis = ctx.get("target_basis")
+        lines.append(f"🏁 **Objetivo final:** {_px(tp2)} ({sign * (tp2 - entry):+.2f} pts"
+                     + (f" · {r:.1f}R" if r else "") + ")"
+                     + (f" — {basis}" if basis else ""))
+    if ctx.get("zone_bottom") is not None:
+        lines.append(f"\nZona: {_px(ctx.get('zone_bottom'))} – {_px(ctx.get('zone_top'))}")
+    return _embed(title, "\n".join(lines), _TRADE_COLOR.get(direction, _WIN_COLOR),
+                  event.disclaimer)
+
+
+_EXIT_ES = {"TP1": "PT1 alcanzado", "TP2": "Objetivo final alcanzado",
+            "STOP": "Stop", "INVALIDATION": "Invalidado", "EOD": "Cerrado a las 4pm",
+            "CANCELLED": "Cancelado"}
+
+
+def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    ctx = p.get("context") or {}
+    num, sym = ctx.get("idea_number"), p.get("instrument", "?")
+    pts = p.get("pnl_points") or 0.0
+    r = p.get("r_multiple") or 0.0
+    reason = (p.get("exit_reason") or "").upper()
+    label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
+    if reason == "STOP" and p.get("tp1_hit") and abs(pts) < 1e-6:
+        label, mark = "Breakeven después de PT1", "➖"
+    else:
+        mark = "✅" if pts > 0 else ("➖" if pts == 0 else "🛑")
+    return _embed(
+        f"{mark} IDEA #{num} — {label} · {pts:+.2f} pts",
+        f"{_side(p.get('direction', 'LONG')).capitalize()} {sym}: entrada "
+        f"{_px(p.get('entry'))} → salida {_px(p.get('exit_price'))}\n"
+        f"Resultado: **{pts:+.2f} pts** ({r:+.2f}R)",
+        _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
+        event.disclaimer)
+
+
+def _build_trade_tp1_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    num = (p.get("context") or {}).get("idea_number")
+    name = f"IDEA #{num}" if num is not None else p.get("setup", "trade")
+    entry, tp1 = p.get("entry"), p.get("tp1")
+    gained = abs(tp1 - entry) if entry is not None and tp1 is not None else None
+    return _embed(
+        f"🎯 {name} — PT1 alcanzado · {p.get('instrument', '?')}",
+        (f"+{gained:.2f} pts. " if gained is not None else "")
+        + f"Stop movido a breakeven ({_px(entry)}): este trade ya no puede perder. "
+        f"Sigue abierto hacia el objetivo final {_px(p.get('tp2'))}.",
+        _WIN_COLOR, event.disclaimer)
 
 
 def _build_signal_payload(event: OutputEvent) -> dict:

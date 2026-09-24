@@ -44,12 +44,17 @@ class BotService:
         auto_start: bool = False,
         logger: logging.Logger | None = None,
         on_tick: Callable[["BotService"], None] | None = None,
+        max_catchup_bars: int = 5,
     ):
         self.runtime = runtime
         self.cycle_seconds = max(0.5, float(cycle_seconds))
         self.auto_start = auto_start
         self.logger = logger or _DEFAULT_LOGGER
         self.on_tick = on_tick
+        # A delayed feed can deliver several closed candles in one poll. Each
+        # is run in order (up to this many) so a stop or zone touch on a
+        # middle candle is not skipped. Older gaps are not replayed.
+        self.max_catchup_bars = max(1, int(max_catchup_bars))
 
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -127,13 +132,20 @@ class BotService:
         # Pass the already-polled bars so run_cycle does NOT poll again. We only
         # get here when a genuinely new closed candle exists, so the pipeline
         # runs at most once per candle per symbol.
-        result = self.runtime.run_cycle(symbol, tf_bars=tf_bars)
-        if result.ran:
-            self._last_processed_bar[symbol] = last_ts
+        prev = self._last_processed_bar.get(symbol)
+        pending = [last_ts] if prev is None else \
+            list(bars.index[bars.index > prev][-self.max_catchup_bars:])
+        for ts in pending:
+            window = tf_bars if ts == last_ts else \
+                {tf: df.loc[:ts] for tf, df in tf_bars.items()}
+            result = self.runtime.run_cycle(symbol, tf_bars=window)
+            if not result.ran:
+                return
+            self._last_processed_bar[symbol] = ts
             self.cycles_run += 1
             if result.signals_produced or result.no_trades_produced:
                 self.logger.info(
-                    "%s cycle @ %s: signals=%d no_trades=%d", symbol, last_ts,
+                    "%s cycle @ %s: signals=%d no_trades=%d", symbol, ts,
                     result.signals_produced, result.no_trades_produced)
 
     # ------------------------------------------------------------------ #

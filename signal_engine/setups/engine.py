@@ -20,6 +20,7 @@ from .liquidity_sweep import LiquiditySweepDetector
 from .models import SetupCandidate
 from .orb import OrbDetector
 from .vwap_reclaim import VwapReclaimDetector
+from .zone_retrace import ZoneRetraceDetector
 
 
 class SetupEngine:
@@ -38,7 +39,8 @@ class SetupEngine:
         else:
             kwargs = {"n_left": a.native_n_left, "n_right": a.native_n_right}
         return MarketAnalyzer(backend=a.structure_backend, provider_kwargs=kwargs,
-                              with_order_blocks=a.with_order_blocks)
+                              with_order_blocks=a.with_order_blocks,
+                              max_bars=a.max_bars)
 
     def _build_detectors(self) -> list[SetupDetector]:
         s = self.cfg.setups
@@ -50,7 +52,15 @@ class SetupEngine:
         if s.orb.enabled:
             dets.append(OrbDetector(s.orb, SessionClassifier(self.cfg.sessions),
                                     self.cfg.data.timezone))
+        if s.zone_retrace.enabled:
+            dets.append(ZoneRetraceDetector(s.zone_retrace))
         return dets
+
+    def zone_detector(self) -> "ZoneRetraceDetector | None":
+        for d in self.detectors:
+            if isinstance(d, ZoneRetraceDetector):
+                return d
+        return None
 
     @property
     def enabled_setups(self) -> list[str]:

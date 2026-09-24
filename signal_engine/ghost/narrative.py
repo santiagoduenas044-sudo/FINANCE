@@ -50,6 +50,11 @@ def _setup_thesis(setup: str, long: bool) -> str:
         side, role = ("arriba", "soporte") if long else ("abajo", "resistencia")
         return (f"Recuperación del VWAP: el precio lo cruzó hacia {side}, y espero "
                 f"que ahora lo use de {role}.")
+    if setup == "zone_retrace":
+        zone = "compra" if long else "venta"
+        return (f"Regreso a zona: el precio volvió por primera vez a una zona de "
+                f"{zone} (hueco de valor en 5m) y reaccionó ahí, así que espero "
+                f"que respete la zona.")
     return f"Setup {setup}."
 
 
@@ -155,7 +160,9 @@ def trade_thesis(decision, *, breakeven_after_tp1: bool = False,
         out["en_contra"] = _sentence("; ".join(dict.fromkeys(risks))) + "."
 
     if conf is not None:
-        out["confianza"] = (f"Confluencia {conf.score:.0f} (mínimo {conf.threshold:.0f}) "
+        gate = (f" (mínimo {conf.threshold:.0f})" if conf.threshold is not None
+                else " (informativa; esta estrategia no la exige)")
+        out["confianza"] = (f"Confluencia {conf.score:.0f}{gate} "
                             f"— es un puntaje de calidad, no una probabilidad.")
     return out
 

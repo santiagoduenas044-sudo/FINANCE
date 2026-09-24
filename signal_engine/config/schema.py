@@ -5,6 +5,7 @@ logic should hardcode values that belong in configuration.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -12,6 +13,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator
 
 CONFIG_DIR = Path(__file__).resolve().parent
+STRATEGIES_DIR = CONFIG_DIR / "strategies"
+DEFAULT_STRATEGY = "zones"
 
 
 # --------------------------------------------------------------------------- #
@@ -83,6 +86,10 @@ class AnalysisConfig(BaseModel):
     native_n_right: int = 3
     smc_swing_length: int = 8
     with_order_blocks: bool = True
+    # Analyse only the most recent N bars of each timeframe. None = the whole
+    # buffer. A 1m execution timeframe holds ~7000 bars; the structure
+    # scans are superlinear, so capping keeps a cycle well under a second.
+    max_bars: Optional[int] = None
 
 
 class LiquiditySweepParams(BaseModel):
@@ -112,10 +119,44 @@ class OrbParams(BaseModel):
     expiration_bars: int = 12
 
 
+class ZoneRetraceParams(BaseModel):
+    """First retrace into a fresh fair-value-gap zone, confirmed by a reaction
+    candle (setups/zone_retrace.py). All distances are index points."""
+    enabled: bool = False
+    timeframe: str = "1m"             # confirmation / execution timeframe
+    zone_timeframe: str = "5m"        # where the zones (FVGs) are found
+    zone_lookback_bars: int = 36      # zone_timeframe bars searched for zones
+    min_zone_points: float = 3.0      # thinner gaps are noise
+    max_zone_points: float = 40.0     # wider gaps put the midpoint stop inside the zone
+    stop_points: float = 20.0         # stop distance beyond the zone midpoint
+    max_risk_points: float = 35.0     # price ran too far from the zone: skip
+    arm_distance_points: float = 30.0  # heads-up once price is this close to the zone
+    confirm_bars: int = 5             # bars after the first touch to show a reaction
+    tp1_r: float = 1.25               # first target (stop goes to breakeven there)
+    min_target_r: float = 2.0         # structural final target must pay at least this
+    max_target_r: float = 5.0         # ...and no more than this
+    fallback_target_r: float = 3.0    # no structure in range -> fixed R
+    expiration_bars: int = 5
+    # The point values above are NQ points. Other symbols scale them: ES moves
+    # roughly a quarter of NQ's points for the same % move.
+    points_scale: dict[str, float] = Field(
+        default_factory=lambda: {"ES": 0.25, "MES": 0.25})
+
+    def for_symbol(self, symbol: str) -> "ZoneRetraceParams":
+        k = self.points_scale.get(symbol, 1.0)
+        if k == 1.0:
+            return self
+        return self.model_copy(update={
+            f: getattr(self, f) * k for f in (
+                "min_zone_points", "max_zone_points", "stop_points",
+                "max_risk_points", "arm_distance_points")})
+
+
 class SetupsConfig(BaseModel):
     liquidity_sweep: LiquiditySweepParams = Field(default_factory=LiquiditySweepParams)
     vwap_reclaim: VwapReclaimParams = Field(default_factory=VwapReclaimParams)
     orb: OrbParams = Field(default_factory=OrbParams)
+    zone_retrace: ZoneRetraceParams = Field(default_factory=ZoneRetraceParams)
 
 
 class SignalConfig(BaseModel):
@@ -188,6 +229,11 @@ class NotificationsConfig(BaseModel):
     # Discord gives the same summary on demand.
     status_digest: bool = False
     status_digest_minutes: float = 60.0      # 0 disables the timer
+    # Heads-up "trade idea" before a zone trade confirms, and its cancellation
+    # when price crosses the zone without reacting (zone_retrace strategy).
+    trade_ideas: bool = True
+    # One message when TP1 is hit and the stop moves to breakeven.
+    tp1_hit: bool = True
 
 
 class OutputConfig(BaseModel):
@@ -219,7 +265,9 @@ class GhostConfig(BaseModel):
     Data/Analysis/Setup/Signal/Risk logic, connects nothing external, and places
     no orders. Disabled -> the runtime behaves exactly as before."""
     enabled: bool = True
-    min_confluence_score: float = 55.0
+    # None disables the confluence gate (the score is still computed and
+    # shown) — for strategies whose own entry rules are the whole filter.
+    min_confluence_score: Optional[float] = 55.0
     weights: ConfluenceWeights = Field(default_factory=ConfluenceWeights)
 
     # --- regime classification (deterministic, no-lookahead) --- #
@@ -358,11 +406,39 @@ class EngineConfig(BaseModel):
     ghost: GhostConfig = Field(default_factory=GhostConfig)
 
     @classmethod
-    def load(cls, path: Optional[str | Path] = None) -> "EngineConfig":
+    def load(cls, path: Optional[str | Path] = None,
+             strategy: Optional[str] = None) -> "EngineConfig":
+        """Load default.yaml (or `path`), optionally overlaid with
+        config/strategies/<strategy>.yaml. The overlay only lists what the
+        strategy changes; everything else keeps the base value."""
         path = Path(path) if path else CONFIG_DIR / "default.yaml"
         with open(path, "r") as fh:
             raw = yaml.safe_load(fh) or {}
+        if strategy:
+            overlay_path = STRATEGIES_DIR / f"{strategy}.yaml"
+            if not overlay_path.exists():
+                known = sorted(p.stem for p in STRATEGIES_DIR.glob("*.yaml"))
+                raise ValueError(f"unknown strategy {strategy!r}; known: {known}")
+            with open(overlay_path, "r") as fh:
+                raw = _deep_merge(raw, yaml.safe_load(fh) or {})
         return cls(**raw)
+
+    @classmethod
+    def load_active(cls) -> "EngineConfig":
+        """The config the live bot runs: default.yaml + the strategy named by
+        $BOT_STRATEGY (default "zones"). "legacy" = default.yaml alone."""
+        name = os.environ.get("BOT_STRATEGY", DEFAULT_STRATEGY).strip()
+        return cls.load(strategy=None if name in ("", "legacy") else name)
+
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    out = dict(base)
+    for k, v in overlay.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _deep_merge(out[k], v)
+        else:
+            out[k] = v
+    return out
 
 
 # --------------------------------------------------------------------------- #

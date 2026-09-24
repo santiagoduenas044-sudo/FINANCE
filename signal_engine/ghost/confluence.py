@@ -129,5 +129,6 @@ def score_confluence(direction: str, ms: MarketState, signal,
         add("regime_alignment", round(w.regime_alignment * factor, 2), note)
 
     score = round(sum(c.points for c in contribs), 2)
-    return ConfluenceResult(direction, score, cfg.min_confluence_score,
-                            score >= cfg.min_confluence_score, contribs)
+    gate = cfg.min_confluence_score
+    return ConfluenceResult(direction, score, gate,
+                            gate is None or score >= gate, contribs)

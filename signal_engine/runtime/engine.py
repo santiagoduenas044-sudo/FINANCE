@@ -71,6 +71,9 @@ class BotRuntime:
     ghost: object | None = None                    # ghost.brain.GhostBrain
     paper_tracker: object | None = None            # paper.tracker.PaperTradeTracker
     ghost_log_path: str | Path | None = None
+    # Optional: heads-up / cancel lifecycle for the zone strategy
+    # (runtime/ideas.py). None => no trade-idea messages.
+    idea_board: object | None = None
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
     started_at: datetime | None = field(default=None, init=False)
@@ -300,7 +303,8 @@ class BotRuntime:
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
     def _notify_trade_updates(self, symbol: str, just_closed: list,
-                              before_r: dict[str, float]) -> None:
+                              before_r: dict[str, float],
+                              before_tp1: set[str] | None = None) -> None:
         """Tell the operator how a trade is going without them opening the
         dashboard: a close with realised P&L, and an R milestone crossed by a
         still-open trade. Never raises — a notification is not worth a cycle."""
@@ -321,6 +325,12 @@ class BotRuntime:
                     for m in _crossed_milestones(prev, t.r_multiple,
                                                  ncfg.progress_milestones_r):
                         self.output_dispatcher.publish_trade_progress(t.to_dict(), m)
+            if ncfg.tp1_hit and before_tp1 is not None:
+                for t in self.paper_tracker.open_trades:
+                    if (t.is_open and t.instrument == symbol and t.tp1_hit
+                            and t.signal_id in before_r
+                            and t.signal_id not in before_tp1):
+                        self.output_dispatcher.publish_trade_tp1(t.to_dict())
             self._update_discord_health()
         except Exception as exc:  # noqa: BLE001
             log.warning("trade notification failed (%s)", type(exc).__name__)
@@ -407,6 +417,8 @@ class BotRuntime:
             # above" — a restart therefore never replays an old milestone.
             before_r = {t.signal_id: t.r_multiple
                         for t in self.paper_tracker.open_trades if t.is_open}
+            before_tp1 = {t.signal_id for t in self.paper_tracker.open_trades
+                          if t.is_open and t.tp1_hit}
             just_closed = []
             try:
                 # Fix 3: capture closed trades so account state stays current.
@@ -432,7 +444,7 @@ class BotRuntime:
                     self.daily_realized_pnl += _pnl_delta
             except Exception:  # noqa: BLE001 - memory update never breaks the cycle
                 pass
-            self._notify_trade_updates(symbol, just_closed, before_r)
+            self._notify_trade_updates(symbol, just_closed, before_r, before_tp1)
 
         # 2) build market state + GHOST decisions (same analysis the setups saw).
         analysis = self.setup_engine.analyzer.analyze(ctx)
@@ -463,6 +475,21 @@ class BotRuntime:
         if decisions:
             self.ghost_last_decision[symbol] = decisions[-1].to_dict()
 
+        # Zone strategy: the same per-zone judgement the detector used, for the
+        # heads-up / cancel lifecycle. Rejected zone trades cancel their idea.
+        zone_states: dict = {}
+        zone_rejections: dict[str, str] = {}
+        zone_det = (self.setup_engine.zone_detector()
+                    if self.idea_board is not None
+                    and hasattr(self.setup_engine, "zone_detector") else None)
+        if zone_det is not None:
+            zone_states = {st.zone.zone_id: st for st in zone_det.zone_states(ctx)}
+
+        def _zone_rejected(d, reasons: list[str]) -> None:
+            zid = (d.signal.market_context or {}).get("zone_id") if d.signal else None
+            if zid:
+                zone_rejections[zid] = _idea_reject_reason(reasons)
+
         # 3) route each decision. Same signal_id end-to-end.
         log.info("GHOST cycle instrument=%s decisions=%d", symbol, len(decisions))
         approved = rejected = 0
@@ -488,6 +515,7 @@ class BotRuntime:
                     self.recent_signals.append(nt)
                     self._persist_record(nt)
                     self.paper_tracker.mark_processed(d.signal.signal_id)
+                    _zone_rejected(d, ["active_trade"])
                     continue
                 # Fix 1: Risk gate BEFORE opening the paper trade.
                 # UNVERIFIED_CONTRACT_SPEC -> soft WARN, paper trade still opens.
@@ -531,6 +559,7 @@ class BotRuntime:
                     self._persist_record(nt)
                     if self.paper_tracker is not None:
                         self.paper_tracker.mark_processed(d.signal.signal_id)
+                    _zone_rejected(d, ["risk_rejected"] + _risk_block_codes)
                     continue
 
                 # Open the PaperTrade FIRST so it is the source of truth for
@@ -539,6 +568,21 @@ class BotRuntime:
                 # signal log must NOT fire either — invariant: approved ==
                 # Discord == PaperTrades.
                 paper_trade = None
+                idea_ctx: dict = {}
+                zid = (d.signal.market_context or {}).get("zone_id")
+                if zone_det is not None and zid:
+                    idea = self.idea_board.claim_for_trade(
+                        symbol, zone_states.get(zid), zid, d.timestamp)
+                    if idea is not None:
+                        mc = d.signal.market_context
+                        idea_ctx = {
+                            "idea_number": idea.number, "idea_direct": idea.direct,
+                            "zone_top": mc.get("zone_top"),
+                            "zone_bottom": mc.get("zone_bottom"),
+                            "target_basis": mc.get("target_basis"),
+                            "risk_usd_micro": self._micro_usd(
+                                symbol, abs(d.signal.entry - d.signal.stop)),
+                        }
                 if self.paper_tracker is not None:
                     sig = d.signal
                     paper_trade = self.paper_tracker.open_trade(
@@ -556,6 +600,7 @@ class BotRuntime:
                             "thesis": trade_thesis(
                                 d, breakeven_after_tp1=gcfg.breakeven_after_tp1,
                                 eod_close_enabled=gcfg.eod_close_enabled),
+                            **idea_ctx,
                         },
                     )
                 if self.paper_tracker is not None and paper_trade is None:
@@ -592,7 +637,50 @@ class BotRuntime:
                 # reconsiders the same opportunity (restart-safe dedup).
                 if d.signal is not None and self.paper_tracker is not None:
                     self.paper_tracker.mark_processed(d.signal.signal_id)
+                _zone_rejected(d, list(nt.reasons))
+
+        if zone_det is not None:
+            self._review_ideas(symbol, ctx, gcfg, list(zone_states.values()),
+                               zone_rejections, data_stale, cooldown_check)
         return approved, rejected
+
+    def _review_ideas(self, symbol, ctx, gcfg, states, rejections,
+                      data_stale, cooldown_check) -> None:
+        """Announce zones price is approaching and cancel ideas that failed.
+        Only announces when a trade could actually follow: inside the entry
+        window, no open position, not cooling down, fresh data."""
+        hhmm = ctx.decision_time.strftime("%H:%M")
+        window_open = (ctx.session in gcfg.valid_sessions
+                       and not (gcfg.last_entry_time and hhmm >= gcfg.last_entry_time))
+        busy = (self.paper_tracker is not None and self.paper_tracker.has_open(symbol))
+        cooling = bool(cooldown_check and cooldown_check(symbol)[0])
+        events = self.idea_board.review(
+            symbol, states, ctx.decision_time, window_open=window_open,
+            can_announce=not (busy or cooling or data_stale), rejections=rejections)
+        ncfg = self.data_engine.cfg.output.notifications
+        if not events or self.output_dispatcher is None or not ncfg.trade_ideas:
+            return
+        for ev in events:
+            ev["risk_usd_micro"] = self._micro_usd(symbol, ev.get("risk_points") or 0)
+            try:
+                self.output_dispatcher.publish_trade_idea(ev)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("trade idea notification failed (%s)", type(exc).__name__)
+        self._update_discord_health()
+
+    def _micro_usd(self, symbol: str, points: float) -> float | None:
+        """Dollar value of `points` on one micro contract — only from
+        VERIFIED contract specs; None otherwise (never a guessed number)."""
+        try:
+            if not self.registry.verified:
+                return None
+            for sym in self.registry.symbols():
+                spec = self.registry.spec(sym)
+                if spec.micro_of == symbol:
+                    return round(points * spec.point_value, 2)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
 
     def _persist_ghost(self, decision) -> None:
         if self.ghost_log_path is None:
@@ -859,6 +947,23 @@ def _record_to_dict(r: Signal | NoTrade) -> dict:
 
 
 _TF_SECS = {"1m": 60, "5m": 300, "15m": 900, "1H": 3600, "1h": 3600, "4H": 14400}
+_IDEA_REJECT_ES = {
+    "active_trade": "ya había otro trade abierto",
+    "cooldown": "el bot está en pausa después de un stop",
+    "too_late_in_session": "ya es tarde para entrar (después de la hora límite)",
+    "invalid_session": "fuera del horario de la sesión",
+    "excessive_volatility": "volatilidad excesiva en ese momento",
+    "stale_data": "los datos llegaron atrasados",
+}
+
+
+def _idea_reject_reason(reasons: list[str]) -> str:
+    for r in reasons:
+        if r in _IDEA_REJECT_ES:
+            return "reaccionó, pero " + _IDEA_REJECT_ES[r]
+    return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
+
+
 def _tf_seconds(tf: str) -> float:
     return float(_TF_SECS.get(tf, 300))
 

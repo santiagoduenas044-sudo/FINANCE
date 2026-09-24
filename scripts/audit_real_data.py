@@ -13,9 +13,11 @@ What it does:
   1. Downloads 1-minute NQ=F bars (Yahoo keeps ~30 days of 1m history) and
      saves them to market_data/NQ/YAHOO_1m.csv, so re-runs need no network and
      the file can be shared for analysis.
-  2. Replays every RTH 5-minute bar through the real BotRuntime (setups ->
+  2. Replays every RTH execution bar through the real BotRuntime (setups ->
      signal engine -> GHOST -> paper tracker, EOD close, breakeven, cooldown),
-     with a rolling 5-day history window like the live feed.
+     with a rolling history window like the live feed. Uses the same strategy
+     the live bot runs ($BOT_STRATEGY, default "zones"; --strategy legacy for
+     the old 5m setups).
   3. Charges a round-trip cost (commission + 1 tick slippage per side).
   4. "Shadow" pass: every signal GHOST scored — approved or not — is simulated
      on its own, to show which setups carry edge, whether the confluence score
@@ -27,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 import urllib.request
@@ -38,7 +41,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from signal_engine.config.schema import EngineConfig  # noqa: E402
+from signal_engine.config.schema import DEFAULT_STRATEGY, EngineConfig  # noqa: E402
 from signal_engine.data.contracts import ContractRegistry  # noqa: E402
 from signal_engine.data.engine import DataEngine  # noqa: E402
 from signal_engine.data.models import SESSION  # noqa: E402
@@ -46,6 +49,7 @@ from signal_engine.data.providers.csv_provider import CsvProvider  # noqa: E402
 from signal_engine.ghost.brain import GhostBrain  # noqa: E402
 from signal_engine.paper.tracker import PaperTradeTracker  # noqa: E402
 from signal_engine.runtime.engine import BotRuntime  # noqa: E402
+from signal_engine.runtime.ideas import IdeaBoard  # noqa: E402
 from signal_engine.setups.engine import SetupEngine  # noqa: E402
 from signal_engine.signals.engine import SignalEngine  # noqa: E402
 
@@ -54,7 +58,7 @@ CONTRACT = "YAHOO"
 TICKERS = {"NQ": "NQ=F", "ES": "ES=F"}
 # Round trip, in index points: ~$4.50 all-in commission + 1 tick slippage each side.
 COST_POINTS = {"NQ": 0.75, "ES": 0.6}
-HISTORY_DAYS = 5
+HISTORY_DAYS = 5          # 5m execution; a 1m execution needs only 2 (see replay)
 
 
 # --------------------------------------------------------------------------- #
@@ -98,8 +102,8 @@ def download(symbol: str, days: int) -> Path:
 # --------------------------------------------------------------------------- #
 # replay
 # --------------------------------------------------------------------------- #
-def replay(symbol: str, provider: CsvProvider, contract: str):
-    cfg = EngineConfig.load()
+def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | None):
+    cfg = EngineConfig.load(strategy=strategy)
     reg = ContractRegistry.load()
     de = DataEngine(cfg, reg)
     tf_all = de.build_timeframes(de.load_contract(provider, symbol, contract))
@@ -110,7 +114,20 @@ def replay(symbol: str, provider: CsvProvider, contract: str):
     tracker = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1)
     rt = BotRuntime(de, SetupEngine(cfg, reg), SignalEngine(cfg.signals), reg,
                     ghost=GhostBrain(cfg.ghost), paper_tracker=tracker)
+    ideas: Counter = Counter()
+    if cfg.setups.zone_retrace.enabled:
+        rt.idea_board = IdeaBoard(None, timezone=cfg.data.timezone)
+        orig_review = rt.idea_board.review
+
+        def review_hook(*a, **k):
+            evs = orig_review(*a, **k)
+            ideas.update(e["event"] for e in evs)
+            return evs
+        rt.idea_board.review = review_hook
     rt.start()
+    # 1m bars: two days already cover the analysis window (analysis.max_bars)
+    # and the 1H EMA50; five would only slow the replay down.
+    history_days = 2 if roles.execution == "1m" else HISTORY_DAYS
 
     candidates: Counter = Counter()
     decisions: list = []
@@ -128,19 +145,19 @@ def replay(symbol: str, provider: CsvProvider, contract: str):
 
     rt.setup_engine.detect, rt.ghost.evaluate = detect_hook, eval_hook
 
-    start_at = exec_bars.index[0] + pd.Timedelta(days=HISTORY_DAYS)
+    start_at = exec_bars.index[0] + pd.Timedelta(days=history_days)
     # RTH bars only (the 16:00-labeled bar is RTH by its open instant, and is
     # where the EOD close fires); GHOST never enters outside RTH anyway.
     steps = exec_bars.index[(exec_bars.index >= start_at) & (exec_bars[SESSION] == "RTH")]
     t0 = time.time()
     for i, N in enumerate(steps):
-        lo = N - pd.Timedelta(days=HISTORY_DAYS)
+        lo = N - pd.Timedelta(days=history_days)
         window = {tf: tf_all[tf].loc[lo:N] for tf in tfs}
         rt.run_cycle(symbol, tf_bars=window)
         if i % max(1, len(steps) // 10) == 0:
             print(f"  replay {i / len(steps):4.0%}  {N:%Y-%m-%d %H:%M}  "
                   f"({time.time() - t0:.0f}s)", file=sys.stderr, flush=True)
-    return cfg, de, exec_bars, steps, tracker, candidates, decisions
+    return cfg, de, exec_bars, steps, tracker, candidates, decisions, ideas
 
 
 def shadow(cfg, de, exec_bars, decisions):
@@ -209,7 +226,8 @@ def warn(n):
     return "  (!) menos de 30 — no concluyas nada de esta fila" if n < 30 else ""
 
 
-def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow_rows, cost):
+def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow_rows,
+           cost, ideas):
     pv = ContractRegistry.load().spec(symbol).point_value
     days = len({ts.date() for ts in steps})
     print(f"\n=== AUDITORÍA CON DATOS REALES — {symbol} ===")
@@ -225,14 +243,20 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
     reasons = Counter(r.value for d in decisions for r in d.no_trade_reasons)
     print("  rechazos: " + ", ".join(f"{k} {v}" for k, v in reasons.most_common(8)))
 
+    if ideas or cfg.setups.zone_retrace.enabled:
+        print(f"  ideas avisadas (🟡): {ideas['idea']} · canceladas (⚪): {ideas['cancelled']}")
     closed = [{"pnl_pts": t.pnl_points, "risk_pts": t.initial_risk, "setup": t.setup,
-               "hour": t.opened_at.hour, "exit": t.exit_reason.value}
+               "hour": t.opened_at.hour, "exit": t.exit_reason.value,
+               "direct": bool((t.context or {}).get("idea_direct"))}
               for t in tracker.closed_trades]
     print("\n-- Lo que el bot habría operado (una posición a la vez) --")
     s = stats(closed, cost)
     print(line("TOTAL", s, pv) + (warn(s["n"]) if s else ""))
     for k in sorted({x["setup"] for x in closed}):
         print(line(k, stats([x for x in closed if x["setup"] == k], cost), pv))
+    if cfg.setups.zone_retrace.enabled:
+        print(line("con aviso previo (🟢)", stats([x for x in closed if not x["direct"]], cost), pv))
+        print(line("señal directa (⚡)", stats([x for x in closed if x["direct"]], cost), pv))
     print("  salidas: " + ", ".join(f"{k} {v}" for k, v in
                                     Counter(x["exit"] for x in closed).most_common()))
     by_hour = defaultdict(list)
@@ -247,7 +271,7 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
     print(line("  rechazadas por GHOST", stats([x for x in shadow_rows if not x["approved"]], cost)))
     for k in sorted({x["setup"] for x in shadow_rows}):
         print(line(f"setup {k}", stats([x for x in shadow_rows if x["setup"] == k], cost)))
-    thr = cfg.ghost.min_confluence_score
+    thr = cfg.ghost.min_confluence_score or 35   # buckets still useful without a gate
     for lo_, hi_ in [(-99, 20), (20, thr), (thr, 50), (50, 999)]:
         rows = [x for x in shadow_rows if lo_ <= x["score"] < hi_]
         print(line(f"score {lo_:>3}..{hi_:<3}", stats(rows, cost)))
@@ -275,7 +299,10 @@ def main() -> None:
     ap.add_argument("--csv-root", help="raíz CsvProvider alternativa (p.ej. tests/data_samples)")
     ap.add_argument("--contract", default=CONTRACT)
     ap.add_argument("--cost-points", type=float, help="costo ida y vuelta en puntos")
+    ap.add_argument("--strategy", default=os.environ.get("BOT_STRATEGY", DEFAULT_STRATEGY),
+                    help='estrategia (default la del bot: "zones"; "legacy" = setups 5m)')
     a = ap.parse_args()
+    strategy = None if a.strategy in ("", "legacy") else a.strategy
 
     root = Path(a.csv_root) if a.csv_root else DATA_DIR
     if not a.csv_root and not a.offline:
@@ -283,10 +310,10 @@ def main() -> None:
         print(f"  guardado en {download(a.symbol, a.days).relative_to(ROOT)}", file=sys.stderr)
     cost = a.cost_points if a.cost_points is not None else COST_POINTS[a.symbol]
 
-    cfg, de, exec_bars, steps, tracker, cands, decisions = replay(
-        a.symbol, CsvProvider(root), a.contract)
+    cfg, de, exec_bars, steps, tracker, cands, decisions, ideas = replay(
+        a.symbol, CsvProvider(root), a.contract, strategy)
     rows = shadow(cfg, de, exec_bars, decisions)
-    report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost)
+    report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas)
 
 
 if __name__ == "__main__":

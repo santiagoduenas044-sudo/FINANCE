@@ -106,6 +106,14 @@ class OutputDispatcher:
         """An open trade crossed an R milestone."""
         self._emit(OutputEvent.from_trade_progress(paper_trade_dict, milestone_r))
 
+    def publish_trade_idea(self, idea_event: dict) -> None:
+        """Zone-strategy heads-up ("get ready") or its cancellation."""
+        self._emit(OutputEvent.from_trade_idea(idea_event))
+
+    def publish_trade_tp1(self, paper_trade_dict: dict) -> None:
+        """TP1 reached; stop moved to breakeven."""
+        self._emit(OutputEvent.from_trade_tp1(paper_trade_dict))
+
     def publish_status_digest(self, payload: dict, timestamp) -> None:
         """Periodic 'where we stand' summary for remote monitoring."""
         self._emit(OutputEvent.from_status_digest(payload, timestamp))

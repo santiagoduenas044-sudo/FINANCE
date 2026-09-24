@@ -218,3 +218,22 @@ def test_start_background_runs_and_stops(engine, registry):
     t.join(timeout=3)
     assert not t.is_alive()
     assert svc.stats()["running"] is False
+
+
+def test_service_runs_every_candle_of_a_batched_delivery(engine, registry):
+    # A delayed feed hands over several closed candles at once: each one is
+    # run in order, so a stop hit on a middle candle is not skipped.
+    adapter = SimulatedLiveAdapter(_es_1m(engine), symbol="ES", bars_per_poll=200)
+    feed = _feed(engine, adapter)
+    rt = _runtime(engine, registry, feed)
+    svc = BotService(rt, cycle_seconds=0.5, max_catchup_bars=3)
+    rt.start()
+    svc.tick()
+    seen = []
+    orig = rt.run_cycle
+    rt.run_cycle = lambda sym, tf_bars=None: (
+        seen.append(tf_bars[engine.cfg.timeframe_roles.execution].index[-1])
+        or orig(sym, tf_bars=tf_bars))
+    svc.tick()                       # 200 more 1m bars = 40 new 5m candles
+    assert len(seen) == 3 and seen == sorted(seen)
+    assert svc._last_processed_bar["ES"] == seen[-1]

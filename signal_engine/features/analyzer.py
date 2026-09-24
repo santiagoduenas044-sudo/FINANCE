@@ -43,13 +43,17 @@ class MarketAnalysis:
 class MarketAnalyzer:
     def __init__(self, provider: MarketStructureProvider | None = None,
                  backend: str = "native", provider_kwargs: dict | None = None,
-                 with_order_blocks: bool = True):
+                 with_order_blocks: bool = True, max_bars: int | None = None):
         self.provider = provider or get_structure_provider(backend, **(provider_kwargs or {}))
         self.with_order_blocks = with_order_blocks
+        self.max_bars = max_bars
+        self._last: tuple | None = None   # (key, MarketAnalysis) of the last call
 
     def analyze_view(self, view: TimeframeView,
                      decision_time: pd.Timestamp) -> TimeframeAnalysis:
         bars = view.bars
+        if self.max_bars and len(bars) > self.max_bars:
+            bars = bars.iloc[-self.max_bars:]
         obs = self.provider.order_blocks(bars) if self.with_order_blocks else []
         return TimeframeAnalysis(
             timeframe=view.timeframe,
@@ -63,10 +67,17 @@ class MarketAnalyzer:
         )
 
     def analyze(self, ctx: AnalysisContext) -> MarketAnalysis:
+        # The runtime analyses the same context twice per cycle (setups, then
+        # GHOST); the result is a pure function of the context, so reuse it.
+        key = id(ctx)
+        if self._last is not None and self._last[0] == key and self._last[1] is ctx:
+            return self._last[2]
         views = {
             ctx.htf.timeframe: ctx.htf,
             ctx.structure.timeframe: ctx.structure,
             ctx.execution.timeframe: ctx.execution,
         }
         by_tf = {tf: self.analyze_view(v, ctx.decision_time) for tf, v in views.items()}
-        return MarketAnalysis(ctx.symbol, ctx.decision_time, by_tf)
+        result = MarketAnalysis(ctx.symbol, ctx.decision_time, by_tf)
+        self._last = (key, ctx, result)
+        return result
