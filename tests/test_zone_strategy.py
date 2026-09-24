@@ -130,3 +130,20 @@ def test_partial_at_tp1_banks_half_then_breakeven(tmp_path):
     closed = build_discord_payload(OutputEvent.from_trade_closed(
         {**t.to_dict(), "context": {"idea_number": 1}}))["embeds"][0]
     assert closed["title"] == "✅ IDEA #1 — Stop en breakeven (parcial asegurado) · +17.50 pts"
+
+
+def test_heads_up_spells_out_the_conditional_plan():
+    idea = {"event": "idea", "number": 2, "symbol": "NQ", "direction": "SHORT",
+            "mid": 30841.5, "top": 30850.75, "bottom": 30832.25, "stop": 30876.5,
+            "risk_points": 35.0, "zone_id": "z", "usd_per_point": {"NQ": 20.0, "MNQ": 2.0},
+            "plan": {"stop": 30876.5, "tp1": 30806.5, "final": 30670.0, "tp1_rr": 1.0,
+                     "plan_rr": 4.9, "basis": "mínimo sin tomar en 30,670.00",
+                     "confirm_minutes": 5, "price_now": 30880.0, "distance": 29.25,
+                     "partial": 0.5, "last_entry_time": "15:30"}}
+    d = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]["description"]
+    for text in ["SI el precio sube a 30,832.25 y reacciona → VENTA",
+                 "dentro de los **5 min**", "Stop: 30,876.50 (~35 pts ≈ $700 en NQ / $70 en MNQ)",
+                 "Objetivo 1: 30,806.50 (+35 pts, 1R) → cierra el 50% y stop a breakeven",
+                 "hasta 30,670.00 (+172 pts, 4.9R)",
+                 "una vela cierra por arriba de 30,850.75", "antes de las 15:30 ET"]:
+        assert text in d, text

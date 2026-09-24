@@ -645,11 +645,13 @@ class BotRuntime:
 
         if zone_det is not None:
             self._review_ideas(symbol, ctx, gcfg, list(zone_states.values()),
-                               zone_rejections, data_stale, cooldown_check)
+                               zone_rejections, data_stale, cooldown_check,
+                               zone_det=zone_det, analysis=analysis)
         return approved, rejected
 
     def _review_ideas(self, symbol, ctx, gcfg, states, rejections,
-                      data_stale, cooldown_check) -> None:
+                      data_stale, cooldown_check, *, zone_det=None,
+                      analysis=None) -> None:
         """Announce zones price is approaching and cancel ideas that failed.
         Only announces when a trade could actually follow: inside the entry
         window, no open position, not cooling down, fresh data."""
@@ -664,8 +666,23 @@ class BotRuntime:
         ncfg = self.data_engine.cfg.output.notifications
         if not events or self.output_dispatcher is None or not ncfg.trade_ideas:
             return
+        by_id = {st.zone.zone_id: st for st in states}
+        price_now = float(ctx.execution.bars["close"].iloc[-1]) \
+            if not ctx.execution.bars.empty else None
         for ev in events:
             ev["usd_per_point"] = self._point_values(symbol)
+            st = by_id.get(ev.get("zone_id"))
+            if ev.get("event") == "idea" and st is not None and zone_det is not None:
+                # The full conditional plan, so the heads-up reads as
+                # "if X happens, do Y; if Z happens, it's off".
+                try:
+                    ev["plan"] = {**zone_det.plan_for(ctx, analysis, st.zone),
+                                  "price_now": price_now,
+                                  "distance": st.distance,
+                                  "partial": gcfg.partial_at_tp1,
+                                  "last_entry_time": gcfg.last_entry_time}
+                except Exception as exc:  # noqa: BLE001 - a plan is not worth a cycle
+                    log.warning("idea plan failed (%s)", type(exc).__name__)
             try:
                 self.output_dispatcher.publish_trade_idea(ev)
             except Exception as exc:  # noqa: BLE001

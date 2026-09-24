@@ -366,16 +366,63 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
             _CANCEL_COLOR, event.disclaimer)
     zone = "compra" if side == "COMPRA" else "venta"
     risk = p.get("risk_points")
-    return _embed(
-        f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
-        f"**Prepárate.** El precio viene de regreso a una zona de {zone}.\n\n"
-        f"👀 **Vigila:** {_px(p.get('mid'))} "
-        f"(zona {_px(p.get('bottom'))} – {_px(p.get('top'))})\n"
-        f"🛑 **Stop si se confirma:** {_px(p.get('stop'))}\n"
-        f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}\n\n"
-        f"⚠️ **NO entres todavía.** Espero que el precio reaccione en la zona. "
-        f"Si la cruza sin reaccionar, la cancelo.",
-        _IDEA_COLOR, event.disclaimer)
+    plan = p.get("plan")
+    if not plan:
+        return _embed(
+            f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
+            f"**Prepárate.** El precio viene de regreso a una zona de {zone}.\n\n"
+            f"👀 **Vigila:** {_px(p.get('mid'))} "
+            f"(zona {_px(p.get('bottom'))} – {_px(p.get('top'))})\n"
+            f"🛑 **Stop si se confirma:** {_px(p.get('stop'))}\n"
+            f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}\n\n"
+            f"⚠️ **NO entres todavía.** Espero que el precio reaccione en la zona. "
+            f"Si la cruza sin reaccionar, la cancelo.",
+            _IDEA_COLOR, event.disclaimer)
+    return _embed(f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
+                  _idea_plan_text(p, plan, side, zone, risk), _IDEA_COLOR, event.disclaimer)
+
+
+def _idea_plan_text(p: dict, plan: dict, side: str, zone: str, risk) -> str:
+    """Heads-up as a conditional plan: where, what to do, where it is wrong,
+    where it pays, and exactly what cancels it."""
+    long = side == "COMPRA"
+    mid, top, bottom = p.get("mid"), p.get("top"), p.get("bottom")
+    edge, far = (top, bottom) if long else (bottom, top)
+    move = "baja" if long else "sube"
+    wick = "bajista" if not long else "alcista"
+    closes = "por arriba" if long else "por debajo"
+    through = "por debajo" if long else "por arriba"
+    sign = 1 if long else -1
+    tp1, final, stop = plan.get("tp1"), plan.get("final"), plan.get("stop")
+    mins = plan.get("confirm_minutes") or 5
+    partial = plan.get("partial") or 0
+    lines = [f"**Prepárate.** El precio viene de regreso a una zona de {zone}."]
+    if plan.get("price_now") is not None and plan.get("distance") is not None:
+        lines.append(f"Precio ahora: {_px(plan['price_now'])} "
+                     f"(a {plan['distance']:.0f} pts de la zona)")
+    lines += [
+        "",
+        f"📍 **Zona:** {_px(bottom)} – {_px(top)} · óptima **{_px(mid)}**",
+        "",
+        "**✅ SI el precio " + move + f" a {_px(edge)} y reacciona → {side}**",
+        f"• Confirmación: dentro de los **{mins} min** después de tocar la zona, "
+        f"una vela de 1 min {wick} que cierre {closes} de {_px(mid)}.",
+        f"• 🛑 Stop: {_px(stop)} (~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))})",
+        f"• 🎯 Objetivo 1: {_px(tp1)} ({sign * (tp1 - mid):+.0f} pts, "
+        f"{plan.get('tp1_rr', 1):g}R) → "
+        + (f"cierra el {partial:.0%} y " if partial else "")
+        + "stop a breakeven",
+        f"• 🏁 Objetivo final: hasta {_px(final)} ({sign * (final - mid):+.0f} pts, "
+        f"{plan.get('plan_rr'):g}R) — {plan.get('basis', '')}",
+        "",
+        "**❌ SE CANCELA si:**",
+        f"• una vela cierra {through} de {_px(far)} (cruza la zona sin reaccionar)",
+        f"• pasan {mins} min desde que toca la zona y no hay reacción",
+    ]
+    if plan.get("last_entry_time"):
+        lines.append(f"• no ha regresado a la zona antes de las {plan['last_entry_time']} ET")
+    lines += ["", "⚠️ **NO entres todavía.** Te aviso con 🟢 cuando se confirme."]
+    return "\n".join(lines)
 
 
 def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:

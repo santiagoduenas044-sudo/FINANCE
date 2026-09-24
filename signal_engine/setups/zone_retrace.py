@@ -169,14 +169,27 @@ class ZoneRetraceDetector(SetupDetector):
         return out
 
     # ------------------------------------------------------------------ #
+    def plan_for(self, ctx, analysis, z: Zone) -> dict:
+        """The trade plan for a zone, anchored at its midpoint: what the
+        heads-up announces and what a confirmation will trade."""
+        p = self.p.for_symbol(ctx.symbol)
+        bull = z.bullish
+        plan_r = abs(z.mid - z.stop)
+        tp1, _ = self._target(ctx, analysis, z.mid, plan_r, bull, p.tp1_r, p.tp1_max_r, p.tp1_r)
+        final, basis = self._target(ctx, analysis, z.mid, plan_r, bull, p.min_target_r,
+                                    p.max_target_r, p.fallback_target_r, beyond=tp1)
+        return {"stop": z.stop, "tp1": tp1, "final": final, "basis": basis,
+                "plan_r": plan_r, "tp1_rr": round(abs(tp1 - z.mid) / plan_r, 2),
+                "plan_rr": round(abs(final - z.mid) / plan_r, 1),
+                "confirm_minutes": p.confirm_bars
+                * int(pd.Timedelta(p.timeframe.replace("m", "min")).total_seconds() // 60)}
+
     def _make(self, ctx, analysis, N, entry: float, z: Zone) -> SetupCandidate | None:
         p = self.p.for_symbol(ctx.symbol)
         bull = z.bullish
         stop = z.stop
-        plan_r = abs(z.mid - stop)
-        tp1, _ = self._target(ctx, analysis, z.mid, plan_r, bull, p.tp1_r, p.tp1_max_r, p.tp1_r)
-        final, basis = self._target(ctx, analysis, z.mid, plan_r, bull, p.min_target_r,
-                                    p.max_target_r, p.fallback_target_r, beyond=tp1)
+        plan = self.plan_for(ctx, analysis, z)
+        plan_r, tp1, final, basis = plan["plan_r"], plan["tp1"], plan["final"], plan["basis"]
         risk = abs(entry - stop)
         beyond_tp1 = entry >= tp1 if bull else entry <= tp1
         if risk <= 0 or risk > p.max_risk_points or beyond_tp1 \
