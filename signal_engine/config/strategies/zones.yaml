@@ -53,6 +53,9 @@ signals:
 ghost:
   min_rr: 0.5
   partial_at_tp1: 0.5               # bank half at target 1, run the rest
+  # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
+  # the account flat before 16:59. Entries still stop at 15:30.
+  eod_close_time: "16:55"
   # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
   # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
   # Session / 15:30 cut-off / 16:00 flat / one position / cooldown still apply.

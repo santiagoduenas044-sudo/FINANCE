@@ -403,7 +403,7 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
 
 
 _EXIT_ES = {"TP1": "TP1", "TP2": "TP final", "STOP": "Stop", "INVALIDATION": "Invalidado",
-            "EOD": "Cierre 4pm", "CANCELLED": "Cancelado"}
+            "EOD": "Cierre fin de día", "CANCELLED": "Cancelado"}
 
 
 def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
@@ -490,6 +490,29 @@ def _urllib_transport(url: str, data: bytes, timeout: float) -> int:
             return int(getattr(resp, "status", resp.getcode()))
     except urllib.error.HTTPError as exc:
         # convert HTTP errors into a status code (no URL in the return)
+        return int(exc.code)
+
+
+def send_webhook_with_file(url: str, payload: dict, file_bytes: bytes,
+                           filename: str, timeout: float = 15.0) -> int:
+    """POST an embed plus one attached file (multipart). Reference the file in
+    the embed as attachment://<filename>. Returns the HTTP status; the URL is
+    never logged or put in an exception message."""
+    boundary = "----signalengine" + os.urandom(8).hex()
+    parts = [
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"payload_json\"\r\n"
+        f"Content-Type: application/json\r\n\r\n".encode() + json.dumps(payload).encode(),
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"files[0]\"; "
+        f"filename=\"{filename}\"\r\nContent-Type: image/png\r\n\r\n".encode() + file_bytes,
+    ]
+    body = b"\r\n".join(parts) + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "User-Agent": "DiscordBot (https://github.com/santiagoduenas044-sudo/FINANCE, 1.0)"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return int(getattr(resp, "status", resp.getcode()))
+    except urllib.error.HTTPError as exc:
         return int(exc.code)
 
 

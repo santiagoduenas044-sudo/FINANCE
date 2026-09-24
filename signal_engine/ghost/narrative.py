@@ -58,6 +58,12 @@ def _setup_thesis(setup: str, long: bool) -> str:
     return f"Setup {setup}."
 
 
+def _clock(hhmm: str) -> str:
+    """'16:55' -> '4:55pm'."""
+    h, m = (int(x) for x in hhmm.split(":"))
+    return f"{h % 12 or 12}:{m:02d}{'pm' if h >= 12 else 'am'}"
+
+
 def _sentence(s: str) -> str:
     """Uppercase the first letter only — str.capitalize() would lowercase the
     rest and turn 'VWAP' into 'vwap' and '1H' into '1h'."""
@@ -113,6 +119,7 @@ def market_read(ms: MarketState) -> list[str]:
 
 
 def trade_thesis(decision, *, breakeven_after_tp1: bool = False,
+                 eod_close_time: str | None = None,
                  eod_close_enabled: bool = False) -> dict[str, str]:
     """{veo, por_eso, espero, en_contra, confianza} for an approved decision.
     Keys with nothing honest to say are left out rather than padded."""
@@ -137,8 +144,9 @@ def trade_thesis(decision, *, breakeven_after_tp1: bool = False,
         espero += (" Si toca TP1 muevo el stop a la entrada: desde ahí el trade "
                    "ya no puede perder.")
     if eod_close_enabled:
+        when = _clock(eod_close_time) if eod_close_time else "4:00pm"
         espero += (" No lo dejo abierto de un día para otro: si sigue vivo a las "
-                   "4:00pm ET lo cierro al precio de ese momento.")
+                   f"{when} ET lo cierro al precio de ese momento.")
     out["espero"] = espero
 
     conf = decision.confluence

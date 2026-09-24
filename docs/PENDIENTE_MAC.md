@@ -31,6 +31,36 @@ bash deploy/macos/ctl.sh logs
 
 ---
 
+## 1b. Corregir la IDEA #4 (hacerlo en los próximos días: Yahoo guarda ~7 días de 1m)
+
+Instalar lo necesario para la gráfica:
+
+```bash
+.venv/bin/pip install -r requirements.txt
+```
+
+Ver el resultado corregido (no cambia nada todavía):
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/correct_trade.py --idea 4
+```
+
+Si el "corregido" se ve bien, aplicarlo y mandarlo a Discord con la gráfica:
+
+```bash
+bash deploy/macos/ctl.sh stop
+```
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/correct_trade.py --idea 4 --offline --apply --discord
+```
+
+```bash
+bash deploy/macos/ctl.sh start
+```
+
+---
+
 ## 2. Prueba con datos reales de Yahoo (~30 min, puede ser en la noche)
 
 Descarga ~29 días de NQ a 1 minuto y los pasa por la estrategia. El bot puede

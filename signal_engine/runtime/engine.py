@@ -431,7 +431,8 @@ class BotRuntime:
                 # as ETH/CLOSED, so this fires AT the close using that bar's
                 # real price). Runs AFTER update_symbol so a same-bar TP/stop
                 # hit is still the real outcome, not overridden by EOD.
-                if gcfg.eod_close_enabled and ctx.session != "RTH":
+                if gcfg.eod_close_enabled and eod_due(ctx.session, ctx.decision_time,
+                                                      gcfg.eod_close_time):
                     eod_closed = self.paper_tracker.close_symbol_eod(
                         symbol, float(bars.iloc[-1]["close"]), ctx.decision_time)
                     just_closed = just_closed + eod_closed
@@ -603,7 +604,8 @@ class BotRuntime:
                             "confluence": d.confluence.score if d.confluence else None,
                             "thesis": trade_thesis(
                                 d, breakeven_after_tp1=gcfg.breakeven_after_tp1,
-                                eod_close_enabled=gcfg.eod_close_enabled),
+                                eod_close_enabled=gcfg.eod_close_enabled,
+                                eod_close_time=gcfg.eod_close_time),
                             **idea_ctx,
                         },
                     )
@@ -985,6 +987,19 @@ def _idea_reject_reason(reasons: list[str]) -> str:
         if r in _IDEA_REJECT_ES:
             return "reaccionó, pero " + _IDEA_REJECT_ES[r]
     return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
+
+
+def eod_due(session: str, bar_time, eod_close_time: str | None) -> bool:
+    """Whether an open position must be force-closed on this bar. Without a
+    close time: as soon as the bar leaves RTH. With one (ET "HH:MM"): outside
+    RTH once that time is reached — or any later out-of-hours bar (overnight,
+    maintenance, pre-market), so a missed bar can never leave it open."""
+    if session == "RTH":
+        return False
+    if eod_close_time is None:
+        return True
+    hhmm = bar_time.strftime("%H:%M")
+    return hhmm >= eod_close_time or hhmm < "09:30"
 
 
 def _tf_seconds(tf: str) -> float:
