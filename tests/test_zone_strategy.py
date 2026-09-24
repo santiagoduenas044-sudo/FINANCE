@@ -89,9 +89,9 @@ def test_messages_read_like_trade_ideas():
             "risk_points": 20.0, "zone_id": "z",
             "usd_per_point": {"NQ": 20.0, "MNQ": 2.0}}
     e = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]
-    assert e["title"] == "🟡 TRADE IDEA #3 — posible COMPRA · NQ"
-    assert "21,450.25" in e["description"] and "NO entres todavía" in e["description"]
-    assert "~20 pts ≈ $400 en NQ / $40 en MNQ" in e["description"]
+    assert e["title"] == "🟡 IDEA #3 — posible COMPRA · NQ"
+    assert "Vigila **21,450.25**" in e["description"] and "No entres todavía" in e["description"]
+    assert "~20 pts ≈ $40 MNQ / $400 NQ" in e["description"]
 
     trade = {"signal_id": "s", "instrument": "NQ", "direction": "SHORT", "entry": 100.0,
              "stop": 120.0, "tp1": 75.0, "tp2": 40.0, "pnl_points": -20.0,
@@ -101,11 +101,13 @@ def test_messages_read_like_trade_ideas():
                          "zone_top": 105.0, "zone_mid": 100.0, "plan_rr": 3.0}}
     opened = build_discord_payload(OutputEvent.from_trade_opened(trade))["embeds"][0]
     assert opened["title"] == "⚡ SEÑAL DIRECTA #4 — VENTA · NQ"
-    assert "óptima **100.00**" in opened["description"] and "(R:R 3)" in opened["description"]
-    assert "entra ahora" in opened["description"]
+    assert opened["description"].splitlines() == [
+        "✅ **Entra ahora 100.00** · óptima 100.00",
+        "🛑 SL 120.00 · ~20 pts ≈ $40 MNQ / $400 NQ",
+        "🎯 TP1 75.00 → stop a BE · TP 40.00 (3R)"]
     closed = build_discord_payload(OutputEvent.from_trade_closed(trade))["embeds"][0]
     assert closed["title"] == "🛑 IDEA #4 — Stop · -20.00 pts"
-    assert "· −$400 en NQ · −$40 en MNQ" in closed["description"]
+    assert closed["description"] == "100.00 → 120.00 · -1.00R · −$40 MNQ · −$400 NQ"
 
 
 def test_live_bot_runs_the_zone_strategy_by_default(monkeypatch):
@@ -129,21 +131,18 @@ def test_partial_at_tp1_banks_half_then_breakeven(tmp_path):
     assert not t.is_open and t.pnl_points == 17.5                           # half of 35 kept
     closed = build_discord_payload(OutputEvent.from_trade_closed(
         {**t.to_dict(), "context": {"idea_number": 1}}))["embeds"][0]
-    assert closed["title"] == "✅ IDEA #1 — Stop en breakeven (parcial asegurado) · +17.50 pts"
+    assert closed["title"] == "✅ IDEA #1 — BE tras parcial · +17.50 pts"
 
 
-def test_heads_up_spells_out_the_conditional_plan():
+def test_heads_up_is_short_and_has_the_numbers():
     idea = {"event": "idea", "number": 2, "symbol": "NQ", "direction": "SHORT",
             "mid": 30841.5, "top": 30850.75, "bottom": 30832.25, "stop": 30876.5,
             "risk_points": 35.0, "zone_id": "z", "usd_per_point": {"NQ": 20.0, "MNQ": 2.0},
-            "plan": {"stop": 30876.5, "tp1": 30806.5, "final": 30670.0, "tp1_rr": 1.0,
-                     "plan_rr": 4.9, "basis": "mínimo sin tomar en 30,670.00",
-                     "confirm_minutes": 5, "price_now": 30880.0, "distance": 29.25,
-                     "partial": 0.5, "last_entry_time": "15:30"}}
-    d = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]["description"]
-    for text in ["SI el precio sube a 30,832.25 y reacciona → VENTA",
-                 "dentro de los **5 min**", "Stop: 30,876.50 (~35 pts ≈ $700 en NQ / $70 en MNQ)",
-                 "Objetivo 1: 30,806.50 (+35 pts, 1R) → cierra el 50% y stop a breakeven",
-                 "hasta 30,670.00 (+172 pts, 4.9R)",
-                 "una vela cierra por arriba de 30,850.75", "antes de las 15:30 ET"]:
-        assert text in d, text
+            "plan": {"tp1": 30806.5, "final": 30670.0, "plan_rr": 4.9}}
+    e = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]
+    assert e["title"] == "🟡 IDEA #2 — posible VENTA · NQ"
+    assert e["description"].splitlines() == [
+        "Vigila **30,841.50** (zona 30,832.25 – 30,850.75)",
+        "🛑 SL 30,876.50 · ~35 pts ≈ $70 MNQ / $700 NQ",
+        "🎯 TP1 30,806.50 · TP 30,670.00 (4.9R)",
+        "⚠️ **No entres todavía** — espero reacción en la zona."]

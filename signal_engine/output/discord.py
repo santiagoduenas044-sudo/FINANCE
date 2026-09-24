@@ -340,11 +340,12 @@ def _side(direction: str) -> str:
 
 
 def _usd(points, per_point: dict | None) -> str:
-    """' ≈ $700 en NQ / $70 en MNQ' — empty when the point values are not
-    confirmed (see contracts.yaml operator_confirmed)."""
+    """' ≈ $70 MNQ / $700 NQ' (micro first) — empty when the point values are
+    not confirmed (see contracts.yaml operator_confirmed)."""
     if not per_point or points is None:
         return ""
-    parts = [f"${abs(points) * pv:,.0f} en {sym}" for sym, pv in per_point.items()]
+    parts = [f"${abs(points) * pv:,.0f} {sym}"
+             for sym, pv in sorted(per_point.items(), key=lambda kv: kv[1])]
     return " ≈ " + " / ".join(parts)
 
 
@@ -354,140 +355,74 @@ def _embed(title: str, description: str, color: int, footer: str) -> dict:
                         "color": color, "footer": {"text": footer}}]}
 
 
+def _targets_line(tp1, final, rr=None, *, breakeven: bool = False) -> str:
+    out = f"🎯 TP1 {_px(tp1)}" + (" → stop a BE" if breakeven else "")
+    if final is not None:
+        out += f" · TP {_px(final)}" + (f" ({rr:g}R)" if rr else "")
+    return out
+
+
+# Short on purpose: a signal is read in a few seconds on a phone. Every line is
+# a number to act on; the rules behind them live in the strategy, not the text.
 def _build_trade_idea_payload(event: OutputEvent) -> dict:
     p = event.status_payload or {}
     num, sym = p.get("number", "?"), p.get("symbol", "?")
     side = _side(p.get("direction", "LONG"))
     if event.kind == "trade_idea_cancelled":
-        return _embed(
-            f"⚪ IDEA #{num} CANCELADA — {sym}",
-            f"Posible {side.lower()} en {_px(p.get('mid'))} descartada: "
-            f"{p.get('reason', 'sin reacción')}.\nNo hubo entrada.",
-            _CANCEL_COLOR, event.disclaimer)
-    zone = "compra" if side == "COMPRA" else "venta"
+        return _embed(f"⚪ IDEA #{num} CANCELADA — {sym}",
+                      f"{p.get('reason', 'sin reacción').capitalize()}. Sin entrada.",
+                      _CANCEL_COLOR, event.disclaimer)
+    plan = p.get("plan") or {}
     risk = p.get("risk_points")
-    plan = p.get("plan")
-    if not plan:
-        return _embed(
-            f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
-            f"**Prepárate.** El precio viene de regreso a una zona de {zone}.\n\n"
-            f"👀 **Vigila:** {_px(p.get('mid'))} "
-            f"(zona {_px(p.get('bottom'))} – {_px(p.get('top'))})\n"
-            f"🛑 **Stop si se confirma:** {_px(p.get('stop'))}\n"
-            f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}\n\n"
-            f"⚠️ **NO entres todavía.** Espero que el precio reaccione en la zona. "
-            f"Si la cruza sin reaccionar, la cancelo.",
-            _IDEA_COLOR, event.disclaimer)
-    return _embed(f"🟡 TRADE IDEA #{num} — posible {side} · {sym}",
-                  _idea_plan_text(p, plan, side, zone, risk), _IDEA_COLOR, event.disclaimer)
-
-
-def _idea_plan_text(p: dict, plan: dict, side: str, zone: str, risk) -> str:
-    """Heads-up as a conditional plan: where, what to do, where it is wrong,
-    where it pays, and exactly what cancels it."""
-    long = side == "COMPRA"
-    mid, top, bottom = p.get("mid"), p.get("top"), p.get("bottom")
-    edge, far = (top, bottom) if long else (bottom, top)
-    move = "baja" if long else "sube"
-    wick = "bajista" if not long else "alcista"
-    closes = "por arriba" if long else "por debajo"
-    through = "por debajo" if long else "por arriba"
-    sign = 1 if long else -1
-    tp1, final, stop = plan.get("tp1"), plan.get("final"), plan.get("stop")
-    mins = plan.get("confirm_minutes") or 5
-    partial = plan.get("partial") or 0
-    lines = [f"**Prepárate.** El precio viene de regreso a una zona de {zone}."]
-    if plan.get("price_now") is not None and plan.get("distance") is not None:
-        lines.append(f"Precio ahora: {_px(plan['price_now'])} "
-                     f"(a {plan['distance']:.0f} pts de la zona)")
-    lines += [
-        "",
-        f"📍 **Zona:** {_px(bottom)} – {_px(top)} · óptima **{_px(mid)}**",
-        "",
-        "**✅ SI el precio " + move + f" a {_px(edge)} y reacciona → {side}**",
-        f"• Confirmación: dentro de los **{mins} min** después de tocar la zona, "
-        f"una vela de 1 min {wick} que cierre {closes} de {_px(mid)}.",
-        f"• 🛑 Stop: {_px(stop)} (~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))})",
-        f"• 🎯 Objetivo 1: {_px(tp1)} ({sign * (tp1 - mid):+.0f} pts, "
-        f"{plan.get('tp1_rr', 1):g}R) → "
-        + (f"cierra el {partial:.0%} y " if partial else "")
-        + "stop a breakeven",
-        f"• 🏁 Objetivo final: hasta {_px(final)} ({sign * (final - mid):+.0f} pts, "
-        f"{plan.get('plan_rr'):g}R) — {plan.get('basis', '')}",
-        "",
-        "**❌ SE CANCELA si:**",
-        f"• una vela cierra {through} de {_px(far)} (cruza la zona sin reaccionar)",
-        f"• pasan {mins} min desde que toca la zona y no hay reacción",
-    ]
-    if plan.get("last_entry_time"):
-        lines.append(f"• no ha regresado a la zona antes de las {plan['last_entry_time']} ET")
-    lines += ["", "⚠️ **NO entres todavía.** Te aviso con 🟢 cuando se confirme."]
-    return "\n".join(lines)
+    lines = [f"Vigila **{_px(p.get('mid'))}** (zona {_px(p.get('bottom'))} – {_px(p.get('top'))})",
+             f"🛑 SL {_px(p.get('stop'))} · ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}"]
+    if plan.get("tp1") is not None:
+        lines.append(_targets_line(plan["tp1"], plan.get("final"), plan.get("plan_rr")))
+    lines.append("⚠️ **No entres todavía** — espero reacción en la zona.")
+    return _embed(f"🟡 IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
+                  _IDEA_COLOR, event.disclaimer)
 
 
 def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
-    """Same layout as the heads-up's follow-through: zone + optimal entry,
-    stop, TP1 (breakeven), final target with the plan's R:R, price now."""
     p = event.status_payload or {}
     ctx = p.get("context") or {}
     num, sym = ctx.get("idea_number"), p.get("instrument", "?")
     direction = p.get("direction", "LONG")
     side = _side(direction)
-    entry, stop, tp1, tp2 = p.get("entry"), p.get("stop"), p.get("tp1"), p.get("tp2")
+    entry, stop = p.get("entry"), p.get("stop")
     mid = ctx.get("zone_mid", entry)
-    if ctx.get("idea_direct"):
-        title = f"⚡ SEÑAL DIRECTA #{num} — {side} · {sym}"
-        lead = "Sin aviso previo (el setup se confirmó rápido)."
-    else:
-        title = f"🟢 IDEA #{num} — {side} confirmada · {sym}"
-        lead = f"La idea #{num} se confirmó: el precio reaccionó en la zona."
-    lines = [lead, ""]
-    if ctx.get("zone_bottom") is not None:
-        lines.append(f"**Zona de entrada:** {_px(ctx.get('zone_bottom'))} – "
-                     f"{_px(ctx.get('zone_top'))} · óptima **{_px(mid)}**")
-    if stop is not None and mid is not None:
-        lines.append(f"**Stop:** {_px(stop)} (~{abs(mid - stop):.0f} pts"
-                     f"{_usd(abs(mid - stop), ctx.get('usd_per_point'))})")
-    lines.append("")
-    if tp1 is not None:
-        lines.append(f"**Objetivo 1:** {_px(tp1)} · aquí el stop pasa a breakeven")
-    if tp2 is not None:
-        rr = ctx.get("plan_rr")
-        basis = ctx.get("target_basis")
-        lines.append(f"**Objetivo final:** {_px(tp2)}" + (f" (R:R {rr:g})" if rr else "")
-                     + (f" — {basis}" if basis else ""))
-    lines += [f"**Precio ahora:** {_px(entry)}", "",
-              "✅ **El precio está en la zona — entra ahora.**"]
+    title = (f"⚡ SEÑAL DIRECTA #{num} — {side} · {sym}" if ctx.get("idea_direct")
+             else f"🟢 IDEA #{num} — {side} · {sym}")
+    risk = abs(mid - stop) if mid is not None and stop is not None else None
+    lines = [f"✅ **Entra ahora {_px(entry)}** · óptima {_px(mid)}",
+             f"🛑 SL {_px(stop)}" + (f" · ~{risk:.0f} pts{_usd(risk, ctx.get('usd_per_point'))}"
+                                     if risk is not None else ""),
+             _targets_line(p.get("tp1"), p.get("tp2"), ctx.get("plan_rr"), breakeven=True)]
     return _embed(title, "\n".join(lines), _TRADE_COLOR.get(direction, _WIN_COLOR),
                   event.disclaimer)
 
 
-_EXIT_ES = {"TP1": "PT1 alcanzado", "TP2": "Objetivo final alcanzado",
-            "STOP": "Stop", "INVALIDATION": "Invalidado", "EOD": "Cerrado a las 4pm",
-            "CANCELLED": "Cancelado"}
+_EXIT_ES = {"TP1": "TP1", "TP2": "TP final", "STOP": "Stop", "INVALIDATION": "Invalidado",
+            "EOD": "Cierre 4pm", "CANCELLED": "Cancelado"}
 
 
 def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
     p = event.status_payload or {}
     ctx = p.get("context") or {}
-    num, sym = ctx.get("idea_number"), p.get("instrument", "?")
+    num = ctx.get("idea_number")
     pts = p.get("pnl_points") or 0.0
     r = p.get("r_multiple") or 0.0
     reason = (p.get("exit_reason") or "").upper()
     label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
     if reason == "STOP" and p.get("tp1_hit"):
-        label = ("Stop en breakeven (parcial asegurado)" if p.get("partial_fraction")
-                 else "Breakeven después de PT1")
+        label = "BE tras parcial" if p.get("partial_fraction") else "Breakeven"
     mark = "✅" if pts > 1e-6 else ("➖" if abs(pts) <= 1e-6 else "🛑")
+    usd = "".join(f" · {'+' if pts >= 0 else '−'}${abs(pts) * pv:,.0f} {s}"
+                  for s, pv in sorted((ctx.get("usd_per_point") or {}).items(),
+                                      key=lambda kv: kv[1]))
     return _embed(
         f"{mark} IDEA #{num} — {label} · {pts:+.2f} pts",
-        f"{_side(p.get('direction', 'LONG')).capitalize()} {sym}: entrada "
-        f"{_px(p.get('entry'))} → salida {_px(p.get('exit_price'))}\n"
-        f"Resultado: **{pts:+.2f} pts** ({r:+.2f}R)"
-        + "".join(f" · {'+' if pts >= 0 else '−'}${abs(pts) * pv:,.0f} en {sym}"
-                  for sym, pv in (ctx.get("usd_per_point") or {}).items())
-        + (f"\nIncluye el {p['partial_fraction']:.0%} cerrado en el objetivo 1."
-           if p.get("partial_fraction") and p.get("tp1_hit") else ""),
+        f"{_px(p.get('entry'))} → {_px(p.get('exit_price'))} · {r:+.2f}R{usd}",
         _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
         event.disclaimer)
 
@@ -499,13 +434,11 @@ def _build_trade_tp1_payload(event: OutputEvent) -> dict:
     entry, tp1 = p.get("entry"), p.get("tp1")
     gained = abs(tp1 - entry) if entry is not None and tp1 is not None else None
     frac = p.get("partial_fraction") or 0
-    took = (f"Tomé parciales: {frac:.0%} cerrado en {_px(tp1)}"
-            + (f" (+{gained:.2f} pts)" if gained is not None else "") + ". "
-            if frac else (f"+{gained:.2f} pts. " if gained is not None else ""))
+    head = f"🎯 {name} — TP1" + (f" +{gained:.2f} pts" if gained is not None else "")
     return _embed(
-        f"🎯 {name} — Objetivo 1 alcanzado · {p.get('instrument', '?')}",
-        took + f"Stop movido a breakeven ({_px(entry)}): este trade ya no puede perder. "
-        f"El resto sigue hacia el objetivo final {_px(p.get('tp2'))}.",
+        head + f" · {p.get('instrument', '?')}",
+        (f"{frac:.0%} cerrado · " if frac else "")
+        + f"stop a BE {_px(entry)} · resto a {_px(p.get('tp2'))}",
         _WIN_COLOR, event.disclaimer)
 
 
