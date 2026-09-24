@@ -390,6 +390,7 @@ class GhostConfig(BaseModel):
 
 class EngineConfig(BaseModel):
     version: int = 1
+    strategy: str = "legacy"          # set by load(): the overlay in use
     data: DataConfig = Field(default_factory=DataConfig)
     validation: ValidationConfig = Field(default_factory=ValidationConfig)
     sessions: SessionsConfig = Field(default_factory=SessionsConfig)
@@ -421,6 +422,7 @@ class EngineConfig(BaseModel):
                 raise ValueError(f"unknown strategy {strategy!r}; known: {known}")
             with open(overlay_path, "r") as fh:
                 raw = _deep_merge(raw, yaml.safe_load(fh) or {})
+            raw["strategy"] = strategy
         return cls(**raw)
 
     @classmethod

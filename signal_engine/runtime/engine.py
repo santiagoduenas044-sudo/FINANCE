@@ -115,7 +115,8 @@ class BotRuntime:
         self.started_at = now
         self.last_error = None
         event = RuntimeEvent(kind="BOT_STARTED", timestamp=now,
-                             detail="Bot started; pipeline will run on next cycle().")
+                             detail=f"Bot started; strategy: {self.data_engine.cfg.strategy}. "
+                                    f"Pipeline will run on next cycle().")
         self._log(event)
         self._notify_discord(event)
         return event
@@ -369,6 +370,7 @@ class BotRuntime:
             uptime = f"{secs // 3600}h {(secs % 3600) // 60}m"
         return {
             "status": self.status.value,
+            "strategy": self.data_engine.cfg.strategy,
             "uptime": uptime,
             "feed": self.connection_state(),
             "trades_today": self.trades_today,

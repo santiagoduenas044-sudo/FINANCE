@@ -101,6 +101,6 @@ def test_live_bot_runs_the_zone_strategy_by_default(monkeypatch):
     monkeypatch.delenv("BOT_STRATEGY", raising=False)
     cfg = EngineConfig.load_active()
     assert cfg.setups.zone_retrace.enabled and not cfg.setups.orb.enabled
-    assert cfg.timeframe_roles.execution == "1m"
+    assert cfg.timeframe_roles.execution == "1m" and cfg.strategy == "zones"
     monkeypatch.setenv("BOT_STRATEGY", "legacy")
     assert not EngineConfig.load_active().setups.zone_retrace.enabled

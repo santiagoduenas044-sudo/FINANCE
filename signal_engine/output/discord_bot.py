@@ -53,7 +53,7 @@ def _status(runtime) -> str:
     open_r = p.get("open_r")
     lines = [
         f"**🤖 GHOST — {p.get('status', '?')}** · activo {p.get('uptime', '—')} "
-        f"· feed {p.get('feed', '—')}",
+        f"· feed {p.get('feed', '—')} · estrategia **{p.get('strategy', '—')}**",
         (f"Trades hoy: {p.get('trades_today', 0)} · cerrados: {p.get('closed_today', 0)} "
          f"· realizado: {realised:+.2f} pts · win rate {p.get('win_rate', '—')}"
          if realised is not None else f"Trades hoy: {p.get('trades_today', 0)}"),
