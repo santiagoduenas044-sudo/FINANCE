@@ -120,7 +120,7 @@ output:                             # Phase 5.5 — external observability adapt
     # defeats the point. -1R is absent because a stop-out is a close, not a
     # milestone.
     progress_milestones_r: [-0.5, 0.5, 1.0, 1.5, 2.0, 3.0]
-    status_digest: true           # periodic "bot is alive, here's the day"
+    status_digest: false          # hourly summary off; use !status on demand
     status_digest_minutes: 60.0   # 0 disables the timer
 
 ghost:                              # Phase 14 — GHOST intelligence layer

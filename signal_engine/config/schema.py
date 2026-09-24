@@ -184,7 +184,9 @@ class NotificationsConfig(BaseModel):
         default_factory=lambda: [-0.5, 0.5, 1.0, 1.5, 2.0, 3.0])
     # Periodic "everything is fine / here is where we stand" digest, so the
     # operator can confirm the bot is alive while away from home.
-    status_digest: bool = True
+    # Off by default: the operator found an hourly message noise. !status in
+    # Discord gives the same summary on demand.
+    status_digest: bool = False
     status_digest_minutes: float = 60.0      # 0 disables the timer
 
 

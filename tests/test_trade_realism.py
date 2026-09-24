@@ -398,6 +398,7 @@ class _Recorder:
 def test_digest_fires_once_per_interval(engine, registry):
     rec = _Recorder()
     rt = _mk_runtime(engine, registry, rec)
+    engine.cfg.output.notifications.status_digest = True
     engine.cfg.output.notifications.status_digest_minutes = 60.0
     t0 = datetime(2026, 6, 15, 12, 0, tzinfo=timezone.utc)
     assert rt.maybe_send_status_digest(t0) is True
@@ -881,3 +882,11 @@ def test_no_new_rth_entry_in_the_last_half_hour():
     off = GhostBrain(_cfg(last_entry_time=None))._decide_signal(
         _sig_at("15:50"), _state(), _ta(3.0), None, False, False, has_active=None)
     assert NoTradeReason.TOO_LATE not in off.no_trade_reasons
+
+
+def test_hourly_digest_is_off_by_default(engine, registry):
+    rec = _Recorder()
+    rt = _mk_runtime(engine, registry, rec)
+    assert EngineConfig.load().output.notifications.status_digest is False
+    assert rt.maybe_send_status_digest(datetime.now(timezone.utc)) is False
+    assert rec.digests == []
