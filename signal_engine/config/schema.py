@@ -128,11 +128,18 @@ class ZoneRetraceParams(BaseModel):
     zone_lookback_bars: int = 36      # zone_timeframe bars searched for zones
     min_zone_points: float = 3.0      # thinner gaps are noise
     max_zone_points: float = 40.0     # wider gaps put the midpoint stop inside the zone
-    stop_points: float = 20.0         # stop distance beyond the zone midpoint
-    max_risk_points: float = 35.0     # price ran too far from the zone: skip
+    # Stop beyond the origin of the move that left the gap (the candle before
+    # the displacement), measured from the zone midpoint and clamped to
+    # [min_stop_points, max_stop_points]: TradingMind's longs show exactly 20,
+    # its direct short 35.
+    min_stop_points: float = 20.0
+    max_stop_points: float = 35.0
+    stop_buffer_points: float = 1.0
+    max_risk_points: float = 50.0     # from the actual fill; price ran too far: skip
     arm_distance_points: float = 30.0  # heads-up once price is this close to the zone
     confirm_bars: int = 5             # bars after the first touch to show a reaction
-    tp1_r: float = 1.25               # first target (stop goes to breakeven there)
+    tp1_r: float = 1.0                # first target (stop goes to breakeven there)
+    tp1_max_r: float = 2.0            # ...or an untaken swing up to this R
     min_target_r: float = 2.0         # structural final target must pay at least this
     max_target_r: float = 5.0         # ...and no more than this
     fallback_target_r: float = 3.0    # no structure in range -> fixed R
@@ -148,8 +155,9 @@ class ZoneRetraceParams(BaseModel):
             return self
         return self.model_copy(update={
             f: getattr(self, f) * k for f in (
-                "min_zone_points", "max_zone_points", "stop_points",
-                "max_risk_points", "arm_distance_points")})
+                "min_zone_points", "max_zone_points", "min_stop_points",
+                "max_stop_points", "stop_buffer_points", "max_risk_points",
+                "arm_distance_points")})
 
 
 class SetupsConfig(BaseModel):

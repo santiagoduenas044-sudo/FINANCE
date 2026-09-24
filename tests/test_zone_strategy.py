@@ -27,7 +27,12 @@ def test_find_zones_marks_a_bullish_gap_with_its_stop():
     b = _bars([(95, 100, 94, 99), (99, 118, 98, 117), (117, 125, 110, 124)], freq="5min")
     (z,) = find_zones(b, "NQ", P)
     assert (z.direction, z.bottom, z.top) == (Direction.BULLISH, 100.0, 110.0)
-    assert z.stop == 105.0 - 20.0
+    assert z.stop == 105.0 - 20.0          # move origin only 12 pts away -> 20 floor
+    # A bearish gap left by a move that started far above: stop capped at 35.
+    b = _bars([(200, 250, 190, 192), (192, 193, 170, 171), (171, 180, 165, 166)],
+              freq="5min")
+    (z,) = find_zones(b, "NQ", P)
+    assert (z.direction, z.bottom, z.top, z.stop) == (Direction.BEARISH, 180, 190, 185 + 35)
 
 
 def test_zone_armed_confirmed_and_cancelled():
@@ -55,10 +60,10 @@ def test_detector_trade_plan_from_the_zone():
     ctx = AnalysisContext("NQ", one.index[-1], "RTH", htf=TimeframeView("1H", z5.iloc[:0]),
                           structure=TimeframeView("5m", z5), execution=TimeframeView("1m", one))
     (c,) = ZoneRetraceDetector(P).detect(ctx, MarketAnalysis("NQ", one.index[-1], {}))
-    assert c.entry == 108 and c.stop_loss == 85.0             # mid 105 - 20
-    risk = 23.0
-    assert c.take_profits == [108 + 1.25 * risk, 108 + 3.0 * risk]   # fallback 3R
-    assert c.market_context["zone_id"]
+    # Fill at the confirmation close; plan anchored at the midpoint 105, R=20.
+    assert c.entry == 108 and c.stop_loss == 85.0
+    assert c.take_profits == [105 + 20, 105 + 3 * 20]         # 1R, fallback 3R
+    assert c.market_context["plan_rr"] == 3.0 and c.market_context["zone_id"]
 
 
 def test_idea_board_heads_up_cancel_direct_and_numbering(tmp_path):
@@ -90,9 +95,12 @@ def test_messages_read_like_trade_ideas():
     trade = {"signal_id": "s", "instrument": "NQ", "direction": "SHORT", "entry": 100.0,
              "stop": 120.0, "tp1": 75.0, "tp2": 40.0, "pnl_points": -20.0,
              "r_multiple": -1.0, "exit_reason": "STOP", "exit_price": 120.0,
-             "context": {"idea_number": 4, "idea_direct": True}}
+             "context": {"idea_number": 4, "idea_direct": True, "zone_bottom": 95.0,
+                         "zone_top": 105.0, "zone_mid": 100.0, "plan_rr": 3.0}}
     opened = build_discord_payload(OutputEvent.from_trade_opened(trade))["embeds"][0]
     assert opened["title"] == "⚡ SEÑAL DIRECTA #4 — VENTA · NQ"
+    assert "óptima **100.00**" in opened["description"] and "(R:R 3)" in opened["description"]
+    assert "entra ahora" in opened["description"]
     closed = build_discord_payload(OutputEvent.from_trade_closed(trade))["embeds"][0]
     assert closed["title"] == "🛑 IDEA #4 — Stop · -20.00 pts"
 

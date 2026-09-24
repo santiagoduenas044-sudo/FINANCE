@@ -3,9 +3,11 @@
 #
 # Model: mark a fresh fair-value-gap zone on 5m, warn when price is coming back
 # to it ("get ready"), and only trade the FIRST retrace if price reacts there on
-# 1m. Stop = zone midpoint -/+ 20 pts; stop to breakeven at TP1; final target
-# at the nearest untaken swing (2R-5R) or 3R. Cut through without a reaction ->
-# the idea is cancelled.
+# 1m. The plan is anchored at the zone midpoint (the "optimal" entry): stop
+# beyond the origin of the move, 20-35 pts; TP1 at 1R (or a swing up to 2R),
+# where the stop goes to breakeven; final target at the nearest untaken swing
+# (2R-5R) or 3R. The paper fill is the confirmation close — what "take the
+# entry now" really gets. Cut through without a reaction -> cancelled.
 #
 # NOT calibrated on real data yet: run scripts/audit_real_data.py on the Mac
 # (it uses this same strategy) before trusting the numbers.
@@ -29,17 +31,27 @@ setups:
     zone_lookback_bars: 36          # zones from the last 3 hours
     min_zone_points: 3.0
     max_zone_points: 40.0
-    stop_points: 20.0
-    max_risk_points: 35.0
+    min_stop_points: 20.0
+    max_stop_points: 35.0
+    stop_buffer_points: 1.0
+    max_risk_points: 50.0
     arm_distance_points: 30.0
     confirm_bars: 5
-    tp1_r: 1.25
+    tp1_r: 1.0
+    tp1_max_r: 2.0
     min_target_r: 2.0
     max_target_r: 5.0
     fallback_target_r: 3.0
     expiration_bars: 5
 
+signals:
+  # R:R is judged on the plan (midpoint entry); from a fill taken a few points
+  # past the midpoint, TP1 at 1R is ~0.5-0.8R — TradingMind's own direct short
+  # was 0.55R from "price now". Only reject plans worse than that.
+  min_risk_reward: 0.5
+
 ghost:
+  min_rr: 0.5
   # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
   # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
   # Session / 15:30 cut-off / 16:00 flat / one position / cooldown still apply.

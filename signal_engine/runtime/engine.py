@@ -577,13 +577,16 @@ class BotRuntime:
                         symbol, zone_states.get(zid), zid, d.timestamp)
                     if idea is not None:
                         mc = d.signal.market_context
+                        mid = mc.get("zone_mid", d.signal.entry)
                         idea_ctx = {
                             "idea_number": idea.number, "idea_direct": idea.direct,
                             "zone_top": mc.get("zone_top"),
                             "zone_bottom": mc.get("zone_bottom"),
+                            "zone_mid": mid,
+                            "plan_rr": mc.get("plan_rr"),
                             "target_basis": mc.get("target_basis"),
                             "risk_usd_micro": self._micro_usd(
-                                symbol, abs(d.signal.entry - d.signal.stop)),
+                                symbol, abs(mid - d.signal.stop)),
                         }
                 if self.paper_tracker is not None:
                     sig = d.signal

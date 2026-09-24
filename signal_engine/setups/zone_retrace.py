@@ -18,10 +18,16 @@ Definitions (bullish; bearish is the mirror image):
       CANCELLED  a bar closed below the zone bottom first (no reaction)
       EXPIRED    confirm_bars passed after the first touch without a reaction
     Only the FIRST touch counts: a zone is used once.
-  * A candidate is emitted only on the bar where the zone CONFIRMS (bar N),
-    so the trade is known at N's close: entry = close[N], stop = midpoint -
-    stop_points, TP1 = tp1_r * risk, final target = nearest untaken swing high
-    between min_target_r and max_target_r, else fallback_target_r.
+  * Stop: beyond the origin of the displacement (lowest low of the two candles
+    before the gap, minus a buffer), clamped to min/max_stop_points from the
+    midpoint.
+  * A candidate is emitted only on the bar where the zone CONFIRMS (bar N).
+    The plan is anchored at the midpoint (the "optimal" entry): R = |mid -
+    stop|, TP1 = nearest untaken swing within [tp1_r, tp1_max_r] R else
+    tp1_r, final = nearest untaken swing within [min_target_r, max_target_r]
+    R else fallback_target_r. The fill is close[N] — what "take the entry
+    now" actually gets — and is skipped if that risks more than
+    max_risk_points or is already past TP1.
 
 `zone_states()` exposes the same per-zone judgement so the runtime can send the
 "get ready" heads-up and the cancellation, without a second implementation.
@@ -53,7 +59,7 @@ class Zone:
     formed_at: pd.Timestamp
     top: float
     bottom: float
-    stop: float                   # midpoint -/+ stop_points
+    stop: float                   # beyond the move's origin, clamped from the midpoint
 
     @property
     def mid(self) -> float:
@@ -90,7 +96,12 @@ def find_zones(bars: pd.DataFrame, symbol: str, p: ZoneRetraceParams) -> list[Zo
         raw = f"{symbol}|{d.value}|{ts[i].isoformat()}|{top:.2f}|{bottom:.2f}"
         zid = hashlib.sha256(raw.encode()).hexdigest()[:12]
         mid = (top + bottom) / 2.0
-        stop = mid - p.stop_points if d is Direction.BULLISH else mid + p.stop_points
+        if d is Direction.BULLISH:
+            origin = min(l[i - 2], l[i - 1]) - p.stop_buffer_points
+        else:
+            origin = max(h[i - 2], h[i - 1]) + p.stop_buffer_points
+        dist = min(max(abs(mid - origin), p.min_stop_points), p.max_stop_points)
+        stop = mid - dist if d is Direction.BULLISH else mid + dist
         out.append(Zone(zid, d, ts[i], top, bottom, round(stop, 4)))
     return out
 
@@ -162,11 +173,15 @@ class ZoneRetraceDetector(SetupDetector):
         p = self.p.for_symbol(ctx.symbol)
         bull = z.bullish
         stop = z.stop
+        plan_r = abs(z.mid - stop)
+        tp1, _ = self._target(ctx, analysis, z.mid, plan_r, bull, p.tp1_r, p.tp1_max_r, p.tp1_r)
+        final, basis = self._target(ctx, analysis, z.mid, plan_r, bull, p.min_target_r,
+                                    p.max_target_r, p.fallback_target_r, beyond=tp1)
         risk = abs(entry - stop)
-        if risk <= 0 or risk > p.max_risk_points:
+        beyond_tp1 = entry >= tp1 if bull else entry <= tp1
+        if risk <= 0 or risk > p.max_risk_points or beyond_tp1 \
+                or (entry <= stop if bull else entry >= stop):
             return None
-        tp1 = entry + p.tp1_r * risk if bull else entry - p.tp1_r * risk
-        final, basis = self._final_target(ctx, analysis, entry, risk, bull)
         tps = [tp1, final]
         direction = z.direction
         side = "compra" if bull else "venta"
@@ -181,25 +196,26 @@ class ZoneRetraceDetector(SetupDetector):
                 f"cerró {'arriba' if bull else 'abajo'} de la mitad ({z.mid:.2f})",
                 f"Objetivo final: {basis}",
             ],
-            invalidation_conditions=[f"Stop {stop:.2f}: {p.stop_points:g} pts "
+            invalidation_conditions=[f"Stop {stop:.2f}: {plan_r:g} pts "
                                      f"{'bajo' if bull else 'sobre'} la mitad de la zona"],
             invalidation_price=stop,
             valid_until=horizon(N, p.timeframe, p.expiration_bars),
             market_context={"session": ctx.session, "zone_id": z.zone_id,
                             "zone_top": z.top, "zone_bottom": z.bottom,
                             "zone_mid": round(z.mid, 2),
+                            "plan_rr": round(abs(final - z.mid) / plan_r, 1),
                             "target_basis": basis},
             referenced=[LevelRef("zone", z.formed_at, z.mid,
                                  f"{z.bottom:.2f}-{z.top:.2f}")],
             status=SetupStatus.VALID,
         )
 
-    def _final_target(self, ctx, analysis, entry, risk, bull) -> tuple[float, str]:
+    def _target(self, ctx, analysis, entry, risk, bull, min_r, max_r, fallback_r,
+                beyond: float | None = None) -> tuple[float, str]:
         """Nearest swing the market has not taken yet, if it pays between
-        min_target_r and max_target_r; otherwise fallback_target_r."""
-        p = self.p
-        lo = entry + p.min_target_r * risk if bull else entry - p.max_target_r * risk
-        hi = entry + p.max_target_r * risk if bull else entry - p.min_target_r * risk
+        min_r and max_r (and lies beyond `beyond`); otherwise fallback_r."""
+        lo = entry + min_r * risk if bull else entry - max_r * risk
+        hi = entry + max_r * risk if bull else entry - min_r * risk
         levels: list[float] = []
         for tf in (ctx.structure.timeframe, ctx.htf.timeframe):
             ta = analysis.by_timeframe.get(tf)
@@ -210,6 +226,8 @@ class ZoneRetraceDetector(SetupDetector):
             for s in ta.swings:
                 if s.type is not want or not lo <= s.price <= hi:
                     continue
+                if beyond is not None and ((s.price <= beyond) if bull else (s.price >= beyond)):
+                    continue
                 later = bars[bars.index > s.timestamp]
                 taken = (later[HIGH] > s.price).any() if bull else (later[LOW] < s.price).any()
                 if not taken:
@@ -217,5 +235,5 @@ class ZoneRetraceDetector(SetupDetector):
         if levels:
             lvl = min(levels) if bull else max(levels)
             return lvl, f"{'máximo' if bull else 'mínimo'} sin tomar en {lvl:,.2f}"
-        fb = entry + p.fallback_target_r * risk if bull else entry - p.fallback_target_r * risk
-        return fb, f"{p.fallback_target_r:g}R (sin estructura clara en rango)"
+        fb = entry + fallback_r * risk if bull else entry - fallback_r * risk
+        return fb, f"{fallback_r:g}R (sin estructura clara en rango)"

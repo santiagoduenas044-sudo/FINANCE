@@ -374,35 +374,38 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
 
 
 def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
+    """Same layout as the heads-up's follow-through: zone + optimal entry,
+    stop, TP1 (breakeven), final target with the plan's R:R, price now."""
     p = event.status_payload or {}
     ctx = p.get("context") or {}
     num, sym = ctx.get("idea_number"), p.get("instrument", "?")
     direction = p.get("direction", "LONG")
     side = _side(direction)
     entry, stop, tp1, tp2 = p.get("entry"), p.get("stop"), p.get("tp1"), p.get("tp2")
-    risk = abs(entry - stop) if entry is not None and stop is not None else None
-    sign = 1 if direction == "LONG" else -1
+    mid = ctx.get("zone_mid", entry)
     if ctx.get("idea_direct"):
         title = f"⚡ SEÑAL DIRECTA #{num} — {side} · {sym}"
-        lead = "Sin aviso previo: el precio llegó y reaccionó en la zona de golpe."
+        lead = "Sin aviso previo (el setup se confirmó rápido)."
     else:
         title = f"🟢 IDEA #{num} — {side} confirmada · {sym}"
-        lead = "El precio reaccionó en la zona. **Entrada ahora.**"
-    lines = [lead, "",
-             f"▶️ **Entrada:** {_px(entry)}",
-             f"🛑 **Stop:** {_px(stop)} (−{risk:.2f} pts{_usd(ctx.get('risk_usd_micro'))})"
-             if risk is not None else f"🛑 **Stop:** {_px(stop)}"]
-    if tp1 is not None:
-        lines.append(f"🎯 **PT1:** {_px(tp1)} ({sign * (tp1 - entry):+.2f} pts) "
-                     f"→ ahí muevo el stop a breakeven")
-    if tp2 is not None:
-        r = abs(tp2 - entry) / risk if risk else None
-        basis = ctx.get("target_basis")
-        lines.append(f"🏁 **Objetivo final:** {_px(tp2)} ({sign * (tp2 - entry):+.2f} pts"
-                     + (f" · {r:.1f}R" if r else "") + ")"
-                     + (f" — {basis}" if basis else ""))
+        lead = f"La idea #{num} se confirmó: el precio reaccionó en la zona."
+    lines = [lead, ""]
     if ctx.get("zone_bottom") is not None:
-        lines.append(f"\nZona: {_px(ctx.get('zone_bottom'))} – {_px(ctx.get('zone_top'))}")
+        lines.append(f"**Zona de entrada:** {_px(ctx.get('zone_bottom'))} – "
+                     f"{_px(ctx.get('zone_top'))} · óptima **{_px(mid)}**")
+    if stop is not None and mid is not None:
+        lines.append(f"**Stop:** {_px(stop)} (~{abs(mid - stop):.0f} pts"
+                     f"{_usd(ctx.get('risk_usd_micro'))})")
+    lines.append("")
+    if tp1 is not None:
+        lines.append(f"**Objetivo 1:** {_px(tp1)} · aquí el stop pasa a breakeven")
+    if tp2 is not None:
+        rr = ctx.get("plan_rr")
+        basis = ctx.get("target_basis")
+        lines.append(f"**Objetivo final:** {_px(tp2)}" + (f" (R:R {rr:g})" if rr else "")
+                     + (f" — {basis}" if basis else ""))
+    lines += [f"**Precio ahora:** {_px(entry)}", "",
+              "✅ **El precio está en la zona — entra ahora.**"]
     return _embed(title, "\n".join(lines), _TRADE_COLOR.get(direction, _WIN_COLOR),
                   event.disclaimer)
 
