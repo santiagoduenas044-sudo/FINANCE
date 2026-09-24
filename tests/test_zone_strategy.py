@@ -86,16 +86,18 @@ def test_idea_board_heads_up_cancel_direct_and_numbering(tmp_path):
 def test_messages_read_like_trade_ideas():
     idea = {"event": "idea", "number": 3, "symbol": "NQ", "direction": "LONG",
             "mid": 21450.25, "top": 21460.5, "bottom": 21440.0, "stop": 21430.25,
-            "risk_points": 20.0, "zone_id": "z", "risk_usd_micro": 40.0}
+            "risk_points": 20.0, "zone_id": "z",
+            "usd_per_point": {"NQ": 20.0, "MNQ": 2.0}}
     e = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]
     assert e["title"] == "🟡 TRADE IDEA #3 — posible COMPRA · NQ"
     assert "21,450.25" in e["description"] and "NO entres todavía" in e["description"]
-    assert "$40.00 por micro" in e["description"]
+    assert "~20 pts ≈ $400 en NQ / $40 en MNQ" in e["description"]
 
     trade = {"signal_id": "s", "instrument": "NQ", "direction": "SHORT", "entry": 100.0,
              "stop": 120.0, "tp1": 75.0, "tp2": 40.0, "pnl_points": -20.0,
              "r_multiple": -1.0, "exit_reason": "STOP", "exit_price": 120.0,
              "context": {"idea_number": 4, "idea_direct": True, "zone_bottom": 95.0,
+                         "usd_per_point": {"NQ": 20.0, "MNQ": 2.0},
                          "zone_top": 105.0, "zone_mid": 100.0, "plan_rr": 3.0}}
     opened = build_discord_payload(OutputEvent.from_trade_opened(trade))["embeds"][0]
     assert opened["title"] == "⚡ SEÑAL DIRECTA #4 — VENTA · NQ"
@@ -103,6 +105,7 @@ def test_messages_read_like_trade_ideas():
     assert "entra ahora" in opened["description"]
     closed = build_discord_payload(OutputEvent.from_trade_closed(trade))["embeds"][0]
     assert closed["title"] == "🛑 IDEA #4 — Stop · -20.00 pts"
+    assert "· −$400 en NQ · −$40 en MNQ" in closed["description"]
 
 
 def test_live_bot_runs_the_zone_strategy_by_default(monkeypatch):

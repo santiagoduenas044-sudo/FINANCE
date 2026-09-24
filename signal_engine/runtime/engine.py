@@ -585,8 +585,7 @@ class BotRuntime:
                             "zone_mid": mid,
                             "plan_rr": mc.get("plan_rr"),
                             "target_basis": mc.get("target_basis"),
-                            "risk_usd_micro": self._micro_usd(
-                                symbol, abs(mid - d.signal.stop)),
+                            "usd_per_point": self._point_values(symbol),
                         }
                 if self.paper_tracker is not None:
                     sig = d.signal
@@ -666,26 +665,28 @@ class BotRuntime:
         if not events or self.output_dispatcher is None or not ncfg.trade_ideas:
             return
         for ev in events:
-            ev["risk_usd_micro"] = self._micro_usd(symbol, ev.get("risk_points") or 0)
+            ev["usd_per_point"] = self._point_values(symbol)
             try:
                 self.output_dispatcher.publish_trade_idea(ev)
             except Exception as exc:  # noqa: BLE001
                 log.warning("trade idea notification failed (%s)", type(exc).__name__)
         self._update_discord_health()
 
-    def _micro_usd(self, symbol: str, points: float) -> float | None:
-        """Dollar value of `points` on one micro contract — only from
-        VERIFIED contract specs; None otherwise (never a guessed number)."""
+    def _point_values(self, symbol: str) -> dict | None:
+        """{"NQ": 20.0, "MNQ": 2.0}: dollars per point for the contract and its
+        micro — only when the operator/CME confirmed them; None otherwise
+        (never a guessed number)."""
         try:
-            if not self.registry.verified:
-                return None
+            out = {}
+            if self.registry.display_confirmed(symbol):
+                out[symbol] = self.registry.spec(symbol).point_value
             for sym in self.registry.symbols():
                 spec = self.registry.spec(sym)
-                if spec.micro_of == symbol:
-                    return round(points * spec.point_value, 2)
+                if spec.micro_of == symbol and self.registry.display_confirmed(sym):
+                    out[sym] = spec.point_value
+            return out or None
         except Exception:  # noqa: BLE001
-            pass
-        return None
+            return None
 
     def _persist_ghost(self, decision) -> None:
         if self.ghost_log_path is None:

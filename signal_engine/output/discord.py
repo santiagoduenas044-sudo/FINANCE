@@ -339,8 +339,13 @@ def _side(direction: str) -> str:
     return "COMPRA" if direction == "LONG" else "VENTA"
 
 
-def _usd(v) -> str:
-    return f" ≈ ${v:,.2f} por micro" if v is not None else ""
+def _usd(points, per_point: dict | None) -> str:
+    """' ≈ $700 en NQ / $70 en MNQ' — empty when the point values are not
+    confirmed (see contracts.yaml operator_confirmed)."""
+    if not per_point or points is None:
+        return ""
+    parts = [f"${abs(points) * pv:,.0f} en {sym}" for sym, pv in per_point.items()]
+    return " ≈ " + " / ".join(parts)
 
 
 def _embed(title: str, description: str, color: int, footer: str) -> dict:
@@ -367,7 +372,7 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
         f"👀 **Vigila:** {_px(p.get('mid'))} "
         f"(zona {_px(p.get('bottom'))} – {_px(p.get('top'))})\n"
         f"🛑 **Stop si se confirma:** {_px(p.get('stop'))}\n"
-        f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(p.get('risk_usd_micro'))}\n\n"
+        f"⚖️ **Riesgo:** ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}\n\n"
         f"⚠️ **NO entres todavía.** Espero que el precio reaccione en la zona. "
         f"Si la cruza sin reaccionar, la cancelo.",
         _IDEA_COLOR, event.disclaimer)
@@ -395,7 +400,7 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
                      f"{_px(ctx.get('zone_top'))} · óptima **{_px(mid)}**")
     if stop is not None and mid is not None:
         lines.append(f"**Stop:** {_px(stop)} (~{abs(mid - stop):.0f} pts"
-                     f"{_usd(ctx.get('risk_usd_micro'))})")
+                     f"{_usd(abs(mid - stop), ctx.get('usd_per_point'))})")
     lines.append("")
     if tp1 is not None:
         lines.append(f"**Objetivo 1:** {_px(tp1)} · aquí el stop pasa a breakeven")
@@ -432,6 +437,8 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
         f"{_side(p.get('direction', 'LONG')).capitalize()} {sym}: entrada "
         f"{_px(p.get('entry'))} → salida {_px(p.get('exit_price'))}\n"
         f"Resultado: **{pts:+.2f} pts** ({r:+.2f}R)"
+        + "".join(f" · {'+' if pts >= 0 else '−'}${abs(pts) * pv:,.0f} en {sym}"
+                  for sym, pv in (ctx.get("usd_per_point") or {}).items())
         + (f"\nIncluye el {p['partial_fraction']:.0%} cerrado en el objetivo 1."
            if p.get("partial_fraction") and p.get("tp1_hit") else ""),
         _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),

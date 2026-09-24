@@ -90,6 +90,10 @@ class ContractRegistry:
     def verification(self) -> dict:
         return dict(self._file.verification)
 
+    def display_confirmed(self, symbol: str) -> bool:
+        """Point value trusted for DISPLAY (messages). Not for sizing."""
+        return self._file.verified or symbol in self._file.operator_confirmed
+
     def symbols(self) -> list[str]:
         return list(self._file.contracts.keys())
 

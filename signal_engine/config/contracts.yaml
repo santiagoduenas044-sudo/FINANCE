@@ -34,6 +34,11 @@ verification:
         search-engine synthesis, NOT a direct read of the primary source, so
         it was deliberately NOT used to set verified: true.
 
+# Point values confirmed by the operator (2026-09-24: NQ = $20 per point) and
+# consistent with TradingMind's "~35 pts ≈ $70 per micro" (MNQ = $2 per point).
+# Used ONLY to show dollar figures in Discord; sizing still needs verified: true.
+operator_confirmed: [NQ, MNQ]
+
 # Month codes for quarterly index futures cycle.
 month_codes:
   H: 3    # March

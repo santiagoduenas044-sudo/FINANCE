@@ -495,6 +495,9 @@ class ContractsFile(BaseModel):
     version: int = 1
     verified: bool = False
     verification: dict = Field(default_factory=dict)
+    # Symbols whose point value the operator has confirmed. Enough to SHOW
+    # dollar figures in messages; the RiskEngine still requires `verified`.
+    operator_confirmed: list[str] = Field(default_factory=list)
     month_codes: dict[str, int] = Field(default_factory=dict)
     contracts: dict[str, ContractSpec] = Field(default_factory=dict)
 
