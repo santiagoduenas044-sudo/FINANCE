@@ -170,7 +170,11 @@ def test_service_persists_signals_to_disk(engine, registry, tmp_path):
     # which survives a restart.
     entries = read_signal_log(log_path)
     assert isinstance(entries, list)
-    assert log_path.exists() == (len(entries) > 0 or True)  # file created on any decision
+    # Persisted exactly what the cycle produced — no more, no less. (This used
+    # to assume the final sample bar always yields a decision; it only did via
+    # a sweep of an already-swept level, which the detector now ignores.)
+    assert len(entries) == len(rt.recent_signals)
+    assert log_path.exists() == bool(rt.recent_signals)
     # A fresh runtime pointed at the same log reads the same history.
     assert read_signal_log(log_path) == entries
 

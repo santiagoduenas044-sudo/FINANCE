@@ -481,13 +481,18 @@ def test_case_D_cooldown_blocks_immediate_reentry(engine, registry, tmp_path):
     if not (tmp_path / "g.jsonl").exists():
         pytest.skip("no ghost decisions in the sample under this config")
     decisions = [json.loads(l) for l in (tmp_path / "g.jsonl").read_text().splitlines()]
-    # If any close happened, a subsequent base signal should have been
-    # rejected for cooldown at least once.
+    # Every scored signal landing inside a post-loss cooldown window must be
+    # refused for cooldown. (The old form asserted that SOME cooldown
+    # rejection happened, which silently depended on a signal happening to
+    # arrive within 3 bars of a loss.)
     lost = [t for t in tracker.closed_trades
             if t.exit_reason and t.exit_reason.value in ("STOP", "INVALIDATION")]
-    if not lost:
-        pytest.skip("no losing trades in sample; cooldown path not exercised")
-    assert any("cooldown" in d["no_trade_reasons"] for d in decisions)
+    windows = [(t.closed_at, t.closed_at + pd.Timedelta(minutes=5 * 3)) for t in lost]
+    inside = [d for d in decisions if d["score"] is not None
+              and any(a < pd.Timestamp(d["timestamp"]) < b for a, b in windows)]
+    if not inside:
+        pytest.skip("no scored signal fell inside a cooldown window in this sample")
+    assert all("cooldown" in d["no_trade_reasons"] for d in inside)
 
 
 # --------------------------------------------------------------------------- #
