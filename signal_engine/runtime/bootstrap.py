@@ -151,10 +151,7 @@ def build_runtime(
         ghost = GhostBrain(gcfg)
         ghost_log = DEFAULT_GHOST_LOG
         if gcfg.paper_enabled:
-            paper_tracker = PaperTradeTracker(
-                store_dir=DEFAULT_PAPER_DIR,
-                breakeven_after_tp1=gcfg.breakeven_after_tp1,
-                partial_at_tp1=gcfg.partial_at_tp1)
+            paper_tracker = PaperTradeTracker.from_config(gcfg, store_dir=DEFAULT_PAPER_DIR)
 
     # Phase 16 Fix 1: Wire RiskEngine so the dashboard shows a real risk status
     # instead of "DISABLED". The CME require_verified() guard remains intact —

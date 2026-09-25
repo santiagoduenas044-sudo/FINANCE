@@ -126,6 +126,19 @@ h3.sec { margin: 0 0 8px; font-size: 10px; letter-spacing: .12em; text-transform
 .g-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .g-brain { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
 .mb { margin-bottom: 6px; }
+/* backtest */
+.btform { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.btform label { display: flex; flex-direction: column; gap: 3px; color: var(--ink-3); font-size: 10px;
+  text-transform: uppercase; letter-spacing: .06em; }
+.btform select, .btform input, #bt-runs { background: var(--bg); color: var(--ink-1); border: 1px solid var(--rule);
+  font: inherit; padding: 3px 6px; color-scheme: dark; }
+.btform button { padding: 5px 14px; font-weight: 800; letter-spacing: .06em; color: #000; background: var(--good); }
+.btform button.cancel { background: var(--critical); color: #fff; }
+.btform button:disabled { background: #1b1e24; color: var(--ink-3); cursor: default; }
+.btbar { height: 6px; background: var(--rule); margin-top: 8px; }
+.btbar > div { height: 100%; width: 0; background: var(--amber); transition: width .4s; }
+.btnote { color: var(--ink-3); font-size: 11px; margin-top: 6px; }
+tr.best td { background: rgba(31, 216, 115, .08); }
 
 .tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: 10px;
   font-weight: 800; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
@@ -290,7 +303,7 @@ svg.chart .axis { stroke: var(--rule); stroke-width: 1; }
     <div class="brand" title="GHOST — terminal de señales en papel">GHOST</div>
     <form class="cmd" id="cmdform" autocomplete="off" role="search">
       <label for="cmd">&gt;</label>
-      <input id="cmd" type="text" spellcheck="false" placeholder="NQ · TRADES · 1-5" aria-label="Línea de comando">
+      <input id="cmd" type="text" spellcheck="false" placeholder="NQ · TRADES · 1-6" aria-label="Línea de comando">
       <button class="go" type="submit" title="Ejecutar">GO</button>
     </form>
     <div class="sec"><span class="tk" id="sec-tk">—</span><span class="nm" id="sec-nm">sin instrumento</span></div>
@@ -318,6 +331,7 @@ svg.chart .axis { stroke: var(--rule); stroke-width: 1; }
     <button type="button" data-view="funnel"><b>3</b>Embudo</button>
     <button type="button" data-view="trades"><b>4</b>Trades</button>
     <button type="button" data-view="audit"><b>5</b>Auditoría</button>
+    <button type="button" data-view="backtest"><b>6</b>Backtest</button>
     <div class="gap"></div>
     <div id="symtabs" style="display:flex;gap:1px" role="group" aria-label="Instrumento"></div>
   </nav>
@@ -490,6 +504,57 @@ svg.chart .axis { stroke: var(--rule); stroke-width: 1; }
         </div>
       </div>
     </section>
+
+    <!-- ═════════ 6 · BACKTEST ═════════ -->
+    <section class="view" id="v-backtest">
+      <div class="panel mb">
+        <div class="ph"><span class="mn">BT</span><h2>Nueva prueba</h2><div class="gap"></div>
+          <span class="pill"><span class="k">estado</span><span class="v" id="bt-state">—</span></span></div>
+        <div class="pb">
+          <form class="btform" id="bt-form">
+            <label>Datos <select id="bt-data"></select></label>
+            <label>Estrategia <select id="bt-strategy"></select></label>
+            <label>Desde <input type="date" id="bt-start" required></label>
+            <label>Hasta <input type="date" id="bt-end" required></label>
+            <button type="submit" id="bt-go">CORRER</button>
+            <button type="button" class="cancel" id="bt-cancel" hidden>CANCELAR</button>
+          </form>
+          <div class="btbar" id="bt-bar" hidden><div id="bt-fill"></div></div>
+          <div class="btnote" id="bt-note"></div>
+        </div>
+      </div>
+      <div class="panel mb">
+        <div class="ph"><span class="mn">RES</span><h2>Resultados</h2><div class="gap"></div>
+          <select id="bt-runs" aria-label="Backtest guardado"></select></div>
+        <div class="pb" id="bt-head"></div>
+      </div>
+      <div class="grid g-4 mb" id="bt-tiles"></div>
+      <div class="grid g-2 mb">
+        <div class="panel">
+          <div class="ph"><span class="mn">EQ</span><h2>Curva de capital (R, con costos)</h2></div>
+          <div class="pb"><div id="bt-equity"></div></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="mn">STP</span><h2>Manejo del stop · mismas señales</h2></div>
+          <div class="pb tight scroll" id="bt-policies"></div>
+        </div>
+      </div>
+      <div class="grid g-2 mb">
+        <div class="panel">
+          <div class="ph"><span class="mn">HR</span><h2>Por hora de entrada (ET)</h2></div>
+          <div class="pb tight scroll" id="bt-hours"></div>
+        </div>
+        <div class="panel">
+          <div class="ph"><span class="mn">MIX</span><h2>Tipo de señal · filtro · salidas</h2></div>
+          <div class="pb tight scroll" id="bt-mix"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="ph"><span class="mn">TRD</span><h2>Operaciones</h2><div class="gap"></div>
+          <span class="pill"><span class="v" id="bt-n">0</span></span></div>
+        <div class="pb tight scroll" style="max-height:420px" id="bt-trades"></div>
+      </div>
+    </section>
   </main>
 
   <!-- ═════════ línea de estado ═════════ -->
@@ -608,10 +673,11 @@ const S = {
 };
 
 /* ───────────────────────── navegación y comando ───────────────────────── */
-const VIEWS = ["tape", "brain", "funnel", "trades", "audit"];
+const VIEWS = ["tape", "brain", "funnel", "trades", "audit", "backtest"];
 const VIEW_ALIAS = { TAPE: "tape", GP: "tape", GRAFICO: "tape", GRÁFICO: "tape",
   CEREBRO: "brain", BRAIN: "brain", EMBUDO: "funnel", FUNNEL: "funnel",
-  TRADES: "trades", OPERACIONES: "trades", AUDIT: "audit", AUDITORIA: "audit", AUDITORÍA: "audit" };
+  TRADES: "trades", OPERACIONES: "trades", AUDIT: "audit", AUDITORIA: "audit", AUDITORÍA: "audit",
+  BACKTEST: "backtest", BT: "backtest" };
 
 function setView(v) {
   if (!VIEWS.includes(v)) return;
@@ -637,14 +703,14 @@ $("cmdform").addEventListener("submit", async e => {
   const raw = inp.value.trim().toUpperCase().replace(/\s*<?GO>?$/, "").trim();
   inp.value = "";
   if (!raw) return;
-  // Tras un comando válido se suelta el foco: si no, las teclas rápidas 1-5
+  // Tras un comando válido se suelta el foco: si no, las teclas rápidas 1-6
   // siguientes se escriben en la línea en vez de cambiar de pantalla.
-  if (/^[1-5]$/.test(raw)) { inp.blur(); setView(VIEWS[Number(raw) - 1]); return; }
+  if (/^[1-6]$/.test(raw)) { inp.blur(); setView(VIEWS[Number(raw) - 1]); return; }
   if (VIEW_ALIAS[raw]) { inp.blur(); setView(VIEW_ALIAS[raw]); return; }
   const sym = raw.replace(/1?\s*(INDEX|COMDTY)?$/, "").trim();
   if (S.symbols.includes(sym)) { inp.blur(); await setSymbol(sym); setView("tape"); return; }
-  inp.placeholder = `«${raw}» no existe · prueba NQ, TRADES o 1-5`;
-  setTimeout(() => { inp.placeholder = "NQ · TRADES · 1-5"; }, 3500);
+  inp.placeholder = `«${raw}» no existe · prueba NQ, TRADES o 1-6`;
+  setTimeout(() => { inp.placeholder = "NQ · TRADES · 1-6"; }, 3500);
 });
 
 document.addEventListener("keydown", e => {
@@ -652,7 +718,7 @@ document.addEventListener("keydown", e => {
   if (e.key === "/" && !typing) { e.preventDefault(); $("cmd").focus(); return; }
   if (e.key === "Escape" && typing) { document.activeElement.blur(); return; }
   if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[1-5]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
+  if (/^[1-6]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
   if (S.view !== "tape" || !CH.chart) return;
   if (e.key === "+" || e.key === "=") { zoomBy(0.7); e.preventDefault(); }
   else if (e.key === "-" || e.key === "_") { zoomBy(1 / 0.7); e.preventDefault(); }
@@ -1734,6 +1800,181 @@ async function renderEngine() {
 }
 
 /* ═══════════════════════ orquestación ═══════════════════════ */
+/* ═══════════════════════ 6 · BACKTEST ═══════════════════════ */
+const BT = { opts: null, runs: [], sel: null, data: null, status: null, init: false };
+const btKey = d => `${d.symbol}|${d.data}`;
+
+async function btInit() {
+  BT.init = true;
+  try { BT.opts = await api("/api/backtest/options"); } catch { BT.opts = { datasets: [], strategies: [] }; }
+  const ds = BT.opts.datasets;
+  $("bt-data").innerHTML = ds.length ? ds.map(d => `<option value="${esc(btKey(d))}">${esc(d.symbol)} · ${esc(d.data)}
+    (${esc(d.first)} → ${esc(d.last)})</option>`).join("") : `<option value="">sin datos descargados</option>`;
+  $("bt-strategy").innerHTML = BT.opts.strategies.map(s => `<option>${esc(s)}</option>`).join("");
+  const best = ds.find(d => d.data === "DATABENTO") || ds[0];
+  if (best) { $("bt-data").value = btKey(best); btDefaultDates(best); }
+  $("bt-data").onchange = () => btDefaultDates(ds.find(d => btKey(d) === $("bt-data").value));
+  ["bt-start", "bt-end"].forEach(i => $(i).onchange = btEstimate);
+  await btPoll(true);
+}
+
+function btDefaultDates(d) {
+  if (!d) return;
+  $("bt-start").min = $("bt-end").min = d.first; $("bt-start").max = $("bt-end").max = d.last;
+  const end = new Date(d.last + "T12:00:00Z"), start = new Date(end);
+  start.setUTCMonth(start.getUTCMonth() - 1);
+  $("bt-end").value = d.last;
+  $("bt-start").value = start.toISOString().slice(0, 10) < d.first ? d.first : start.toISOString().slice(0, 10);
+  btEstimate();
+}
+
+function btEstimate() {
+  const a = new Date($("bt-start").value + "T12:00:00Z"), b = new Date($("bt-end").value + "T12:00:00Z");
+  if (!(a <= b)) { $("bt-note").textContent = "Revisa las fechas."; return; }
+  let days = 0;
+  for (let d = new Date(a); d <= b; d.setUTCDate(d.getUTCDate() + 1)) if (d.getUTCDay() % 6) days++;
+  const mins = Math.max(1, Math.round(days * 390 * 0.012 / 60 + 2));
+  if (BT.status?.state !== "running")
+    $("bt-note").textContent = `${days} sesiones · tiempo estimado ≈ ${mins < 60 ? mins + " min" : (mins / 60).toFixed(1) + " h"}`
+      + " (en la Mac; el bot en vivo sigue funcionando).";
+}
+
+async function btPoll(first = false) {
+  const prev = BT.status?.state;
+  try { BT.status = await api("/api/backtest/status"); } catch { return; }
+  if (first || (prev === "running" && BT.status.state !== "running")) {
+    try { BT.runs = (await api("/api/backtest/runs")).runs || []; } catch { BT.runs = []; }
+    if (BT.runs.length && (first ? !BT.sel : BT.status.state === "done")) await btSelect(BT.runs[0].id);
+  }
+}
+
+async function btSelect(id) {
+  BT.sel = id;
+  try { BT.data = await api("/api/backtest/runs/" + encodeURIComponent(id)); } catch { BT.data = null; }
+  renderBacktest();
+}
+
+$("bt-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const [symbol, data] = ($("bt-data").value || "|").split("|");
+  $("bt-go").disabled = true;
+  try {
+    const r = await fetch("/api/backtest/run", { method: "POST",
+      headers: { "Content-Type": "application/json", ...(TOKEN ? { Authorization: "Bearer " + TOKEN } : {}) },
+      body: JSON.stringify({ symbol, data, start: $("bt-start").value, end: $("bt-end").value,
+        strategy: $("bt-strategy").value }) });
+    const j = await r.json();
+    if (!r.ok) $("bt-note").textContent = "⚠ " + (j.detail || r.status);
+    else BT.status = j;
+  } catch (err) { $("bt-note").textContent = "⚠ " + err.message; }
+  renderBacktest();
+});
+$("bt-cancel").onclick = async () => { try { BT.status = await api("/api/backtest/cancel", { method: "POST" }); } catch {} renderBacktest(); };
+$("bt-runs").onchange = () => btSelect($("bt-runs").value);
+
+function btRow(label, s, pv, extra = "") {
+  const R = `style="text-align:right"`;
+  if (!s) return `<tr${extra}><td>${esc(label)}</td><td colspan="7" class="zero">—</td></tr>`;
+  const pf = s.pf == null ? "∞" : num(s.pf, 2);
+  return `<tr${extra}><td style="color:var(--ink-1)">${esc(label)}</td><td class="num" ${R}>${s.n}</td>
+    <td class="num" ${R}>${(s.wr * 100).toFixed(0)}%</td><td class="num ${cls(s.exp)}" ${R}>${sgn(s.exp, 3)}R</td>
+    <td class="num" ${R}>${pf}</td><td class="num ${cls(s.net)}" style="text-align:right;font-weight:800">${sgn(s.net, 1)}R</td>
+    <td class="num neg" ${R}>${num(s.dd, 1)}R</td>
+    <td class="num ${cls(s.pts)}" ${R}>${pv ? (s.pts >= 0 ? "+$" : "−$") + Math.abs(s.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td></tr>`;
+}
+function btTable(rows) {
+  const R = `style="text-align:right"`;
+  return `<table><thead><tr><th></th><th ${R}>Trades</th><th ${R}>Acierto</th><th ${R}>Esperanza</th>
+    <th ${R}>PF</th><th ${R}>Neto</th><th ${R}>Caída</th><th ${R}>$ (1 ${esc(BT.data?.meta?.symbol || "")})</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function btEquitySvg(eq) {
+  if (eq.length < 2) return `<div class="empty"><span class="ic">◇</span>Pocas operaciones para una curva.</div>`;
+  const W = 100, H = 170, P = { t: 10, r: 4, b: 20, l: 30 };
+  const vals = [0, ...eq.map(p => p.cum)];
+  const lo = Math.min(...vals), hi = Math.max(...vals), rng = (hi - lo) || 1;
+  const x = i => P.l + (i / (vals.length - 1)) * (W - P.l - P.r);
+  const y = v => P.t + (1 - (v - lo) / rng) * (H - P.t - P.b);
+  const pts = vals.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`);
+  const col = css(vals[vals.length - 1] >= 0 ? "--good" : "--critical");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+      aria-label="Curva de capital del backtest en R">
+    ${[hi, (hi + lo) / 2, lo].map(t => `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${y(t).toFixed(2)}"
+      y2="${y(t).toFixed(2)}" vector-effect="non-scaling-stroke"/>`).join("")}
+    <line x1="${P.l}" x2="${W - P.r}" y1="${y(0).toFixed(2)}" y2="${y(0).toFixed(2)}" stroke="${css("--rule")}"
+      stroke-width="1" vector-effect="non-scaling-stroke"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:5px 4px 0 30px">
+      <span>${esc(String(eq[0].t).slice(0, 10))}</span><span>${esc(String(eq[eq.length - 1].t).slice(0, 10))}</span></div>
+    <p class="foot">De ${num(lo, 1)}R a ${num(hi, 1)}R · ${eq.length} operaciones, costos incluidos.</p>`;
+}
+
+function renderBacktest() {
+  if (!BT.init) { btInit().then(renderBacktest); return; }
+  const st = BT.status || { state: "idle" };
+  const running = st.state === "running";
+  $("bt-state").textContent = { idle: "listo", running: "corriendo", done: "terminado", failed: "falló" }[st.state] || st.state;
+  $("bt-go").disabled = running || !(BT.opts?.datasets || []).length;
+  $("bt-cancel").hidden = !running;
+  $("bt-bar").hidden = !running;
+  if (running) {
+    const p = st.progress || {};
+    $("bt-fill").style.width = ((p.pct || 0) * 100).toFixed(1) + "%";
+    const pct = ((p.pct || 0) * 100).toFixed(0);
+    const eta = p.pct > 0.02 ? Math.round(st.elapsed * (1 - p.pct) / p.pct / 60) : null;
+    $("bt-note").textContent = p.stage === "shadow" ? "Comparando reglas de stop…"
+      : `${pct}% · ${p.at || "cargando datos…"} · ${p.trades ?? 0} trades · ${Math.round(st.elapsed / 60)} min`
+        + (eta != null ? ` · faltan ≈ ${eta} min` : "");
+  } else if (st.state === "failed") {
+    $("bt-note").textContent = "⚠ Falló: " + (st.log_tail || []).slice(-2).join(" ");
+  }
+  $("bt-runs").innerHTML = BT.runs.map(r => `<option value="${esc(r.id)}" ${r.id === BT.sel ? "selected" : ""}>
+    ${esc(r.meta?.start)} → ${esc(r.meta?.end)} · ${esc(r.meta?.strategy)} · ${sgn(r.total?.net, 1)}R</option>`).join("");
+
+  const d = BT.data;
+  if (!d) {
+    $("bt-head").innerHTML = `<div class="empty"><span class="ic">◇</span>Todavía no hay backtests. Elige fechas y dale a CORRER.</div>`;
+    ["bt-tiles", "bt-equity", "bt-policies", "bt-hours", "bt-mix", "bt-trades"].forEach(i => $(i).innerHTML = "");
+    return;
+  }
+  const m = d.meta || {}, t = d.total, pv = m.point_value;
+  $("bt-head").innerHTML = `<span class="pill"><span class="k">${esc(m.symbol)}</span><span class="v">${esc(m.start)} → ${esc(m.end)}</span></span>
+    &nbsp;<span class="pill"><span class="k">sesiones</span><span class="v">${m.sessions}</span></span>
+    &nbsp;<span class="pill"><span class="k">estrategia</span><span class="v">${esc(m.strategy)}</span></span>
+    &nbsp;<span class="pill"><span class="k">datos</span><span class="v">${esc(m.data)}</span></span>
+    &nbsp;<span class="pill"><span class="k">costo</span><span class="v">${num(m.cost_points, 2)} pts/trade</span></span>`
+    + (t && t.n < 30 ? `<p class="foot">⚠ Menos de 30 operaciones: no alcanza para sacar conclusiones.</p>` : "");
+  $("bt-tiles").innerHTML = !t ? "" :
+    tile("Resultado neto", sgn(t.net, 1) + "R", pv ? `${t.pts >= 0 ? "+" : "−"}$${Math.abs(t.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 })} con 1 ${esc(m.symbol)} · ${sgn(t.pts, 1)} pts` : "", t.net >= 0 ? "good" : "critical") +
+    tile("Operaciones · acierto", `${t.n} · ${(t.wr * 100).toFixed(0)}%`, `esperanza ${sgn(t.exp, 3)}R por trade`, t.exp >= 0 ? "good" : "critical") +
+    tile("Factor de beneficio", t.pf == null ? "∞" : num(t.pf, 2), "ganado ÷ perdido", (t.pf ?? 9) >= 1 ? "good" : "critical") +
+    tile("Máxima caída", "−" + num(t.dd, 1) + "R", "peor racha, en múltiplos de tu stop", "critical");
+  $("bt-equity").innerHTML = btEquitySvg(d.equity || []);
+  const pol = Object.entries(d.policies || {});
+  const bestNet = Math.max(...pol.map(([, s]) => s?.net ?? -1e9));
+  $("bt-policies").innerHTML = btTable(pol.map(([k, s]) => btRow(k, s, pv, s && s.net === bestNet ? ' class="best"' : "")).join(""))
+    + `<p class="foot" style="padding:0 8px 8px">Cada fila vuelve a jugar las mismas señales aprobadas con otra regla de stop. Verde = mayor neto.</p>`;
+  $("bt-hours").innerHTML = btTable(Object.entries(d.by_hour || {}).map(([h, s]) => btRow(h, s, pv)).join(""));
+  $("bt-mix").innerHTML = btTable(
+    Object.entries(d.by_kind || {}).map(([k, s]) => btRow(k === "directa" ? "⚡ señal directa" : "🟢 con aviso", s, pv)).join("") +
+    Object.entries(d.shadow || {}).map(([k, s]) => btRow("filtro: " + k, s, pv)).join(""))
+    + `<p class="foot" style="padding:0 8px 8px">Salidas: ${Object.entries(d.exits || {}).map(([k, v]) => `${esc(EXIT_ES[k] || k)} ${v}`).join(" · ") || "—"}
+      · Ideas avisadas ${d.funnel?.ideas?.idea ?? 0} · canceladas ${d.funnel?.ideas?.cancelled ?? 0}</p>`;
+  const tr = (d.trades || []).slice().reverse();
+  $("bt-n").textContent = tr.length;
+  const R = `style="text-align:right"`;
+  $("bt-trades").innerHTML = tr.length ? `<table><thead><tr><th>Entrada ET</th><th>Dir.</th><th>Tipo</th>
+      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>R</th></tr></thead><tbody>` +
+    tr.map(x => `<tr><td class="t">${esc(String(x.opened_at).slice(0, 16).replace("T", " "))}</td>
+      <td><span class="tag ${x.direction === "LONG" ? "up" : "down"}">${x.direction === "LONG" ? "▲" : "▼"}</span></td>
+      <td>${x.direct ? "⚡" : "🟢"} ${x.idea ? "#" + x.idea : ""}</td>
+      <td class="num" ${R}>${num(x.entry)}</td><td class="num" ${R}>${num(x.exit_price)}</td>
+      <td>${esc(EXIT_ES[x.exit] || x.exit)}</td>
+      <td class="num ${cls(x.pnl_pts)}" ${R}>${sgn(x.pnl_pts)}</td>
+      <td class="num ${cls(x.r)}" style="text-align:right;font-weight:800">${sgn(x.r)}R</td></tr>`).join("") + "</tbody></table>"
+    : `<div class="empty"><span class="ic">◇</span>Sin operaciones en este periodo.</div>`;
+}
+
 function renderAll() {
   paintHeader(); paintNews();
   switch (S.view) {
@@ -1742,6 +1983,7 @@ function renderAll() {
     case "funnel": renderFunnel(); renderRejectBars(); renderSetupConversion(); break;
     case "trades": renderPerfTiles(); renderEquity(); renderRDist(); renderTradeTables(); break;
     case "audit":  renderAudit(); renderEngine(); break;
+    case "backtest": renderBacktest(); break;
   }
 }
 
@@ -1753,6 +1995,7 @@ async function refresh() {
     // Las velas son de 5 minutos: basta con pedir el gráfico cada ~15 s. Así el
     // celular por Tailscale no descarga 600 velas cada 5 s.
     const jobs = [pollStatus(), pollGhost(), pollDecisions(), pollTrades()];
+    if (S.view === "backtest") jobs.push(btPoll());
     if (S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     await Promise.all(jobs);
     renderAll();

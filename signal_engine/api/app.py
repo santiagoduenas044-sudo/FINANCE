@@ -22,6 +22,7 @@ from ..config.runtime_settings import ServerSettings
 from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
 
+from .backtest import BacktestError, BacktestManager
 from .chart import build_chart_data
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -51,12 +52,13 @@ def _extract_token(request: Request) -> str:
 
 
 def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
-               service=None) -> FastAPI:
+               service=None, backtests: BacktestManager | None = None) -> FastAPI:
     settings = settings or ServerSettings()
     app = FastAPI(title="Futures Signal Engine — Control Dashboard")
     app.state.settings = settings
     app.state.service = service
     app.state.started_at = time.time()
+    backtests = backtests or BacktestManager(Path(__file__).resolve().parents[2])
 
     # -- CORS: only when explicitly configured (never a wildcard) ---------- #
     if settings.cors_origins:
@@ -252,6 +254,42 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             "event": {"kind": event.kind, "timestamp": event.timestamp.isoformat(),
                      "detail": event.detail},
         }
+
+    # -- Backtests (dashboard "Backtest" view) ------------------------------ #
+    @app.get("/api/backtest/options")
+    def backtest_options() -> dict:
+        return {"datasets": backtests.datasets(), "strategies": backtests.strategies()}
+
+    @app.get("/api/backtest/status")
+    def backtest_status() -> dict:
+        return backtests.status()
+
+    @app.post("/api/backtest/run")
+    async def backtest_run(request: Request) -> dict:
+        body = await request.json()
+        try:
+            return backtests.start(symbol=str(body.get("symbol", "NQ")),
+                                   data=str(body.get("data", "")),
+                                   start=str(body.get("start", "")),
+                                   end=str(body.get("end", "")),
+                                   strategy=str(body.get("strategy", "zones")))
+        except BacktestError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/backtest/cancel")
+    def backtest_cancel() -> dict:
+        return backtests.cancel()
+
+    @app.get("/api/backtest/runs")
+    def backtest_runs() -> dict:
+        return {"runs": backtests.runs()}
+
+    @app.get("/api/backtest/runs/{run_id}")
+    def backtest_get(run_id: str) -> dict:
+        try:
+            return backtests.get(run_id)
+        except BacktestError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

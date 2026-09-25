@@ -115,3 +115,86 @@ def render_trade_png(bars: pd.DataFrame, trade: dict, *, title: str = "",
     fig.savefig(buf, format="png", facecolor=_BG)
     plt.close(fig)
     return buf.getvalue()
+
+
+def render_plan_png(bars: pd.DataFrame, *, direction: str, zone_bottom: float,
+                    zone_top: float, entry: float, stop: float, tp1: float | None,
+                    final: float | None, title: str = "", status: str = "",
+                    entered: bool = False) -> bytes:
+    """The plan BEFORE / AT the entry: recent 1m candles, the zone with what
+    has to happen there, the optimal entry line, and the planned position
+    (reward / risk boxes, TP1) projected to the right of the last candle."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    bars = bars.tail(120)
+    n, ahead = len(bars), 28
+    long = direction == "LONG"
+    side = "COMPRA" if long else "VENTA"
+    fig, ax = plt.subplots(figsize=(9, 4.8), dpi=110)
+    fig.patch.set_facecolor(_BG)
+    ax.set_facecolor(_BG)
+
+    # the zone: where it has to happen
+    ax.axhspan(zone_bottom, zone_top, color="#f1c40f", alpha=0.16, zorder=0)
+    ax.text(1, zone_top if long else zone_bottom,
+            f" ZONA {zone_bottom:,.2f} – {zone_top:,.2f}: si entra aquí y reacciona → {side}",
+            color="#f1c40f", fontsize=8, va="bottom" if long else "top", zorder=6,
+            bbox={"boxstyle": "round,pad=0.25", "facecolor": _BG, "edgecolor": "none", "alpha": 0.8})
+
+    # planned position, drawn ahead of the last candle
+    x0, width = n + 1, ahead - 3
+    far = final if final is not None else tp1
+    if far is not None:
+        risk = abs(entry - stop) or 1e-9
+        for a, b, color in ((entry, far, _REWARD), (entry, stop, _RISK)):
+            ax.add_patch(Rectangle((x0, min(a, b)), width, abs(b - a), facecolor=color,
+                                   alpha=0.22, edgecolor=color, linewidth=0.8, zorder=1))
+        ax.text(x0 + 0.5, far, f" TP {far:,.2f} ({abs(far - entry) / risk:.1f}R)",
+                color=_REWARD, fontsize=7.5, va="top" if far > entry else "bottom", zorder=4)
+        ax.text(x0 + 0.5, stop, f" SL {stop:,.2f} ({risk:.0f} pts)", color=_RISK, fontsize=7.5,
+                va="bottom" if long else "top", zorder=4)
+    if tp1 is not None and tp1 != far:
+        ax.hlines(tp1, x0, x0 + width, color=_REWARD, linewidth=0.9, linestyles="--", zorder=3)
+        ax.text(x0 + 0.5, tp1, f" TP1 {tp1:,.2f} → BE", color=_REWARD, fontsize=7,
+                va="bottom", zorder=4)
+    ax.hlines(entry, 0, x0 + width, color="#b2b5be", linewidth=1.0,
+              linestyles="-" if entered else "--", zorder=3)
+    ax.text(x0 + 0.5, entry, f" {'ENTRADA' if entered else 'ÓPTIMA'} {entry:,.2f}",
+            color="#e0e0e0", fontsize=7.5, va="top" if long else "bottom", zorder=4)
+
+    for x, (_, b) in enumerate(bars.iterrows()):
+        c = _UP if b["close"] >= b["open"] else _DOWN
+        ax.vlines(x, b["low"], b["high"], color=c, linewidth=0.8, zorder=2)
+        o, cl = sorted((b["open"], b["close"]))
+        ax.add_patch(Rectangle((x - 0.35, o), 0.7, max(cl - o, 0.25), color=c,
+                               linewidth=0, zorder=2))
+    ax.axvline(n - 0.5, color=_GRID, linewidth=1, zorder=1)
+
+    lo = min(bars["low"].min(), stop, zone_bottom, *(v for v in (tp1, far) if v is not None))
+    hi = max(bars["high"].max(), stop, zone_top, *(v for v in (tp1, far) if v is not None))
+    pad = (hi - lo) * 0.06 or 1.0
+    ax.set_ylim(lo - pad, hi + pad)
+    ax.set_xlim(-1, n + ahead)
+    step = max(1, n // 6)
+    ax.set_xticks(list(range(n))[::step])
+    ax.set_xticklabels([t.strftime("%H:%M") for t in bars.index[::step]], color=_FG, fontsize=8)
+    ax.tick_params(colors=_FG, labelsize=8)
+    ax.yaxis.tick_right()
+    ax.grid(color=_GRID, linewidth=0.6, zorder=0)
+    for s in ax.spines.values():
+        s.set_color(_GRID)
+    if title:
+        ax.set_title(title, color=_FG, fontsize=10, loc="left")
+    if status:
+        ax.text(0.01, 0.97, status, transform=ax.transAxes, color="#000", fontsize=9,
+                fontweight="bold", va="top", zorder=7,
+                bbox={"boxstyle": "round,pad=0.35",
+                      "facecolor": _REWARD if entered else "#f1c40f", "edgecolor": "none"})
+    buf = io.BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format="png", facecolor=_BG)
+    plt.close(fig)
+    return buf.getvalue()

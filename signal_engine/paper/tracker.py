@@ -28,7 +28,9 @@ from .models import ExitReason, PaperTrade, TradeStatus
 
 class PaperTradeTracker:
     def __init__(self, store_dir: str | Path | None = None,
-                 breakeven_after_tp1: bool = False, partial_at_tp1: float = 0.0):
+                 breakeven_after_tp1: bool = False, partial_at_tp1: float = 0.0,
+                 be_trigger_r: float | None = None, be_offset_points: float = 0.0,
+                 trail_start_r: float | None = None, trail_distance_r: float = 1.0):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
         # the stop to entry instead and that giveback becomes ~0R. Measured on
@@ -40,6 +42,17 @@ class PaperTradeTracker:
         # Close this fraction of the position at TP1 ("take partials") and let
         # the rest run to TP2. 0 = all-or-nothing, the previous behaviour.
         self.partial_at_tp1 = min(max(partial_at_tp1, 0.0), 1.0)
+        # Stop management, applied after each bar for the NEXT bar (a level
+        # moved on this bar can never close it retroactively). The stop only
+        # ever tightens. None disables each rule.
+        #   be_trigger_r: once the trade has run this many R in its favour,
+        #     stop to entry (+ be_offset_points, e.g. to cover costs).
+        #   trail_start_r / trail_distance_r: once it has run trail_start_r R,
+        #     the stop follows the best price at trail_distance_r R behind.
+        self.be_trigger_r = be_trigger_r
+        self.be_offset_points = be_offset_points
+        self.trail_start_r = trail_start_r
+        self.trail_distance_r = trail_distance_r
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
         # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
@@ -48,6 +61,14 @@ class PaperTradeTracker:
         self._store_dir = Path(store_dir) if store_dir else None
         if self._store_dir is not None:
             self._load()
+
+    @classmethod
+    def from_config(cls, gcfg, store_dir: str | Path | None = None) -> "PaperTradeTracker":
+        """The tracker exactly as the live bot runs it for a GhostConfig."""
+        return cls(store_dir=store_dir, breakeven_after_tp1=gcfg.breakeven_after_tp1,
+                   partial_at_tp1=gcfg.partial_at_tp1, be_trigger_r=gcfg.be_trigger_r,
+                   be_offset_points=gcfg.be_offset_points, trail_start_r=gcfg.trail_start_r,
+                   trail_distance_r=gcfg.trail_distance_r)
 
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
@@ -219,8 +240,28 @@ class PaperTradeTracker:
                     # Takes effect from the NEXT bar: this bar's protective
                     # levels were already evaluated above, so the move can
                     # never retroactively close a trade that was still alive.
-                    trade.stop = trade.entry
+                    # Never loosens a stop a trailing rule already tightened.
+                    trade.stop = self._tighter(trade, trade.stop, trade.entry)
+        self._manage_stop(trade)
         self._save_open()
+
+    @staticmethod
+    def _tighter(trade: PaperTrade, current: float, proposed: float) -> float:
+        return max(current, proposed) if trade.is_long else min(current, proposed)
+
+    def _manage_stop(self, trade: PaperTrade) -> None:
+        """Breakeven and trailing rules (see __init__). Uses the best price
+        reached so far, including this bar; effective from the next bar."""
+        long = trade.is_long
+        new = trade.stop
+        if self.be_trigger_r is not None and trade.mfe_r >= self.be_trigger_r:
+            off = self.be_offset_points
+            new = self._tighter(trade, new, trade.entry + off if long else trade.entry - off)
+        if self.trail_start_r is not None and trade.mfe_r >= self.trail_start_r:
+            gap = self.trail_distance_r * trade.initial_risk
+            best = trade.entry + trade.mfe_points if long else trade.entry - trade.mfe_points
+            new = self._tighter(trade, new, best - gap if long else best + gap)
+        trade.stop = new
 
     def invalidate_symbol(self, instrument: str, price: float,
                           bar_time: pd.Timestamp, reason: str = "structure") -> list[PaperTrade]:

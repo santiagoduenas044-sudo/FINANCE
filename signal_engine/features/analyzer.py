@@ -40,6 +40,25 @@ class MarketAnalysis:
     by_timeframe: dict[str, TimeframeAnalysis]
 
 
+class LazyAnalysis:
+    """Stands in for a MarketAnalysis and computes it on first use. A detector
+    that decides from the bars alone (zone_retrace, most bars) never pays for
+    the full structure scan; one that reads `.by_timeframe` gets the same
+    result it always did."""
+
+    def __init__(self, analyzer: "MarketAnalyzer", ctx: AnalysisContext):
+        self._analyzer, self._ctx, self._value = analyzer, ctx, None
+
+    @property
+    def computed(self) -> bool:
+        return self._value is not None
+
+    def __getattr__(self, name):
+        if self._value is None:
+            self._value = self._analyzer.analyze(self._ctx)
+        return getattr(self._value, name)
+
+
 class MarketAnalyzer:
     def __init__(self, provider: MarketStructureProvider | None = None,
                  backend: str = "native", provider_kwargs: dict | None = None,

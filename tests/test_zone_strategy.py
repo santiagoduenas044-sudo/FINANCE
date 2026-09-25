@@ -1,4 +1,5 @@
 """Zone-retrace strategy: zone judgement, trade plan, idea lifecycle, messages."""
+import pytest
 import pandas as pd
 
 from signal_engine.config.schema import EngineConfig, ZoneRetraceParams
@@ -90,7 +91,7 @@ def test_messages_read_like_trade_ideas():
             "usd_per_point": {"NQ": 20.0, "MNQ": 2.0}}
     e = build_discord_payload(OutputEvent.from_trade_idea(idea))["embeds"][0]
     assert e["title"] == "🟡 IDEA #3 — posible COMPRA · NQ"
-    assert "Vigila **21,450.25**" in e["description"] and "No entres todavía" in e["description"]
+    assert "Vigila **21,450.25**" in e["description"] and "No entres aún" in e["description"]
     assert "~20 pts ≈ $40 MNQ / $400 NQ" in e["description"]
 
     trade = {"signal_id": "s", "instrument": "NQ", "direction": "SHORT", "entry": 100.0,
@@ -145,4 +146,61 @@ def test_heads_up_is_short_and_has_the_numbers():
         "Vigila **30,841.50** (zona 30,832.25 – 30,850.75)",
         "🛑 SL 30,876.50 · ~35 pts ≈ $70 MNQ / $700 NQ",
         "🎯 TP1 30,806.50 · TP 30,670.00 (4.9R)",
-        "⚠️ **No entres todavía** — espero reacción en la zona."]
+        "⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún."]
+
+
+def _bar(h, l, c):
+    return pd.Series({"open": c, "high": h, "low": l, "close": c})
+
+
+def test_breakeven_trigger_and_trailing_only_tighten():
+    from signal_engine.paper.tracker import PaperTradeTracker
+    tr = PaperTradeTracker(be_trigger_r=0.5, trail_start_r=1.0, trail_distance_r=0.5)
+    t = tr.open_trade(signal_id="tr", instrument="NQ", direction="LONG", setup="zone_retrace",
+                      entry=100.0, stop=80.0, take_profits=[200.0], opened_at=T0)
+    m = lambda k: T0 + pd.Timedelta(minutes=k)
+    tr.update_on_bar(t, _bar(111, 99, 110), m(1))      # +0.55R -> stop to entry
+    assert t.stop == 100.0
+    tr.update_on_bar(t, _bar(130, 115, 128), m(2))     # +1.5R -> trail 0.5R (10) behind 130
+    assert t.stop == 120.0
+    tr.update_on_bar(t, _bar(129, 121, 125), m(3))     # pullback: stop never loosens
+    assert t.stop == 120.0 and t.is_open
+    tr.update_on_bar(t, _bar(124, 118, 119), m(4))     # trailing stop hit
+    assert not t.is_open and t.pnl_points == 20.0
+    closed = build_discord_payload(OutputEvent.from_trade_closed(
+        {**t.to_dict(), "context": {"idea_number": 7}}))["embeds"][0]
+    assert closed["title"] == "✅ IDEA #7 — Trailing stop · +20.00 pts"
+
+
+def test_stop_move_message_is_short():
+    trade = {"signal_id": "x", "instrument": "NQ", "direction": "SHORT", "entry": 100.0,
+             "stop": 90.0, "tp2": 40.0, "current_price": 80.0, "context": {"idea_number": 3}}
+    e = build_discord_payload(OutputEvent.from_stop_moved(trade, 100.0))["embeds"][0]
+    assert e["title"] == "🔒 IDEA #3 — trailing: stop a 90.00 · NQ"
+    assert e["description"] == "Asegura +10.00 pts · precio 80.00 · resto a 40.00"
+
+
+def test_heads_up_goes_out_with_its_chart():
+    from signal_engine.config.schema import DiscordOutputConfig
+    from signal_engine.output.discord import DiscordOutputAdapter
+    sent = []
+    adapter = DiscordOutputAdapter(
+        DiscordOutputConfig(enabled=True), webhook_url="https://discord.invalid/x",
+        transport=lambda *a: pytest.fail("a chart must go as a file upload"),
+        file_transport=lambda url, payload, data, name, timeout: sent.append((payload, name)) or 200)
+    idea = {"event": "idea", "number": 1, "symbol": "NQ", "direction": "LONG", "mid": 10.0,
+            "top": 11.0, "bottom": 9.0, "stop": -10.0, "risk_points": 20.0, "zone_id": "z"}
+    assert adapter.emit(OutputEvent.from_trade_idea(idea, image_png=b"\x89PNG"))
+    payload, name = sent[0]
+    assert payload["embeds"][0]["image"] == {"url": f"attachment://{name}"}
+
+
+def test_plan_chart_renders():
+    pytest.importorskip("matplotlib")
+    from signal_engine.output.trade_chart import render_plan_png
+    bars = pd.DataFrame({"open": [10.0, 11], "high": [12.0, 12], "low": [9.0, 10],
+                         "close": [11.0, 10.5]},
+                        index=pd.date_range(T0, periods=2, freq="1min"))
+    png = render_plan_png(bars, direction="SHORT", zone_bottom=11, zone_top=12, entry=11.5,
+                          stop=15, tp1=8, final=2, status="ESPERANDO")
+    assert png[:4] == b"\x89PNG"

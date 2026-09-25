@@ -76,8 +76,7 @@ def replay(t: dict, bars: pd.DataFrame, cfg: EngineConfig):
     """Same entry/stop/targets, today's tracker + end-of-day rule."""
     g = cfg.ghost
     de = DataEngine(cfg)
-    tr = PaperTradeTracker(breakeven_after_tp1=g.breakeven_after_tp1,
-                           partial_at_tp1=g.partial_at_tp1)
+    tr = PaperTradeTracker.from_config(g)
     opened = pd.Timestamp(t["opened_at"])
     trade = tr.open_trade(signal_id=t["signal_id"], instrument=t["instrument"],
                           direction=t["direction"], setup=t["setup"], entry=t["entry"],

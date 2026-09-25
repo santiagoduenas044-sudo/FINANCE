@@ -48,7 +48,7 @@ from signal_engine.data.models import SESSION  # noqa: E402
 from signal_engine.data.providers.csv_provider import CsvProvider  # noqa: E402
 from signal_engine.ghost.brain import GhostBrain  # noqa: E402
 from signal_engine.paper.tracker import PaperTradeTracker  # noqa: E402
-from signal_engine.runtime.engine import BotRuntime  # noqa: E402
+from signal_engine.runtime.engine import BotRuntime, eod_due  # noqa: E402
 from signal_engine.runtime.ideas import IdeaBoard  # noqa: E402
 from signal_engine.setups.engine import SetupEngine  # noqa: E402
 from signal_engine.signals.engine import SignalEngine  # noqa: E402
@@ -102,8 +102,19 @@ def download(symbol: str, days: int) -> Path:
 # --------------------------------------------------------------------------- #
 # replay
 # --------------------------------------------------------------------------- #
+def _progress(path: str | None, **fields) -> None:
+    """Small JSON the dashboard polls while a backtest runs."""
+    if not path:
+        return
+    try:
+        Path(path).write_text(json.dumps(fields))
+    except OSError:
+        pass
+
+
 def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | None,
-           start: str | None = None, end: str | None = None):
+           start: str | None = None, end: str | None = None,
+           progress_file: str | None = None):
     cfg = EngineConfig.load(strategy=strategy)
     reg = ContractRegistry.load()
     de = DataEngine(cfg, reg)
@@ -112,10 +123,10 @@ def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | No
     tfs = [roles.execution, roles.structure, roles.context]
     exec_bars = tf_all[roles.execution]
 
-    tracker = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1,
-                               partial_at_tp1=cfg.ghost.partial_at_tp1)
+    tracker = PaperTradeTracker.from_config(cfg.ghost)
     rt = BotRuntime(de, SetupEngine(cfg, reg), SignalEngine(cfg.signals), reg,
                     ghost=GhostBrain(cfg.ghost), paper_tracker=tracker)
+    rt.track_market_state = False   # decisions unchanged; skips idle-bar analysis
     ideas: Counter = Counter()
     if cfg.setups.zone_retrace.enabled:
         rt.idea_board = IdeaBoard(None, timezone=cfg.data.timezone)
@@ -159,6 +170,7 @@ def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | No
         keep &= exec_bars.index < stop_at
     steps = exec_bars.index[keep]
     t0 = time.time()
+    _progress(progress_file, stage="replay", pct=0.0, at=None, elapsed=0)
     for i, N in enumerate(steps):
         lo = N - pd.Timedelta(days=history_days)
         window = {tf: tf_all[tf].loc[lo:N] for tf in tfs}
@@ -166,39 +178,90 @@ def replay(symbol: str, provider: CsvProvider, contract: str, strategy: str | No
         if i % max(1, len(steps) // 10) == 0:
             print(f"  replay {i / len(steps):4.0%}  {N:%Y-%m-%d %H:%M}  "
                   f"({time.time() - t0:.0f}s)", file=sys.stderr, flush=True)
+        if i % max(1, len(steps) // 200) == 0:
+            _progress(progress_file, stage="replay", pct=round(i / len(steps), 4),
+                      at=f"{N:%Y-%m-%d %H:%M}", elapsed=round(time.time() - t0),
+                      trades=len(tracker.closed_trades))
     return cfg, de, exec_bars, steps, tracker, candidates, decisions, ideas
 
 
+# Stop-management variants replayed on the SAME approved signals, so the
+# table says which rule actually pays on this data instead of guessing.
+STOP_POLICIES = {
+    "config actual": {},
+    "sin BE ni trailing": dict(breakeven_after_tp1=False, be_trigger_r=None,
+                               trail_start_r=None),
+    "BE a 0.5R": dict(be_trigger_r=0.5),
+    "BE a 1R": dict(be_trigger_r=1.0),
+    "trailing 1R desde 1R": dict(trail_start_r=1.0, trail_distance_r=1.0),
+    "trailing 0.5R desde 1.5R": dict(trail_start_r=1.5, trail_distance_r=0.5),
+    "BE 1R + trailing 1R desde 2R": dict(be_trigger_r=1.0, trail_start_r=2.0,
+                                         trail_distance_r=1.0),
+}
+
+
+def _tracker(cfg, policy: dict) -> PaperTradeTracker:
+    g = cfg.ghost
+    base = dict(breakeven_after_tp1=g.breakeven_after_tp1, partial_at_tp1=g.partial_at_tp1,
+                be_trigger_r=g.be_trigger_r, be_offset_points=g.be_offset_points,
+                trail_start_r=g.trail_start_r, trail_distance_r=g.trail_distance_r)
+    return PaperTradeTracker(**{**base, **policy})
+
+
+class _Arrays:
+    def __init__(self, bars):
+        self.index = bars.index
+        self.h = bars["high"].to_numpy(float)
+        self.l = bars["low"].to_numpy(float)
+        self.c = bars["close"].to_numpy(float)
+        self.session = bars[SESSION].to_numpy()
+
+
+def _simulate(s, cfg, arr: _Arrays, policy: dict):
+    """One signal on its own, from the bar after the signal to its close
+    (same end-of-day rule as the bot). None if the data ends first."""
+    tr = _tracker(cfg, policy)
+    t = tr.open_trade(signal_id=s.signal_id, instrument=s.instrument,
+                      direction=s.direction.value, setup=s.setup, entry=s.entry,
+                      stop=s.stop, take_profits=list(s.take_profits),
+                      opened_at=s.timestamp, invalidation_price=s.invalidation_price)
+    if t is None:
+        return None
+    g = cfg.ghost
+    for i in range(arr.index.searchsorted(s.timestamp, side="right"), len(arr.index)):
+        ts = arr.index[i]
+        tr.update_on_bar(t, {"high": arr.h[i], "low": arr.l[i], "close": arr.c[i]}, ts)
+        if t.is_open and g.eod_close_enabled and eod_due(arr.session[i], ts, g.eod_close_time):
+            tr.close_symbol_eod(s.instrument, float(arr.c[i]), ts)
+        if not t.is_open:
+            return t
+    return None
+
+
 def shadow(cfg, de, exec_bars, decisions):
-    """Simulate every scored signal on its own, EOD close included."""
+    """Simulate every scored signal on its own, EOD close included; approved
+    ones also under each STOP_POLICIES variant."""
     out = []
-    ts_index = exec_bars.index
+    arr = _Arrays(exec_bars)
     for d in decisions:
         s = d.signal
         if s is None or d.confluence is None:
             continue
-        tr = PaperTradeTracker(breakeven_after_tp1=cfg.ghost.breakeven_after_tp1,
-                               partial_at_tp1=cfg.ghost.partial_at_tp1)
-        t = tr.open_trade(signal_id=s.signal_id, instrument=s.instrument,
-                          direction=s.direction.value, setup=s.setup, entry=s.entry,
-                          stop=s.stop, take_profits=list(s.take_profits),
-                          opened_at=s.timestamp, invalidation_price=s.invalidation_price)
+        t = _simulate(s, cfg, arr, {})
         if t is None:
-            continue
-        for N in ts_index[ts_index.searchsorted(s.timestamp, side="right"):]:
-            tr.update_on_bar(t, exec_bars.loc[N], N)
-            if t.is_open and de.classifier.classify(N) != "RTH":
-                tr.close_symbol_eod(s.instrument, float(exec_bars.loc[N, "close"]), N)
-            if not t.is_open:
-                break
-        if t.is_open:
             continue                        # ran off the end of the data
-        out.append({"setup": s.setup, "direction": s.direction.value,
-                    "hour": s.timestamp.hour, "score": d.confluence.score,
-                    "approved": d.action != "NO_TRADE",
-                    "reasons": [r.value for r in d.no_trade_reasons],
-                    "risk_pts": t.initial_risk, "pnl_pts": t.pnl_points,
-                    "exit": t.exit_reason.value if t.exit_reason else "?"})
+        row = {"setup": s.setup, "direction": s.direction.value,
+               "hour": s.timestamp.hour, "score": d.confluence.score,
+               "approved": d.action != "NO_TRADE",
+               "reasons": [r.value for r in d.no_trade_reasons],
+               "risk_pts": t.initial_risk, "pnl_pts": t.pnl_points,
+               "exit": t.exit_reason.value if t.exit_reason else "?", "policy_pnl": {}}
+        if row["approved"]:
+            for name, pol in STOP_POLICIES.items():
+                v = _simulate(s, cfg, arr, pol) if pol else t
+                if v is not None:
+                    row["policy_pnl"][name] = v.pnl_points
+        out.append(row)
     return out
 
 
@@ -225,10 +288,10 @@ def stats(rows, cost):
 
 def line(label, s, pv=None):
     if s is None:
-        return f"  {label:<26} —"
+        return f"  {label:<30} —"
     pf = "inf" if s["pf"] == float("inf") else f"{s['pf']:.2f}"
     usd = f"  ${s['pts'] * pv:>9,.0f}" if pv else ""
-    return (f"  {label:<26}{s['n']:>4}  WR {s['wr']:>4.0%}  exp {s['exp']:+.3f}R  "
+    return (f"  {label:<30}{s['n']:>4}  WR {s['wr']:>4.0%}  exp {s['exp']:+.3f}R  "
             f"PF {pf:>5}  net {s['net']:+6.1f}R  DD {s['dd']:4.1f}R{usd}")
 
 
@@ -290,6 +353,11 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
         rows = [x for x in shadow_rows if reason in x["reasons"]]
         if rows:
             print(line(f"rechazo {reason}", stats(rows, cost)))
+    print("\n-- Manejo del stop: mismas señales aprobadas, distintas reglas --")
+    for name in STOP_POLICIES:
+        rows = [{"pnl_pts": x["policy_pnl"][name], "risk_pts": x["risk_pts"]}
+                for x in shadow_rows if name in x.get("policy_pnl", {})]
+        print(line(name, stats(rows, cost)))
     print("\nLectura: si 'rechazadas' rinde igual o mejor que 'aprobadas', el filtro de GHOST"
           "\nno está separando nada. Si los scores altos no rinden más que los bajos, el"
           "\nscore de confluencia no predice resultado. Un exp menor que 0 después de costos"
@@ -299,6 +367,67 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
     out.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(shadow_rows).to_csv(out, index=False)
     print(f"\nDetalle por señal guardado en {out.relative_to(ROOT)}")
+
+
+def _json_safe(x):
+    if isinstance(x, float):
+        return None if x != x or x in (float("inf"), float("-inf")) else round(x, 4)
+    if isinstance(x, dict):
+        return {str(k): _json_safe(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_json_safe(v) for v in x]
+    return x
+
+
+def summary(symbol, strategy, contract, steps, tracker, candidates, decisions, shadow_rows,
+            cost, ideas) -> dict:
+    """Everything report() prints, as data for the dashboard's backtest view."""
+    pv = ContractRegistry.load().spec(symbol).point_value
+    closed = sorted(tracker.closed_trades, key=lambda t: t.closed_at)
+    rows = [{"pnl_pts": t.pnl_points, "risk_pts": t.initial_risk, "hour": t.opened_at.hour,
+             "exit": t.exit_reason.value,
+             "direct": bool((t.context or {}).get("idea_direct"))} for t in closed]
+    cum, equity, trades = 0.0, [], []
+    for t in closed:
+        r = (t.pnl_points - cost) / t.initial_risk
+        cum += r
+        equity.append({"t": t.closed_at.isoformat(), "cum": cum})
+        trades.append({"opened_at": t.opened_at.isoformat(), "closed_at": t.closed_at.isoformat(),
+                       "direction": t.direction, "entry": t.entry,
+                       "exit_price": t.exit_price, "exit": t.exit_reason.value,
+                       "pnl_pts": t.pnl_points - cost, "r": r,
+                       "idea": (t.context or {}).get("idea_number"),
+                       "direct": bool((t.context or {}).get("idea_direct"))})
+    by_hour = defaultdict(list)
+    for x in rows:
+        by_hour[x["hour"]].append(x)
+    approved = [x for x in shadow_rows if x["approved"]]
+    return {
+        "meta": {"symbol": symbol, "strategy": strategy, "data": contract,
+                 "start": steps[0].strftime("%Y-%m-%d") if len(steps) else None,
+                 "end": steps[-1].strftime("%Y-%m-%d") if len(steps) else None,
+                 "sessions": len({ts.date() for ts in steps}), "cost_points": cost,
+                 "point_value": pv,
+                 "generated_at": pd.Timestamp.now(tz="America/New_York").isoformat()},
+        "funnel": {"candidates": dict(candidates),
+                   "scored": sum(1 for d in decisions if d.signal is not None),
+                   "approved": sum(1 for d in decisions if d.action != "NO_TRADE"),
+                   "rejections": dict(Counter(r.value for d in decisions
+                                              for r in d.no_trade_reasons).most_common(10)),
+                   "ideas": dict(ideas)},
+        "total": stats(rows, cost),
+        "by_kind": {"con aviso": stats([x for x in rows if not x["direct"]], cost),
+                    "directa": stats([x for x in rows if x["direct"]], cost)},
+        "by_hour": {f"{h:02d}:00": stats(v, cost) for h, v in sorted(by_hour.items())},
+        "exits": dict(Counter(x["exit"] for x in rows)),
+        "shadow": {"aprobadas": stats(approved, cost),
+                   "rechazadas": stats([x for x in shadow_rows if not x["approved"]], cost)},
+        "policies": {name: stats([{"pnl_pts": x["policy_pnl"][name], "risk_pts": x["risk_pts"]}
+                                  for x in approved if name in x["policy_pnl"]], cost)
+                     for name in STOP_POLICIES},
+        "equity": equity,
+        "trades": trades[-500:],
+    }
 
 
 def main() -> None:
@@ -313,6 +442,8 @@ def main() -> None:
                     help='estrategia (default la del bot: "zones"; "legacy" = setups 5m)')
     ap.add_argument("--start", help="replay desde YYYY-MM-DD (datos largos: ve por tramos)")
     ap.add_argument("--end", help="replay hasta YYYY-MM-DD, inclusive")
+    ap.add_argument("--json-out", help="guardar el resumen en JSON (dashboard)")
+    ap.add_argument("--progress-file", help="JSON de avance mientras corre (dashboard)")
     a = ap.parse_args()
     strategy = None if a.strategy in ("", "legacy") else a.strategy
 
@@ -323,9 +454,16 @@ def main() -> None:
     cost = a.cost_points if a.cost_points is not None else COST_POINTS[a.symbol]
 
     cfg, de, exec_bars, steps, tracker, cands, decisions, ideas = replay(
-        a.symbol, CsvProvider(root), a.contract, strategy, a.start, a.end)
+        a.symbol, CsvProvider(root), a.contract, strategy, a.start, a.end, a.progress_file)
+    _progress(a.progress_file, stage="shadow", pct=1.0)
     rows = shadow(cfg, de, exec_bars, decisions)
     report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas)
+    if a.json_out:
+        data = summary(a.symbol, a.strategy, a.contract, steps, tracker, cands, decisions,
+                       rows, cost, ideas)
+        Path(a.json_out).parent.mkdir(parents=True, exist_ok=True)
+        Path(a.json_out).write_text(json.dumps(_json_safe(data)))
+    _progress(a.progress_file, stage="done", pct=1.0)
 
 
 if __name__ == "__main__":

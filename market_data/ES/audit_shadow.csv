@@ -1,0 +1,6 @@
+setup,direction,hour,score,approved,reasons,risk_pts,pnl_pts,exit,policy_pnl
+zone_retrace,SHORT,10,65.5,True,[],5.105000000000473,3.1100000000001273,STOP,"{'config actual': 3.1100000000001273, 'sin BE ni trailing': 0.5574999999998909, 'BE a 0.5R': 3.1100000000001273, 'BE a 1R': 3.1100000000001273, 'trailing 1R desde 1R': 4.357499999999618, 'trailing 0.5R desde 1.5R': 3.1100000000001273, 'BE 1R + trailing 1R desde 2R': 3.1100000000001273}"
+zone_retrace,LONG,13,23.0,True,[],5.605000000000473,-5.605000000000473,STOP,"{'config actual': -5.605000000000473, 'sin BE ni trailing': -5.605000000000473, 'BE a 0.5R': -5.605000000000473, 'BE a 1R': -5.605000000000473, 'trailing 1R desde 1R': -5.605000000000473, 'trailing 0.5R desde 1.5R': -5.605000000000473, 'BE 1R + trailing 1R desde 2R': -5.605000000000473}"
+zone_retrace,LONG,13,35.0,False,['active_trade'],5.355000000000473,-5.355000000000473,STOP,{}
+zone_retrace,LONG,14,-5.0,True,[],6.904999999999745,6.779999999999745,TP2,"{'config actual': 6.779999999999745, 'sin BE ni trailing': 6.779999999999745, 'BE a 0.5R': 6.779999999999745, 'BE a 1R': 6.779999999999745, 'trailing 1R desde 1R': 6.779999999999745, 'trailing 0.5R desde 1.5R': 6.779999999999745, 'BE 1R + trailing 1R desde 2R': 6.779999999999745}"
+zone_retrace,LONG,15,35.0,False,['too_late_in_session'],6.039999999999964,-6.039999999999964,STOP,{}

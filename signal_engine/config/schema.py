@@ -242,6 +242,13 @@ class NotificationsConfig(BaseModel):
     trade_ideas: bool = True
     # One message when TP1 is hit and the stop moves to breakeven.
     tp1_hit: bool = True
+    # One message when breakeven/trailing moves the stop into profit, then
+    # again only when the locked-in amount grows by this many R.
+    stop_moves: bool = True
+    # Attach a chart (zone, entry, planned stop/targets) to the heads-up and
+    # the entry message. Needs matplotlib; without it messages go text-only.
+    charts: bool = True
+    stop_move_step_r: float = 0.5
 
 
 class OutputConfig(BaseModel):
@@ -375,6 +382,16 @@ class GhostConfig(BaseModel):
     # Fraction of the position banked at TP1 ("took partials"); the rest runs
     # to TP2 with the stop at breakeven. 0 = all-or-nothing.
     partial_at_tp1: float = 0.0
+    # Stop management (paper/tracker.py). Each rule only ever tightens the
+    # stop and takes effect from the next bar. None disables it.
+    # Breakeven once the trade has run this many R in its favour, with an
+    # optional offset in points (e.g. +1 to cover costs).
+    be_trigger_r: Optional[float] = None
+    be_offset_points: float = 0.0
+    # Trailing: after trail_start_r R in favour, the stop follows the best
+    # price at trail_distance_r R behind it.
+    trail_start_r: Optional[float] = None
+    trail_distance_r: float = 1.0
     # Force-flatten any open position the moment the bar's session is no
     # longer RTH (data.sessions classifies the 16:00 ET bar itself as
     # ETH/CLOSED, so this fires AT the 4pm close using that bar's real close

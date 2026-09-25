@@ -92,10 +92,11 @@ class OutputDispatcher:
                 log.warning("Output adapter %r raised (%s); ignored.",
                             getattr(adapter, "name", "?"), type(exc).__name__)
 
-    def publish_trade_opened(self, paper_trade_dict: dict) -> None:
+    def publish_trade_opened(self, paper_trade_dict: dict,
+                             image_png: bytes | None = None) -> None:
         """Send a rich 'Trade Opened' notification (GHOST-approved paper trade).
         Uses the trade's signal_id as dedup_key — one notification per trade."""
-        self._emit(OutputEvent.from_trade_opened(paper_trade_dict))
+        self._emit(OutputEvent.from_trade_opened(paper_trade_dict, image_png))
 
     def publish_trade_closed(self, paper_trade_dict: dict) -> None:
         """Realised outcome of a paper trade (TP/stop/invalidation)."""
@@ -106,13 +107,17 @@ class OutputDispatcher:
         """An open trade crossed an R milestone."""
         self._emit(OutputEvent.from_trade_progress(paper_trade_dict, milestone_r))
 
-    def publish_trade_idea(self, idea_event: dict) -> None:
+    def publish_trade_idea(self, idea_event: dict, image_png: bytes | None = None) -> None:
         """Zone-strategy heads-up ("get ready") or its cancellation."""
-        self._emit(OutputEvent.from_trade_idea(idea_event))
+        self._emit(OutputEvent.from_trade_idea(idea_event, image_png))
 
     def publish_trade_tp1(self, paper_trade_dict: dict) -> None:
         """TP1 reached; stop moved to breakeven."""
         self._emit(OutputEvent.from_trade_tp1(paper_trade_dict))
+
+    def publish_stop_moved(self, paper_trade_dict: dict, old_stop: float) -> None:
+        """Breakeven / trailing moved the stop into profit."""
+        self._emit(OutputEvent.from_stop_moved(paper_trade_dict, old_stop))
 
     def publish_status_digest(self, payload: dict, timestamp) -> None:
         """Periodic 'where we stand' summary for remote monitoring."""

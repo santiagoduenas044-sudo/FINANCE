@@ -44,6 +44,8 @@ class OutputEvent:
     # populated only for kind="runtime_status" (Phase 9) — a plain, JSON-safe
     # dict, never containing secrets (no webhook URLs, no tokens).
     status_payload: dict | None = None
+    # Optional PNG attached to the message (chart of the idea / trade).
+    image_png: bytes | None = None
 
     @classmethod
     def from_setup_candidate(cls, candidate: SetupCandidate) -> "OutputEvent":
@@ -84,7 +86,8 @@ class OutputEvent:
         )
 
     @classmethod
-    def from_trade_opened(cls, paper_trade_dict: dict) -> "OutputEvent":
+    def from_trade_opened(cls, paper_trade_dict: dict,
+                          image_png: bytes | None = None) -> "OutputEvent":
         """GHOST opened a simulated paper trade — the primary Discord notification.
         Uses signal_id as dedup_key (same invariant: one notification per trade).
         status_payload contains the full PaperTrade.to_dict() — JSON-safe, no
@@ -98,6 +101,7 @@ class OutputEvent:
             title=f"{arrow} {direction} OPENED — {instrument}",
             disclaimer="Simulated paper trade — no real money, no broker connection.",
             status_payload=paper_trade_dict,
+            image_png=image_png,
         )
 
     @classmethod
@@ -151,7 +155,7 @@ class OutputEvent:
         )
 
     @classmethod
-    def from_trade_idea(cls, idea: dict) -> "OutputEvent":
+    def from_trade_idea(cls, idea: dict, image_png: bytes | None = None) -> "OutputEvent":
         """Zone strategy: {"event": "idea"} = heads-up before a possible trade,
         {"event": "cancelled"} = it will not happen. One of each per zone."""
         kind = "trade_idea" if idea.get("event") == "idea" else "trade_idea_cancelled"
@@ -161,6 +165,7 @@ class OutputEvent:
             title=f"IDEA #{idea.get('number', '?')}",
             disclaimer="Simulated paper trading — not financial advice.",
             status_payload=dict(idea),
+            image_png=image_png,
         )
 
     @classmethod
@@ -171,4 +176,15 @@ class OutputEvent:
             title="TP1",
             disclaimer="Simulated paper trade — no real money, no broker connection.",
             status_payload=paper_trade_dict,
+        )
+
+    @classmethod
+    def from_stop_moved(cls, paper_trade_dict: dict, old_stop: float) -> "OutputEvent":
+        stop = paper_trade_dict.get("stop") or 0.0
+        return cls(
+            kind="stop_moved",
+            dedup_key=f"{paper_trade_dict.get('signal_id', '')}:stop:{stop:.2f}",
+            title="STOP",
+            disclaimer="Simulated paper trade — no real money, no broker connection.",
+            status_payload={**paper_trade_dict, "old_stop": old_stop},
         )

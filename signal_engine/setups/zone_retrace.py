@@ -106,29 +106,42 @@ def find_zones(bars: pd.DataFrame, symbol: str, p: ZoneRetraceParams) -> list[Zo
     return out
 
 
-def judge_zone(zone: Zone, exec_bars: pd.DataFrame, p: ZoneRetraceParams) -> ZoneState:
-    after = exec_bars[exec_bars.index > zone.formed_at]
-    if after.empty:
+class _Bars:
+    """Execution bars as plain arrays: a zone is judged on every bar for
+    every zone, and pandas row access there dominated a backtest."""
+
+    def __init__(self, df: pd.DataFrame):
+        self.index = df.index
+        self.o = df[OPEN].to_numpy(float)
+        self.h = df[HIGH].to_numpy(float)
+        self.l = df[LOW].to_numpy(float)
+        self.c = df[CLOSE].to_numpy(float)
+
+
+def judge_zone(zone: Zone, exec_bars, p: ZoneRetraceParams) -> ZoneState:
+    b = exec_bars if isinstance(exec_bars, _Bars) else _Bars(exec_bars)
+    start = int(b.index.searchsorted(zone.formed_at, side="right"))
+    if start >= len(b.index):
         return ZoneState(zone, FRESH, None, None)
     bull = zone.bullish
-    touched = (after[LOW] <= zone.top) if bull else (after[HIGH] >= zone.bottom)
+    touched = (b.l[start:] <= zone.top) if bull else (b.h[start:] >= zone.bottom)
     if not touched.any():
-        last = float(after[CLOSE].iloc[-1])
+        last = float(b.c[-1])
         dist = last - zone.top if bull else zone.bottom - last
         state = ARMED if dist <= p.arm_distance_points else FRESH
         return ZoneState(zone, state, None, round(dist, 2))
 
-    first = int(touched.to_numpy().argmax())
-    window = after.iloc[first:first + p.confirm_bars]
-    for ts, bar in window.iterrows():
-        o, c = float(bar[OPEN]), float(bar[CLOSE])
+    first = start + int(touched.argmax())
+    end = min(first + p.confirm_bars, len(b.index))
+    for i in range(first, end):
+        o, c = b.o[i], b.c[i]
         if (c < zone.bottom) if bull else (c > zone.top):
-            return ZoneState(zone, CANCELLED, ts)
+            return ZoneState(zone, CANCELLED, b.index[i])
         if (c > o and c >= zone.mid) if bull else (c < o and c <= zone.mid):
-            return ZoneState(zone, CONFIRMED, ts)
-    if len(window) >= p.confirm_bars:
-        return ZoneState(zone, EXPIRED, window.index[-1])
-    return ZoneState(zone, TOUCHED, window.index[0])
+            return ZoneState(zone, CONFIRMED, b.index[i])
+    if end - first >= p.confirm_bars:
+        return ZoneState(zone, EXPIRED, b.index[end - 1])
+    return ZoneState(zone, TOUCHED, b.index[first])
 
 
 class ZoneRetraceDetector(SetupDetector):
@@ -136,14 +149,20 @@ class ZoneRetraceDetector(SetupDetector):
 
     def __init__(self, params: ZoneRetraceParams):
         self.p = params
+        self._last: tuple | None = None    # (ctx, states): detector + runtime share it
 
     def zone_states(self, ctx: AnalysisContext) -> list[ZoneState]:
+        if self._last is not None and self._last[0] is ctx:
+            return self._last[1]
         p = self.p.for_symbol(ctx.symbol)
         zbars = view_for(ctx, p.zone_timeframe).bars
         ebars = view_for(ctx, p.timeframe).bars
-        if len(zbars) < 3 or ebars.empty:
-            return []
-        return [judge_zone(z, ebars, p) for z in find_zones(zbars, ctx.symbol, p)]
+        states = []
+        if len(zbars) >= 3 and not ebars.empty:
+            arrays = _Bars(ebars)
+            states = [judge_zone(z, arrays, p) for z in find_zones(zbars, ctx.symbol, p)]
+        self._last = (ctx, states)
+        return states
 
     def detect(self, ctx: AnalysisContext, analysis: MarketAnalysis) -> list[SetupCandidate]:
         ebars = view_for(ctx, self.p.timeframe).bars

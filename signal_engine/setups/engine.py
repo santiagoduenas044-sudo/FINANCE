@@ -14,7 +14,7 @@ from ..data.context import AnalysisContext
 from ..data.contracts import ContractRegistry
 from ..data.engine import DataEngine
 from ..data.sessions import SessionClassifier
-from ..features.analyzer import MarketAnalyzer
+from ..features.analyzer import LazyAnalysis, MarketAnalyzer
 from .base import SetupDetector
 from .liquidity_sweep import LiquiditySweepDetector
 from .models import SetupCandidate
@@ -67,7 +67,7 @@ class SetupEngine:
         return [d.name for d in self.detectors]
 
     def detect(self, ctx: AnalysisContext) -> list[SetupCandidate]:
-        analysis = self.analyzer.analyze(ctx)
+        analysis = LazyAnalysis(self.analyzer, ctx)   # computed only if a detector reads it
         out: list[SetupCandidate] = []
         for d in self.detectors:
             out.extend(d.detect(ctx, analysis))

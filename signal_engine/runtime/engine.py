@@ -23,6 +23,7 @@ import pandas as pd
 
 from ..data.contracts import ContractRegistry
 from ..data.engine import DataEngine
+from ..features.analyzer import LazyAnalysis
 from ..ghost.narrative import market_read, trade_thesis
 from ..output.dispatcher import OutputDispatcher
 from ..output.events import OutputEvent
@@ -74,6 +75,11 @@ class BotRuntime:
     # Optional: heads-up / cancel lifecycle for the zone strategy
     # (runtime/ideas.py). None => no trade-idea messages.
     idea_board: object | None = None
+    # Build GHOST's market state (dashboard / !why) on every bar. A backtest
+    # sets this False: with no candidate on the bar there is nothing to
+    # decide, and skipping the full structure scan is what makes years of
+    # 1-minute bars replayable. Decisions are identical either way.
+    track_market_state: bool = True
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
     started_at: datetime | None = field(default=None, init=False)
@@ -282,7 +288,7 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
-    def _on_trade_opened(self, signal: Signal, paper_trade) -> None:
+    def _on_trade_opened(self, signal: Signal, paper_trade, bars=None) -> None:
         """Record-keeping + Discord for a GHOST-approved, paper-trade-opened event.
         Called instead of _handle_signal in the GHOST path so the Discord message
         is a rich 'Trade Opened' embed (with full TradePlan) rather than the
@@ -296,7 +302,18 @@ class BotRuntime:
                 log.info("DISCORD SEND signal_id=%.8s… instrument=%s direction=%s",
                          signal.signal_id, signal.instrument,
                          getattr(paper_trade, "direction", "?"))
-                self.output_dispatcher.publish_trade_opened(paper_trade.to_dict())
+                td = paper_trade.to_dict()
+                ctx_d = td.get("context") or {}
+                png = None
+                if bars is not None and ctx_d.get("zone_bottom") is not None:
+                    png = self._plan_chart(
+                        bars, direction=td["direction"], zone_bottom=ctx_d["zone_bottom"],
+                        zone_top=ctx_d["zone_top"], entry=td["entry"], stop=td["stop"],
+                        tp1=td.get("tp1"), final=td.get("tp2"), entered=True,
+                        title=f"IDEA #{ctx_d.get('idea_number', '?')} · "
+                              f"{td['instrument']} 1m · entrada",
+                        status="ENTRAMOS AHORA")
+                self.output_dispatcher.publish_trade_opened(td, png)
                 self._update_discord_health()
             except Exception as exc:            # noqa: BLE001
                 log.warning("Discord send failed (%s) signal_id=%.8s…",
@@ -305,7 +322,8 @@ class BotRuntime:
 
     def _notify_trade_updates(self, symbol: str, just_closed: list,
                               before_r: dict[str, float],
-                              before_tp1: set[str] | None = None) -> None:
+                              before_tp1: set[str] | None = None,
+                              before_stop: dict[str, float] | None = None) -> None:
         """Tell the operator how a trade is going without them opening the
         dashboard: a close with realised P&L, and an R milestone crossed by a
         still-open trade. Never raises — a notification is not worth a cycle."""
@@ -332,6 +350,17 @@ class BotRuntime:
                             and t.signal_id in before_r
                             and t.signal_id not in before_tp1):
                         self.output_dispatcher.publish_trade_tp1(t.to_dict())
+            if ncfg.stop_moves and before_stop:
+                for t in self.paper_tracker.open_trades:
+                    old = before_stop.get(t.signal_id)
+                    if not (t.is_open and t.instrument == symbol and old is not None
+                            and t.stop != old and _stop_move_worth_telling(t, ncfg)):
+                        continue
+                    # A TP1 hit on this bar already announced "stop a BE".
+                    just_tp1 = (t.tp1_hit and before_tp1 is not None
+                                and t.signal_id not in before_tp1 and ncfg.tp1_hit)
+                    if not just_tp1:
+                        self.output_dispatcher.publish_stop_moved(t.to_dict(), old)
             self._update_discord_health()
         except Exception as exc:  # noqa: BLE001
             log.warning("trade notification failed (%s)", type(exc).__name__)
@@ -421,6 +450,8 @@ class BotRuntime:
                         for t in self.paper_tracker.open_trades if t.is_open}
             before_tp1 = {t.signal_id for t in self.paper_tracker.open_trades
                           if t.is_open and t.tp1_hit}
+            before_stop = {t.signal_id: t.stop for t in self.paper_tracker.open_trades
+                           if t.is_open}
             just_closed = []
             try:
                 # Fix 3: capture closed trades so account state stays current.
@@ -447,10 +478,11 @@ class BotRuntime:
                     self.daily_realized_pnl += _pnl_delta
             except Exception:  # noqa: BLE001 - memory update never breaks the cycle
                 pass
-            self._notify_trade_updates(symbol, just_closed, before_r, before_tp1)
+            self._notify_trade_updates(symbol, just_closed, before_r, before_tp1,
+                                       before_stop)
 
         # 2) build market state + GHOST decisions (same analysis the setups saw).
-        analysis = self.setup_engine.analyzer.analyze(ctx)
+        analysis = LazyAnalysis(self.setup_engine.analyzer, ctx)
         feed_status = self.data_feed_status.get(symbol)
         data_stale = getattr(feed_status, "value", None) == "STALE"
 
@@ -467,14 +499,16 @@ class BotRuntime:
             cooldown_check = _cool
             duplicate_check = self.paper_tracker.has_processed
 
-        ms, decisions = self.ghost.evaluate(ctx, analysis, base_results,
-                                            data_stale=data_stale,
-                                            has_active=has_active,
-                                            cooldown_check=cooldown_check,
-                                            duplicate_check=duplicate_check)
+        decisions = []
+        if base_results or self.track_market_state:
+            ms, decisions = self.ghost.evaluate(ctx, analysis, base_results,
+                                                data_stale=data_stale,
+                                                has_active=has_active,
+                                                cooldown_check=cooldown_check,
+                                                duplicate_check=duplicate_check)
+            self.ghost_market_state[symbol] = ms.to_dict()
+            self.ghost_market_read[symbol] = market_read(ms)
         self._set_component(ComponentStatus.OK, "ghost")
-        self.ghost_market_state[symbol] = ms.to_dict()
-        self.ghost_market_read[symbol] = market_read(ms)
         if decisions:
             self.ghost_last_decision[symbol] = decisions[-1].to_dict()
 
@@ -623,7 +657,7 @@ class BotRuntime:
                          d.signal.entry, d.signal.stop)
                 approved += 1
                 # Fire record-keeping + Discord with rich "Trade Opened" embed.
-                self._on_trade_opened(d.signal, paper_trade)
+                self._on_trade_opened(d.signal, paper_trade, ctx.execution.bars)
             else:
                 rejected += 1
                 # A rejected decision is a first-class outcome — record it in
@@ -686,10 +720,32 @@ class BotRuntime:
                 except Exception as exc:  # noqa: BLE001 - a plan is not worth a cycle
                     log.warning("idea plan failed (%s)", type(exc).__name__)
             try:
-                self.output_dispatcher.publish_trade_idea(ev)
+                png = None
+                if ev.get("event") == "idea" and ev.get("plan"):
+                    plan = ev["plan"]
+                    png = self._plan_chart(
+                        ctx.execution.bars, direction=ev["direction"],
+                        zone_bottom=ev["bottom"], zone_top=ev["top"], entry=ev["mid"],
+                        stop=ev["stop"], tp1=plan.get("tp1"), final=plan.get("final"),
+                        title=f"IDEA #{ev['number']} · {symbol} 1m · posible "
+                              f"{'COMPRA' if ev['direction'] == 'LONG' else 'VENTA'}",
+                        status="ESPERANDO: todavía no estoy seguro")
+                self.output_dispatcher.publish_trade_idea(ev, png)
             except Exception as exc:  # noqa: BLE001
                 log.warning("trade idea notification failed (%s)", type(exc).__name__)
         self._update_discord_health()
+
+    def _plan_chart(self, bars, **kw) -> bytes | None:
+        """Chart for a heads-up / entry message, or None (disabled, no
+        matplotlib, or any rendering problem: a chart is never worth a cycle)."""
+        if not self.data_engine.cfg.output.notifications.charts or bars is None or bars.empty:
+            return None
+        try:
+            from ..output.trade_chart import render_plan_png
+            return render_plan_png(bars, **kw)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("chart render failed (%s)", type(exc).__name__)
+            return None
 
     def _point_values(self, symbol: str) -> dict | None:
         """{"NQ": 20.0, "MNQ": 2.0}: dollars per point for the contract and its
@@ -987,6 +1043,21 @@ def _idea_reject_reason(reasons: list[str]) -> str:
         if r in _IDEA_REJECT_ES:
             return "reaccionó, pero " + _IDEA_REJECT_ES[r]
     return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
+
+
+def _stop_move_worth_telling(trade, ncfg) -> bool:
+    """A stop moved into profit (or to breakeven) is news; the next one only
+    once the locked-in amount has grown by stop_move_step_r. Remembers the
+    last announced lock on the trade so a restart does not repeat it."""
+    locked = (trade.stop - trade.entry) if trade.is_long else (trade.entry - trade.stop)
+    if locked < 0:
+        return False                      # still a loss if hit: not a lock-in
+    last = (trade.context or {}).get("stop_notified_r")
+    locked_r = locked / trade.initial_risk
+    if last is not None and locked_r - last < ncfg.stop_move_step_r:
+        return False
+    trade.context = {**(trade.context or {}), "stop_notified_r": round(locked_r, 3)}
+    return True
 
 
 def eod_due(session: str, bar_time, eod_close_time: str | None) -> bool:

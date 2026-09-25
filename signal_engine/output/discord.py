@@ -134,6 +134,8 @@ def build_discord_payload(event: OutputEvent) -> dict:
         return _build_trade_idea_payload(event)
     if event.kind == "trade_tp1":
         return _build_trade_tp1_payload(event)
+    if event.kind == "stop_moved":
+        return _build_stop_moved_payload(event)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
@@ -378,7 +380,7 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
              f"🛑 SL {_px(p.get('stop'))} · ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}"]
     if plan.get("tp1") is not None:
         lines.append(_targets_line(plan["tp1"], plan.get("final"), plan.get("plan_rr")))
-    lines.append("⚠️ **No entres todavía** — espero reacción en la zona.")
+    lines.append("⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún.")
     return _embed(f"🟡 IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
                   _IDEA_COLOR, event.disclaimer)
 
@@ -416,6 +418,10 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
     label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
     if reason == "STOP" and p.get("tp1_hit"):
         label = "BE tras parcial" if p.get("partial_fraction") else "Breakeven"
+    elif reason == "STOP" and pts > 1e-6:
+        label = "Trailing stop"
+    elif reason == "STOP" and abs(pts) <= 1e-6:
+        label = "Breakeven"
     mark = "✅" if pts > 1e-6 else ("➖" if abs(pts) <= 1e-6 else "🛑")
     usd = "".join(f" · {'+' if pts >= 0 else '−'}${abs(pts) * pv:,.0f} {s}"
                   for s, pv in sorted((ctx.get("usd_per_point") or {}).items(),
@@ -439,6 +445,21 @@ def _build_trade_tp1_payload(event: OutputEvent) -> dict:
         head + f" · {p.get('instrument', '?')}",
         (f"{frac:.0%} cerrado · " if frac else "")
         + f"stop a BE {_px(entry)} · resto a {_px(p.get('tp2'))}",
+        _WIN_COLOR, event.disclaimer)
+
+
+def _build_stop_moved_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    num = (p.get("context") or {}).get("idea_number")
+    name = f"IDEA #{num}" if num is not None else p.get("setup", "trade")
+    entry, stop = p.get("entry"), p.get("stop")
+    long = p.get("direction", "LONG") == "LONG"
+    locked = (stop - entry) if long else (entry - stop)
+    what = "stop a BE" if abs(locked) < 0.01 else f"trailing: stop a {_px(stop)}"
+    return _embed(
+        f"🔒 {name} — {what} · {p.get('instrument', '?')}",
+        (f"Asegura +{locked:.2f} pts" if locked >= 0.01 else "Ya no puede perder")
+        + f" · precio {_px(p.get('current_price'))} · resto a {_px(p.get('tp2'))}",
         _WIN_COLOR, event.disclaimer)
 
 
@@ -520,12 +541,13 @@ class DiscordOutputAdapter(OutputAdapter):
     name = "discord"
 
     def __init__(self, config: DiscordOutputConfig, *, webhook_url: str | None = None,
-                 transport=None, sleep=None):
+                 transport=None, sleep=None, file_transport=None):
         self.config = config
         # webhook resolved from env by default; kept private, never logged
         self._webhook = webhook_url if webhook_url is not None \
             else os.environ.get(config.webhook_env)
         self._transport = transport or _urllib_transport
+        self._file_transport = file_transport or send_webhook_with_file
         import time
         self._sleep = sleep or time.sleep
         self._seen: set[str] = set()
@@ -555,7 +577,11 @@ class DiscordOutputAdapter(OutputAdapter):
             return False
         log.info("Discord SEND kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
         payload = build_discord_payload(event)
-        ok = self._send_with_retry(payload)
+        image = event.image_png
+        if image:
+            for emb in payload.get("embeds", [])[:1]:
+                emb["image"] = {"url": "attachment://chart.png"}
+        ok = self._send_with_retry(payload, image)
         if ok:
             log.info("Discord SENT OK kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
             if self.config.deduplication_enabled:
@@ -564,13 +590,17 @@ class DiscordOutputAdapter(OutputAdapter):
             log.warning("Discord FAILED kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
         return ok
 
-    def _send_with_retry(self, payload: dict) -> bool:
+    def _send_with_retry(self, payload: dict, image: bytes | None = None) -> bool:
         data = json.dumps(payload).encode("utf-8")
         attempts = max(1, self.config.retry_count + 1)
         for i in range(attempts):
             last = i == attempts - 1
             try:
-                status = self._transport(self._webhook, data, self.config.timeout_seconds)
+                if image:
+                    status = self._file_transport(self._webhook, payload, image, "chart.png",
+                                                  self.config.timeout_seconds)
+                else:
+                    status = self._transport(self._webhook, data, self.config.timeout_seconds)
             except TimeoutError:
                 if last:
                     log.warning("Discord request timed out after %d attempt(s).", attempts)
