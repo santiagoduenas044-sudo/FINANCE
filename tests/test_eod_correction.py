@@ -63,6 +63,8 @@ def test_trade_chart_is_a_png():
     pytest.importorskip("matplotlib")
     from signal_engine.output.trade_chart import render_trade_png
     bars = _bars([("15:40", 1, 2, 0.5, 1.5), ("15:41", 1.5, 2.5, 1, 2)])
-    png = render_trade_png(bars, {"entry": 1.5, "stop": 3.0, "tp1": 1.0, "tp2": 0.5},
-                           marks=[(_t("15:41"), 2.0, "Corregido", "#26a69a")])
+    png = render_trade_png(bars, {"entry": 1.5, "stop": 3.0, "tp1": 1.0, "tp2": 0.5,
+                                  "opened_at": _t("15:40"), "closed_at": _t("15:41"),
+                                  "exit_price": 1.2, "pnl_points": 0.3, "r_multiple": 0.2},
+                           marks=[(_t("15:41"), "cierre anterior", "#9e9e9e")])
     assert png[:8] == b"\x89PNG\r\n\x1a\n"

@@ -151,6 +151,16 @@ def main() -> int:
     print(f"  corregido: {_fmt(nd)}")
     if (nd["exit_reason"], round(nd["pnl_points"], 2)) == \
             (old.get("exit_reason"), round(old.get("pnl_points", 0), 2)):
+        corr = (old.get("context") or {}).get("correction")
+        if a.discord and corr:
+            # Already corrected: re-send the Discord report (e.g. a new chart).
+            before = {**old, "exit_reason": corr["old_exit_reason"],
+                      "exit_price": corr["old_exit_price"],
+                      "pnl_points": corr["old_pnl_points"], "closed_at": corr["old_closed_at"],
+                      "tp1_hit": False,
+                      "r_multiple": corr["old_pnl_points"] / old["initial_risk"]}
+            post_correction(before, {**nd, "context": old.get("context")}, bars, name, cfg)
+            return 0
         print("Mismo resultado con las reglas actuales: no hay nada que corregir.")
         return 0
 
@@ -185,9 +195,9 @@ def post_correction(old: dict, nd: dict, bars: pd.DataFrame, name: str, cfg) -> 
     closed = pd.Timestamp(nd["closed_at"])
     window = bars[(bars.index >= opened - pd.Timedelta(minutes=30))
                   & (bars.index <= closed + pd.Timedelta(minutes=15))]
-    marks = [(opened, old["entry"], "Entrada", "#bbbbbb"),
-             (pd.Timestamp(old["closed_at"]), old["exit_price"], "Antes", "#9e9e9e"),
-             (closed, nd["exit_price"], "Corregido", "#26a69a")]
+    old_close = pd.Timestamp(old["closed_at"])
+    marks = [(old_close, f"cierre anterior {old_close:%H:%M} ({old['pnl_points']:+.2f} pts)",
+              "#9e9e9e")]
     png = render_trade_png(window, {**nd, "stop_initial": initial_stop(old)},
                            title=f"{name} · {old['instrument']} 1m · corrección", marks=marks)
     pts = nd["pnl_points"]
