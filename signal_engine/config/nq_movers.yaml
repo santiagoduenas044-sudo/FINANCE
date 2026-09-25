@@ -1,0 +1,16 @@
+# Nasdaq-100 mega caps shown in the dashboard's "Qué mueve al NQ" card.
+# weight = APPROXIMATE % of the Nasdaq-100 index. The index rebalances and
+# prices move, so these drift: refresh from nasdaq.com / the QQQ holdings
+# page now and then. They only size the "≈ NQ points" estimate — nothing
+# in the strategy reads them.
+components:
+  - {symbol: NVDA,  name: Nvidia,    weight: 9.5}
+  - {symbol: MSFT,  name: Microsoft, weight: 8.5}
+  - {symbol: AAPL,  name: Apple,     weight: 7.5}
+  - {symbol: AMZN,  name: Amazon,    weight: 5.5}
+  - {symbol: AVGO,  name: Broadcom,  weight: 5.0}
+  - {symbol: META,  name: Meta,      weight: 3.8}
+  - {symbol: GOOGL, name: Alphabet,  weight: 5.3}   # GOOGL + GOOG together
+  - {symbol: TSLA,  name: Tesla,     weight: 3.2}
+  - {symbol: NFLX,  name: Netflix,   weight: 2.3}
+  - {symbol: COST,  name: Costco,    weight: 2.3}

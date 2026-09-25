@@ -22,7 +22,8 @@ from ..config.runtime_settings import ServerSettings
 from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
 
-from .backtest import BacktestError, BacktestManager
+from ..live.movers import MoversService
+from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .chart import build_chart_data
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -52,13 +53,15 @@ def _extract_token(request: Request) -> str:
 
 
 def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
-               service=None, backtests: BacktestManager | None = None) -> FastAPI:
+               service=None, backtests: BacktestManager | None = None,
+               movers: MoversService | None = None) -> FastAPI:
     settings = settings or ServerSettings()
     app = FastAPI(title="Futures Signal Engine — Control Dashboard")
     app.state.settings = settings
     app.state.service = service
     app.state.started_at = time.time()
     backtests = backtests or BacktestManager(Path(__file__).resolve().parents[2])
+    movers = movers or MoversService()
 
     # -- CORS: only when explicitly configured (never a wildcard) ---------- #
     if settings.cors_origins:
@@ -255,6 +258,12 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                      "detail": event.detail},
         }
 
+    @app.get("/api/market/movers")
+    def get_movers() -> dict:
+        """Mega caps' % change today and their estimated pull on NQ, in points."""
+        st = runtime.instrument_status.get("NQ")
+        return movers.snapshot(getattr(st, "last_price", None))
+
     @app.get("/api/ideas")
     def get_ideas() -> dict:
         """Trade ideas (heads-up / confirmed / direct / cancelled) of the most
@@ -284,7 +293,9 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     # -- Backtests (dashboard "Backtest" view) ------------------------------ #
     @app.get("/api/backtest/options")
     def backtest_options() -> dict:
-        return {"datasets": backtests.datasets(), "strategies": backtests.strategies()}
+        return {"datasets": backtests.datasets(), "strategies": backtests.strategies(),
+                "strategy_info": {k: {"title": t, "text": d}
+                                  for k, (t, d) in STRATEGY_INFO.items()}}
 
     @app.get("/api/backtest/status")
     def backtest_status() -> dict:

@@ -207,6 +207,9 @@ class ZoneRetraceDetector(SetupDetector):
         return {"stop": z.stop, "tp1": tp1, "final": final, "basis": basis,
                 "plan_r": plan_r, "tp1_rr": round(abs(tp1 - z.mid) / plan_r, 2),
                 "plan_rr": round(abs(final - z.mid) / plan_r, 1),
+                # every untaken swing from 1R to 6R, in R from the midpoint:
+                # what a different target rule would have had to choose from
+                "swing_rs": self._swing_rs(ctx, analysis, z.mid, plan_r, bull),
                 "confirm_minutes": p.confirm_bars
                 * int(pd.Timedelta(p.timeframe.replace("m", "min")).total_seconds() // 60)}
 
@@ -243,18 +246,20 @@ class ZoneRetraceDetector(SetupDetector):
                             "zone_top": z.top, "zone_bottom": z.bottom,
                             "zone_mid": round(z.mid, 2),
                             "plan_rr": round(abs(final - z.mid) / plan_r, 1),
+                            "swing_rs": plan["swing_rs"],
                             "target_basis": basis},
             referenced=[LevelRef("zone", z.formed_at, z.mid,
                                  f"{z.bottom:.2f}-{z.top:.2f}")],
             status=SetupStatus.VALID,
         )
 
-    def _target(self, ctx, analysis, entry, risk, bull, min_r, max_r, fallback_r,
-                beyond: float | None = None) -> tuple[float, str]:
-        """Nearest swing the market has not taken yet, if it pays between
-        min_r and max_r (and lies beyond `beyond`); otherwise fallback_r."""
-        lo = entry + min_r * risk if bull else entry - max_r * risk
-        hi = entry + max_r * risk if bull else entry - min_r * risk
+    def _swing_rs(self, ctx, analysis, entry, risk, bull) -> list[float]:
+        lo = entry + 1.0 * risk if bull else entry - 6.0 * risk
+        hi = entry + 6.0 * risk if bull else entry - 1.0 * risk
+        return sorted(round(abs(v - entry) / risk, 3)
+                      for v in self._untaken(ctx, analysis, bull, lo, hi, None))
+
+    def _untaken(self, ctx, analysis, bull, lo, hi, beyond) -> list[float]:
         levels: list[float] = []
         for tf in (ctx.structure.timeframe, ctx.htf.timeframe):
             ta = analysis.by_timeframe.get(tf)
@@ -271,6 +276,15 @@ class ZoneRetraceDetector(SetupDetector):
                 taken = (later[HIGH] > s.price).any() if bull else (later[LOW] < s.price).any()
                 if not taken:
                     levels.append(float(s.price))
+        return levels
+
+    def _target(self, ctx, analysis, entry, risk, bull, min_r, max_r, fallback_r,
+                beyond: float | None = None) -> tuple[float, str]:
+        """Nearest swing the market has not taken yet, if it pays between
+        min_r and max_r (and lies beyond `beyond`); otherwise fallback_r."""
+        lo = entry + min_r * risk if bull else entry - max_r * risk
+        hi = entry + max_r * risk if bull else entry - min_r * risk
+        levels = self._untaken(ctx, analysis, bull, lo, hi, beyond)
         if levels:
             lvl = min(levels) if bull else max(levels)
             return lvl, f"{'máximo' if bull else 'mínimo'} sin tomar en {lvl:,.2f}"

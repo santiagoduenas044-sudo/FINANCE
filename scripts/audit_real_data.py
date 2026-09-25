@@ -206,20 +206,36 @@ STOP_POLICIES = {
 
 # Target variants on the SAME approved signals: the plan's R is |midpoint -
 # stop| (what the message shows); None = the plan as configured.
+# A tuple (lo, hi, fallback) is DYNAMIC: the nearest untaken swing between
+# lo and hi R, else fallback R — the target adapts to where the structure is.
 TARGET_VARIANTS = {
     "plan actual": None,
     "2:1 fijo (1 objetivo)": [2.0],
     "1.5:1 fijo (1 objetivo)": [1.5],
     "3:1 fijo (1 objetivo)": [3.0],
     "TP1 1R + TP 2R": [1.0, 2.0],
+    "dinámico 1.5–3R (1 objetivo)": [(1.5, 3.0, 2.0)],
+    "TP1 1R + dinámico 1.5–3R": [1.0, (1.5, 3.0, 2.0)],
+    "dinámico 2–4R (1 objetivo)": [(2.0, 4.0, 2.5)],
 }
 
 
-def _with_targets(s, rs: list[float]):
-    mid = (s.market_context or {}).get("zone_mid", s.entry)
+def _pick(k, swing_rs: list[float]) -> float:
+    if not isinstance(k, tuple):
+        return k
+    lo, hi, fb = k
+    inside = [r for r in swing_rs if lo <= r <= hi]
+    return inside[0] if inside else fb
+
+
+def _with_targets(s, rs: list):
+    ctx = s.market_context or {}
+    mid = ctx.get("zone_mid", s.entry)
     r = abs(mid - s.stop)
     long = s.direction.value == "LONG"
-    tps = [mid + k * r if long else mid - k * r for k in rs]
+    ks = [_pick(k, ctx.get("swing_rs") or []) for k in rs]
+    ks = sorted(set(ks))
+    tps = [mid + k * r if long else mid - k * r for k in ks]
     if (tps[0] <= s.entry) if long else (tps[0] >= s.entry):
         return None                        # fill already past that target
     return replace(s, take_profits=tps)

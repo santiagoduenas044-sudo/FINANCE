@@ -22,6 +22,7 @@
   --r: 10px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; background: var(--bg); }
 body { color: var(--ink-1); font: 14px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
@@ -120,6 +121,13 @@ main { padding: 14px 18px 40px; max-width: 1500px; margin: 0 auto; }
 .ideas .ic { font-size: 16px; text-align: center; }
 .ideas .t { color: var(--ink-3); font: 11px var(--mono); }
 .ideas .res { font: 700 13px var(--mono); text-align: right; }
+.mv { display: grid; grid-template-columns: 58px 1fr 62px 66px; gap: 8px; align-items: center; padding: 5px 0;
+  font-size: 13px; }
+.mv .s { font-weight: 700; } .mv .n { color: var(--ink-3); font-size: 11px; display: block; font-weight: 400; }
+.mv .bar { position: relative; height: 8px; background: var(--panel-2); border-radius: 4px; }
+.mv .bar i { position: absolute; top: 0; height: 8px; border-radius: 4px; }
+.mv .bar::after { content: ""; position: absolute; left: 50%; top: -2px; width: 1px; height: 12px; background: var(--rule); }
+.mv .p, .mv .q { font: 600 12px var(--mono); text-align: right; }
 .empty { color: var(--ink-3); text-align: center; padding: 18px 8px; font-size: 13px; line-height: 1.5; }
 
 /* ── tablas / tiles (historial, backtest, sistema) ── */
@@ -165,6 +173,9 @@ svg.chart .grid { stroke: var(--line); stroke-width: 1; }
 .btnote { color: var(--ink-3); font-size: 11px; margin-top: 6px; }
 tr.best td { background: rgba(31, 216, 115, .08); }
 .btform button { border-radius: 8px; }
+.stratinfo { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2);
+  color: var(--ink-2); font-size: 13px; line-height: 1.5; max-width: 900px; }
+.stratinfo b { color: var(--ink-1); }
 .btform select, .btform input, #bt-runs { border-radius: 6px; padding: 5px 8px; }
 
 .comp { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
@@ -231,6 +242,8 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
       <aside class="side">
         <div class="card now"><h3>Ahora</h3><div class="body" id="now"></div></div>
         <div class="card"><h3>Hoy <span class="r" id="today-date"></span></h3><div class="body"><div class="stats4" id="today"></div></div></div>
+        <div class="card" id="movers-card"><h3>Qué mueve al NQ <span class="r" id="movers-sum"></span></h3>
+          <div class="body"><div id="movers"></div></div></div>
         <div class="card"><h3>Ideas de hoy <span class="r" id="ideas-n"></span></h3><div class="body"><ul class="ideas" id="ideas"></ul></div></div>
       </aside>
     </div>
@@ -257,6 +270,7 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
             <button type="submit" id="bt-go">CORRER</button>
             <button type="button" class="cancel" id="bt-cancel" hidden>CANCELAR</button>
           </form>
+          <div class="stratinfo" id="bt-info"></div>
           <div class="btbar" id="bt-bar" hidden><div id="bt-fill"></div></div>
           <div class="btnote" id="bt-note"></div>
         </div>
@@ -351,7 +365,7 @@ function tile(lab, fig, sub, tone) {
 
 /* ───────────────────────── estado ───────────────────────── */
 const S = { view: "panel", symbol: null, symbols: [], status: null, chart: null,
-  open: [], closed: [], ideas: { ideas: [] }, decisions: [], tick: 0 };
+  open: [], closed: [], ideas: { ideas: [] }, decisions: [], movers: null, tick: 0 };
 const VIEWS = ["panel", "history", "backtest", "system"];
 
 function setView(v) {
@@ -398,6 +412,7 @@ async function pollTrades() {
   try { S.open = (await api("/api/ghost/trades/active")).trades || []; } catch { S.open = []; }
   try { S.closed = (await api("/api/ghost/trades/history?limit=500")).trades || []; } catch { S.closed = []; }
 }
+async function pollMovers() { try { S.movers = await api("/api/market/movers"); } catch { S.movers = null; } }
 async function pollIdeas() { try { S.ideas = await api("/api/ideas"); } catch { S.ideas = { ideas: [] }; } }
 async function pollDecisions() {
   try { S.decisions = (await api("/api/ghost/decisions?limit=200")).decisions || []; } catch { S.decisions = []; }
@@ -629,6 +644,25 @@ function renderToday() {
     <div class="stat"><div class="k">Señales directas</div><div class="v">${ideas.filter(i => i.direct).length}</div><div class="s">sin aviso previo</div></div>`;
 }
 
+function renderMovers() {
+  const card = $("movers-card"), m = S.movers;
+  card.hidden = S.symbol !== "NQ";
+  if (card.hidden) return;
+  const all = m?.items || [], items = all.slice(0, 6);
+  if (!items.length) { $("movers").innerHTML = `<div class="empty">Sin cotizaciones de las acciones ahora.</div>`; $("movers-sum").textContent = ""; return; }
+  const max = Math.max(...items.map(q => Math.abs(q.nq_points ?? q.chg_pct)), 1e-9);
+  const tot = m.nq_points_total;
+  $("movers-sum").innerHTML = `${m.up}↑ ${m.down}↓` + (tot != null ? ` · <span class="${cls(tot)}">${sgn(tot, 0)} pts</span>` : "");
+  $("movers").innerHTML = items.map(q => {
+    const v = q.nq_points ?? q.chg_pct, w = Math.abs(v) / max * 50;
+    const col = v >= 0 ? css("--good") : css("--critical");
+    return `<div class="mv"><span class="s">${esc(q.symbol)}<span class="n">${esc(q.name)}</span></span>
+      <span class="bar"><i style="background:${col};width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></i></span>
+      <span class="p ${cls(q.chg_pct)}">${sgn(q.chg_pct)}%</span>
+      <span class="q ${cls(q.nq_points)}">${q.nq_points != null ? "≈" + sgn(q.nq_points, 0) : "—"}</span></div>`;
+  }).join("") + `<p class="foot">Las ${items.length} que más empujan al NQ hoy, en puntos (peso en el índice × su cambio)${all.length > items.length ? `; el total incluye ${all.length}` : ""}. Pesos aproximados.</p>`;
+}
+
 function renderIdeas() {
   const list = (S.ideas.ideas || []).filter(i => i.symbol === S.symbol).slice().reverse();
   $("ideas-n").textContent = S.ideas.day && S.ideas.day !== fmtDate.format(new Date()) ? "último día: " + S.ideas.day : list.length ? list.length : "";
@@ -704,6 +738,9 @@ async function btInit() {
   $("bt-data").innerHTML = ds.length ? ds.map(d => `<option value="${esc(btKey(d))}">${esc(d.symbol)} · ${esc(d.data)}
     (${esc(d.first)} → ${esc(d.last)})</option>`).join("") : `<option value="">sin datos descargados</option>`;
   $("bt-strategy").innerHTML = BT.opts.strategies.map(s => `<option>${esc(s)}</option>`).join("");
+  const info = () => { const i = (BT.opts.strategy_info || {})[$("bt-strategy").value];
+    $("bt-info").innerHTML = i ? `<b>${esc(i.title)}</b><br>${esc(i.text)}` : ""; };
+  $("bt-strategy").onchange = info; info();
   const best = ds.find(d => d.data === "DATABENTO") || ds[0];
   if (best) { $("bt-data").value = btKey(best); btDefaultDates(best); }
   $("bt-data").onchange = () => btDefaultDates(ds.find(d => btKey(d) === $("bt-data").value));
@@ -825,6 +862,8 @@ function renderBacktest() {
     ${esc(r.meta?.start)} → ${esc(r.meta?.end)} · ${esc(r.meta?.strategy)} · ${sgn(r.total?.net, 1)}R</option>`).join("");
 
   const d = BT.data;
+  ["bt-tiles", "bt-equity", "bt-targets", "bt-hours", "bt-trades"].forEach(id => {
+    const block = $(id).closest("#v-backtest > *"); if (block) block.hidden = !d; });
   if (!d) {
     $("bt-head").innerHTML = `<div class="empty"><span class="ic">◇</span>Todavía no hay backtests. Elige fechas y dale a CORRER.</div>`;
     ["bt-tiles", "bt-equity", "bt-policies", "bt-targets", "bt-hours", "bt-mix", "bt-trades"].forEach(i => $(i).innerHTML = "");
@@ -877,7 +916,7 @@ function renderBacktest() {
 /* ═══════════════════════════ ciclo ═══════════════════════════ */
 function renderAll() {
   paintHeader();
-  if (S.view === "panel") { renderChart(); renderNow(); renderToday(); renderIdeas(); }
+  if (S.view === "panel") { renderChart(); renderNow(); renderToday(); renderMovers(); renderIdeas(); }
   else if (S.view === "history") renderHistory();
   else if (S.view === "backtest") renderBacktest();
   else if (S.view === "system") renderSystem();
@@ -887,6 +926,7 @@ async function refresh(force = false) {
   if (busy) return; busy = true;
   try {
     const jobs = [pollStatus(), pollTrades(), pollIdeas()];
+    if (force || S.tick % 12 === 0) jobs.push(pollMovers());
     if (force || S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     if (S.view === "system") jobs.push(pollDecisions());
     if (S.view === "backtest") jobs.push(btPoll());

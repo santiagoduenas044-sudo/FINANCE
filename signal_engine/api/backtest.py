@@ -21,6 +21,22 @@ _ID = re.compile(r"^[0-9A-Za-z_-]{1,64}$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SYMBOLS = ("NQ", "ES")
 
+# What each strategy does, in the operator's words, for the backtest screen.
+STRATEGY_INFO = {
+    "zones": ("Zonas (estilo TradingMind) — la que usa el bot en vivo",
+              "Marca huecos de precio (FVG) frescos en velas de 5 min. Avisa 🟡 cuando el "
+              "precio se acerca y solo entra en el PRIMER regreso a la zona si una vela de "
+              "1 min reacciona ahí. Stop 20–35 pts detrás del origen del movimiento; cierra "
+              "la mitad en TP1 (1R) y pasa a breakeven; el resto va al máximo/mínimo sin "
+              "tomar más cercano (2–5R). Entradas 9:30–15:30 ET, todo cerrado a las 16:55. "
+              "Una operación a la vez."),
+    "legacy": ("Setups antiguos (5 min) — la estrategia anterior del bot",
+               "Tres setups en velas de 5 min: ruptura del rango de apertura (ORB), barrida "
+               "de liquidez (toma los stops de un máximo/mínimo y rechaza) y recuperación "
+               "del VWAP. Un filtro de confluencia (tendencia, estructura, VWAP, volumen) "
+               "decide si opera. Objetivos 1R y 2R."),
+}
+
 
 class BacktestError(ValueError):
     """A request the dashboard should show back to the operator."""
