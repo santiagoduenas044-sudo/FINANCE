@@ -300,7 +300,7 @@ def warn(n):
 
 
 def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow_rows,
-           cost, ideas):
+           cost, ideas, shadow_path: Path | None = None):
     pv = ContractRegistry.load().spec(symbol).point_value
     days = len({ts.date() for ts in steps})
     print(f"\n=== AUDITORÍA CON DATOS REALES — {symbol} ===")
@@ -363,10 +363,10 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
           "\nscore de confluencia no predice resultado. Un exp menor que 0 después de costos"
           "\nsignifica que ese setup pierde dinero real.")
 
-    out = DATA_DIR / symbol / "audit_shadow.csv"
+    out = shadow_path or DATA_DIR / symbol / "audit_shadow.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(shadow_rows).to_csv(out, index=False)
-    print(f"\nDetalle por señal guardado en {out.relative_to(ROOT)}")
+    print(f"\nDetalle por señal guardado en {out}")
 
 
 def _json_safe(x):
@@ -457,7 +457,8 @@ def main() -> None:
         a.symbol, CsvProvider(root), a.contract, strategy, a.start, a.end, a.progress_file)
     _progress(a.progress_file, stage="shadow", pct=1.0)
     rows = shadow(cfg, de, exec_bars, decisions)
-    report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas)
+    report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas,
+           shadow_path=Path(a.json_out).with_suffix(".shadow.csv") if a.json_out else None)
     if a.json_out:
         data = summary(a.symbol, a.strategy, a.contract, steps, tracker, cands, decisions,
                        rows, cost, ideas)
