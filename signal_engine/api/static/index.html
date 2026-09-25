@@ -182,30 +182,92 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .comp div { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); font-size: 12px; }
 .comp small { color: var(--ink-3); margin-left: auto; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 
-/* práctica (repetición de velas) */
-.pxbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; }
+/* práctica (repetición de velas, estilo TradingView) */
+.pxbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; }
 .pxbar + .pxbar { border-top: 1px solid var(--line); }
-.pxbar select, .pxbar input, .trade input, .trade select { background: var(--bg); color: var(--ink-1);
+.pxbar select, .pxbar input, .ticket input, .ticket select { background: var(--bg); color: var(--ink-1);
   border: 1px solid var(--rule); border-radius: 6px; font: 13px var(--mono); padding: 5px 7px; color-scheme: dark; }
 .pbtn { padding: 6px 11px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--rule);
   color: var(--ink-1); font-size: 12px; font-weight: 700; }
 .pbtn.on { background: var(--amber); color: #1a1200; border-color: transparent; }
+.pbtn:disabled { opacity: .4; cursor: default; }
 .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; }
 .seg button { padding: 6px 10px; font: 700 12px var(--mono); color: var(--ink-2); background: var(--panel-2); }
 .seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--bg); }
 .pxlab { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-#pr-chart { height: 560px; position: relative; }
+.pxsep { width: 1px; height: 22px; background: var(--rule); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chipbtn { padding: 4px 9px; border-radius: 999px; font: 700 11px var(--mono); border: 1px solid var(--rule); background: var(--panel-2); }
+.chipbtn[aria-pressed="true"] { color: #0b0e13; border-color: transparent; }
+.prwrap { display: grid; grid-template-columns: 46px minmax(0, 1fr); height: 640px; }
+.prtools { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px;
+  border-right: 1px solid var(--line); overflow-y: auto; }
+.prtools button { width: 36px; height: 34px; flex: none; border-radius: 7px; display: grid; place-items: center; color: var(--ink-2); }
+.prtools button:hover { background: var(--panel-2); color: var(--ink-1); }
+.prtools button[aria-pressed="true"] { background: var(--amber-dim); color: var(--amber); }
+.prtools hr { width: 26px; border: 0; border-top: 1px solid var(--rule); margin: 4px 0; flex: none; }
+.prtools svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+#pr-chart { position: relative; min-width: 0; min-height: 0; }
+#pr-kl { position: absolute; inset: 0; }
+#pr-kl.grab, #pr-kl.grab * { cursor: ns-resize !important; }
 #pr-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); pointer-events: none;
-  text-align: center; padding: 20px; z-index: 3; }
-.trade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.trade label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); }
-.trade label, .trade input, .trade select { min-width: 0; width: 100%; }
-.trade .buy, .trade .sell { padding: 10px; border-radius: 8px; font-weight: 800; font-size: 14px; }
-.trade .buy { background: var(--good); color: #04130a; } .trade .sell { background: var(--critical); color: #fff; }
-.trade .close { grid-column: span 2; }
+  text-align: center; padding: 20px; z-index: 3; background: var(--panel); }
+#pr-msg:empty { display: none; }
+.prbadge { position: absolute; left: 50%; transform: translateX(-50%); top: 6px; z-index: 2; white-space: nowrap; pointer-events: none; font: 700 11px var(--mono);
+  color: var(--ink-2); background: rgba(11, 14, 19, .8); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; }
+.prbadge b { color: var(--amber); letter-spacing: .08em; }
+.prbadge:empty { display: none; }
+.prtoasts { position: absolute; top: 34px; right: 140px; z-index: 4; display: flex; flex-direction: column; gap: 6px;
+  pointer-events: none; align-items: flex-end; }
+.prtoast { background: #1b2130; border: 1px solid var(--rule); border-left: 3px solid var(--info); border-radius: 7px;
+  padding: 8px 12px; font: 600 12px var(--sans); box-shadow: 0 6px 20px rgba(0, 0, 0, .35); transition: opacity .4s, transform .4s; }
+.prtoast.good { border-left-color: var(--good); } .prtoast.bad { border-left-color: var(--critical); }
+.prtoast.out { opacity: 0; transform: translateY(-6px); }
+.prmenu { position: fixed; z-index: 50; min-width: 240px; background: #1b2130; border: 1px solid var(--rule);
+  border-radius: 8px; padding: 4px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.prmenu button { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 5px; font-size: 13px; }
+.prmenu button:hover { background: var(--panel-2); }
+.prmenu .b { color: var(--good); } .prmenu .s { color: var(--critical); }
+.prmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 0; }
+.ticket { display: grid; gap: 10px; }
+.ticket > .seg { display: grid; grid-template-columns: 1fr 1fr; }
+.tk-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ticket label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); min-width: 0; }
+.ticket input, .ticket select { width: 100%; min-width: 0; }
+.tk-sum { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; background: var(--panel-2);
+  border-radius: 7px; padding: 7px 10px; font: 12px var(--mono); color: var(--ink-3); }
+.tk-sum b { font-weight: 700; }
+.bs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bs button { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border-radius: 8px; }
+.bs small { font: 700 11px var(--sans); text-transform: uppercase; letter-spacing: .06em; opacity: .9; }
+.bs b { font: 700 17px var(--mono); }
+.bs .sell { background: var(--critical); color: #fff; align-items: flex-start; }
+.bs .buy { background: var(--good); color: #04130a; align-items: flex-end; }
+.bs button:disabled { opacity: .35; cursor: default; }
+.poshead { display: flex; align-items: center; gap: 8px; font: 13px var(--mono); color: var(--ink-2); }
+.sidetag { font: 800 11px var(--sans); letter-spacing: .08em; padding: 2px 7px; border-radius: 4px; }
+.sidetag.l { background: var(--good-dim); color: var(--good); } .sidetag.s { background: var(--critical-dim); color: var(--critical); }
+.sidetag.o { background: rgba(59, 130, 246, .16); color: #60a5fa; }
+.posbig { font: 700 30px var(--mono); margin: 8px 0 0; line-height: 1.1; }
+.possub { font: 12px var(--mono); color: var(--ink-3); }
+.posact { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
+.posact .pbtn { padding: 7px 2px; }
+.hint { color: var(--ink-3); font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
+.acct { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.acct div { background: var(--panel-2); border-radius: 7px; padding: 7px 10px; display: flex; flex-direction: column; min-width: 0; }
+.acct .k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.acct .v { font: 700 15px var(--mono); }
 .keys-help { color: var(--ink-3); font-size: 12px; line-height: 1.8; }
 .keys-help kbd { font: 11px var(--mono); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 4px;
   padding: 0 5px; color: var(--ink-1); }
+@media (max-width: 640px) {
+  .prwrap { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 460px; height: auto; }
+  .prtools { flex-direction: row; border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .prtools hr { display: none; }
+  .prtoasts { right: 70px; }
+  #v-practice .board { flex-direction: column; }   /* aquí la gráfica va primero */
+  .prbadge { top: auto; bottom: 30px; }
+}
 footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 18px; }
 
 @media (max-width: 1080px) {
@@ -345,47 +407,59 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <input type="date" id="pr-date" aria-label="Día">
         <input type="time" id="pr-time" value="09:30" step="60" aria-label="Hora de inicio (NY)">
         <button class="pbtn" id="pr-go" type="button">Ir</button>
-        <button class="pbtn" id="pr-random" type="button">🎲 Día al azar</button>
+        <button class="pbtn" id="pr-random" type="button" title="Tecla R">🎲 Día al azar</button>
+        <span class="pxsep"></span>
+        <button class="pbtn" id="pr-play" type="button" title="Espacio">▶ Play</button>
+        <button class="pbtn" id="pr-step" type="button" title="Flecha →">▶| Vela</button>
+        <select id="pr-speed" aria-label="Velocidad">
+          <option value="1">1 vela/s</option><option value="2">2 velas/s</option><option value="5" selected>5 velas/s</option>
+          <option value="10">10 velas/s</option><option value="20">20 velas/s</option></select>
         <span class="fill"></span>
         <div class="seg" id="pr-tf" role="group" aria-label="Temporalidad"></div>
       </div>
       <div class="pxbar">
-        <button class="pbtn" id="pr-play" type="button">▶ Play</button>
-        <button class="pbtn" id="pr-step" type="button">▶| Siguiente vela</button>
-        <select id="pr-speed" aria-label="Velocidad">
-          <option value="1">1 vela/s</option><option value="2">2 velas/s</option>
-          <option value="5" selected>5 velas/s</option><option value="10">10 velas/s</option></select>
-        <span class="mono" id="pr-clock" style="color:var(--ink-2)"></span>
-        <span class="fill"></span>
         <span class="pxlab">Indicadores</span>
-        <div id="pr-ind" style="display:flex;gap:6px;flex-wrap:wrap"></div>
-        <button class="pbtn" id="pr-line" type="button" title="Tecla L">✏️ Línea</button>
-        <button class="pbtn" id="pr-clear" type="button">Borrar líneas</button>
+        <div class="chips" id="pr-ind"></div>
+        <span class="fill"></span>
+        <span class="mono" id="pr-clock" style="color:var(--ink-2);font-size:12px"></span>
       </div>
     </div>
     <div class="board">
-      <div class="card chartcard"><div id="pr-chart"><div id="pr-msg">Elige un día y pulsa <b>Ir</b>, o prueba 🎲 Día al azar.</div></div></div>
+      <div class="card chartcard"><div class="prwrap">
+        <nav class="prtools" id="pr-tools" aria-label="Herramientas de dibujo"></nav>
+        <div id="pr-chart"><div id="pr-kl"></div>
+          <div class="prbadge" id="pr-badge"></div><div class="prtoasts" id="pr-toasts"></div>
+          <div id="pr-msg">Cargando…</div></div>
+      </div></div>
       <aside class="side">
-        <div class="card"><h3>Operar <span class="r mono" id="pr-px"></span></h3><div class="body">
-          <div class="trade">
-            <label>Stop (pts)<input type="number" id="pr-sl" value="20" min="1" step="0.25"></label>
-            <label>Objetivo (pts)<input type="number" id="pr-tp" value="40" min="1" step="0.25"></label>
+        <div class="card"><h3>Orden <span class="r mono" id="pr-px"></span></h3><div class="body ticket">
+          <div class="seg" id="pr-otype" role="group" aria-label="Tipo de orden">
+            <button type="button" data-t="mkt" aria-pressed="true">Mercado</button>
+            <button type="button" data-t="lmt" aria-pressed="false">Límite / Stop</button></div>
+          <label id="pr-lpx-wrap" hidden>Precio de la orden<input type="number" id="pr-lpx" step="0.25"></label>
+          <div class="tk-row">
             <label>Contratos<input type="number" id="pr-qty" value="5" min="1" step="1"></label>
-            <label>Tipo<select id="pr-inst"><option value="2" selected>MNQ ($2/pt)</option><option value="20">NQ ($20/pt)</option></select></label>
-            <button class="buy" id="pr-buy" type="button">Comprar (B)</button>
-            <button class="sell" id="pr-sell" type="button">Vender (S)</button>
-            <button class="pbtn close" id="pr-close" type="button">Cerrar posición (C)</button>
+            <label>Tipo<select id="pr-inst"></select></label>
+            <label>Stop (pts)<input type="number" id="pr-sl" value="20" min="0.25" step="0.25"></label>
+            <label>Objetivo (pts)<input type="number" id="pr-tp" value="40" min="0.25" step="0.25"></label>
           </div>
-          <div id="pr-pos" style="margin-top:12px"></div>
+          <div class="tk-sum" id="pr-sum"></div>
+          <div class="bs">
+            <button class="sell" id="pr-sell" type="button"><small>Vender · S</small><b id="pr-bid">—</b></button>
+            <button class="buy" id="pr-buy" type="button"><small>Comprar · B</small><b id="pr-ask">—</b></button>
+          </div>
         </div></div>
-        <div class="card"><h3>Mi práctica <span class="r" id="pr-stats"></span></h3>
-          <div class="body"><ul class="ideas" id="pr-log"></ul>
-            <button class="pbtn" id="pr-reset" type="button" style="margin-top:8px">Borrar récord de práctica</button></div></div>
+        <div class="card"><h3>Posición</h3><div class="body" id="pr-pos"></div></div>
+        <div class="card"><h3>Cuenta de práctica <span class="r"><button class="pbtn" id="pr-reset" type="button">Reiniciar</button></span></h3>
+          <div class="body"><div class="acct" id="pr-acct"></div><ul class="ideas" id="pr-log"></ul></div></div>
         <div class="card"><h3>Atajos</h3><div class="body keys-help">
           <kbd>Espacio</kbd> play/pausa · <kbd>→</kbd> siguiente vela · <kbd>B</kbd> comprar · <kbd>S</kbd> vender ·
-          <kbd>C</kbd> cerrar · <kbd>L</kbd> dibujar línea (clic en la gráfica) · <kbd>R</kbd> día al azar</div></div>
+          <kbd>C</kbd> cerrar · <kbd>R</kbd> día al azar · <kbd>Esc</kbd> cancelar dibujo · <kbd>Supr</kbd> borrar dibujo
+          seleccionado · <b>clic derecho</b> en la gráfica: orden límite/stop a ese precio · arrastra las líneas
+          <b>TP</b>/<b>SL</b> para moverlas · rueda = zoom</div></div>
       </aside>
     </div>
+    <div class="prmenu" id="pr-menu" hidden></div>
   </section>
 
   <!-- ═════════ 5 · SISTEMA ═════════ -->
@@ -399,6 +473,7 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
 <footer>Paper trading · sin bróker · ninguna orden es real</footer>
 
 <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
+<script src="/static/vendor/klinecharts.min.js"></script>
 <script>
 /* ───────────────────────── utilidades ───────────────────────── */
 const $ = id => document.getElementById(id);
@@ -991,90 +1066,425 @@ function renderBacktest() {
 
 
 /* ═══════════════════════════ 4 · PRÁCTICA (repetición de velas) ═══════════════════════════
-   Las velas futuras ya están en el navegador pero NUNCA se dibujan antes de
-   tiempo: el gráfico solo recibe hasta la vela `ptr`. Los indicadores usan
-   solo velas pasadas (EMA/VWAP son causales), así que no hay trampa. */
+   Replay estilo TradingView sobre KLineChart (Apache-2.0, /static/vendor). Las
+   velas futuras ya están en el navegador pero la gráfica solo recibe hasta la
+   vela `ptr`; los indicadores son causales (solo miran velas pasadas), así que
+   no hay trampa. Órdenes, stop y objetivo se simulan vela a vela como el paper
+   trading de TradingView; el TP, el SL y las órdenes pendientes se arrastran. */
 const TF_SEC = { "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600 };
-const IND = [["ema9", "EMA 9", "#38bdf8", 9], ["ema20", "EMA 20", "#f472b6", 20], ["ema50", "EMA 50", "#a78bfa", 50],
-             ["ema200", "EMA 200", "#f5c518", 200], ["vwap", "VWAP", "#e2e8f0", 0]];
-const PR = { init: false, chart: null, candle: null, vol: null, series: {}, markers: null, ds: [], bars: [], ptr: -1,
-  tf: "5m", timer: null, lineMode: false, lines: [], lineObjs: [], pos: null, posLines: [], log: [], ind: {}, busy: false };
+const TICK = 0.25, ACCOUNT0 = 50000;                 // tick del NQ/ES · cuenta tipo Apex 50K
+const GOOD = "#22c55e", BAD = "#ef4444", BLUE = "#3b82f6";
+const IND = [["ema9", "EMA 9", "#38bdf8"], ["ema20", "EMA 20", "#f472b6"], ["ema50", "EMA 50", "#a78bfa"],
+  ["ema200", "EMA 200", "#f5c518"], ["vwap", "VWAP", "#e2e8f0"], ["boll", "BOLL", "#94a3b8"],
+  ["vol", "VOL", "#64748b"], ["rsi", "RSI", "#c084fc"], ["macd", "MACD", "#60a5fa"]];
+const EMA_LEN = { ema9: 9, ema20: 20, ema50: 50, ema200: 200 };
+const ICON = {
+  cursor: '<path d="M6 3l12 9-5.5 1.2L9.5 19z"/>',
+  segment: '<path d="M5 19L19 5"/><circle cx="5" cy="19" r="1.6"/><circle cx="19" cy="5" r="1.6"/>',
+  rayLine: '<path d="M5 18L21 6"/><circle cx="5" cy="18" r="1.6"/>',
+  horizontalStraightLine: '<path d="M2 12h20"/>',
+  horizontalRayLine: '<path d="M7 12h15"/><circle cx="5" cy="12" r="1.6"/>',
+  verticalStraightLine: '<path d="M12 2v20"/>',
+  parallelStraightLine: '<path d="M3 15L15 4M9 20L21 9"/>',
+  fibonacciLine: '<path d="M3 5h18M3 10h18M3 14h18M3 19h18" stroke-dasharray="2 2"/><path d="M3 5h18M3 19h18"/>',
+  prRect: '<rect x="4" y="6" width="16" height="12" rx="1.5"/>',
+  simpleAnnotation: '<path d="M5 5h14v10h-7l-4 4v-4H5z"/>',
+  planL: '<rect x="4" y="4" width="16" height="8" fill="rgba(34,197,94,.45)" stroke="none"/><rect x="4" y="12" width="16" height="8" fill="rgba(239,68,68,.45)" stroke="none"/><path d="M4 12h16"/>',
+  planS: '<rect x="4" y="4" width="16" height="8" fill="rgba(239,68,68,.45)" stroke="none"/><rect x="4" y="12" width="16" height="8" fill="rgba(34,197,94,.45)" stroke="none"/><path d="M4 12h16"/>',
+  magnet: '<path d="M6 4v8a6 6 0 0012 0V4h-4v8a2 2 0 01-4 0V4z"/><path d="M6 8h4M14 8h4"/>',
+  hide: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>' };
+const TOOLS = [["cursor", "Cursor (Esc)"], "|", ["segment", "Línea de tendencia"], ["rayLine", "Rayo"],
+  ["horizontalStraightLine", "Línea horizontal"], ["horizontalRayLine", "Rayo horizontal"],
+  ["verticalStraightLine", "Línea vertical"], ["parallelStraightLine", "Canal paralelo"],
+  ["fibonacciLine", "Retroceso de Fibonacci"], ["prRect", "Rectángulo / zona"], ["simpleAnnotation", "Nota de texto"], "|",
+  ["planL", "Posición larga (planear)"], ["planS", "Posición corta (planear)"], "|",
+  ["magnet", "Imán: pega el dibujo al OHLC"], ["hide", "Ocultar / mostrar dibujos"], ["trash", "Borrar todos los dibujos"]];
+const PR = { init: false, kl: null, push: null, ds: [], sym: "NQ", bars: [], ptr: -1, tf: "5m", timer: null, busy: false,
+  ind: {}, log: [], pos: null, order: null, otype: "mkt", tool: null, toolId: null, magnet: false, hidden: false,
+  sel: null, drag: null, restoring: false, ids: {} };
 const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const tick = p => Math.round(p / TICK) * TICK;
+const money = v => (v == null || !isFinite(v)) ? "—" : `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+const kbar = b => ({ timestamp: b.t * 1000, open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v });
+const prBar = () => PR.bars[PR.ptr];
+const isLong = d => d === "LONG";
+const fmtH23 = new Intl.DateTimeFormat("en-US", { timeZone: NY, hour: "numeric", hourCycle: "h23" });
+const hourMemo = new Map();
+const nyHour = ms => { const k = Math.floor(ms / 36e5); let h = hourMemo.get(k);
+  if (h == null) { h = +fmtH23.format(new Date(ms)) % 24; hourMemo.set(k, h); } return h; };
 
+/* ── figuras de las herramientas propias (posición, orden, plan, zona) ── */
+const MONO = () => css("--mono");
+const tag = (x, y, text, bg, fg = "#fff", align = "right", baseline = "middle") => ({ type: "text", ignoreEvent: true,
+  attrs: { x, y, text, align, baseline },
+  styles: { style: "fill", color: fg, backgroundColor: bg, borderColor: bg, borderSize: 0, borderRadius: 3, size: 11,
+    weight: 700, family: MONO(), paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3 } });
+const hline = (x1, x2, y, color, dashed, size = 1) => ({ type: "line", ignoreEvent: true,
+  attrs: { coordinates: [{ x: x1, y }, { x: x2, y }] }, styles: { style: dashed ? "dashed" : "solid", dashedValue: [4, 4], color, size } });
+const box = (x, y1, w, y2, color) => ({ type: "rect", attrs: { x, y: Math.min(y1, y2), width: w, height: Math.max(1, Math.abs(y2 - y1)) },
+  styles: { style: "fill", color } });
+
+function prRegister() {
+  const K = window.klinecharts;
+  K.registerLocale("es", { time: "Hora: ", open: "A: ", high: "Máx: ", low: "Mín: ", close: "C: ", volume: "Vol: ",
+    change: "Cambio: ", turnover: "Monto: ", second: "s", minute: "min", hour: "h", day: "d", week: "sem", month: "mes", year: "año" });
+  // VWAP de sesión: se reinicia a las 18:00 NY, cuando abre la sesión de futuros
+  K.registerIndicator({ name: "VWAP", shortName: "VWAP", series: "price", precision: 2,
+    figures: [{ key: "vwap", title: "VWAP: ", type: "line" }],
+    calc: list => { let pv = 0, vv = 0, prev = null;
+      return list.map(b => { const h = nyHour(b.timestamp);
+        if (prev != null && prev < 18 && h >= 18) { pv = 0; vv = 0; }
+        prev = h; const v = b.volume || 1; pv += (b.high + b.low + b.close) / 3 * v; vv += v; return { vwap: pv / vv }; }); } });
+  // posición abierta (líneas TP/SL/entrada a todo lo ancho, como TradingView) o cerrada (caja con resultado)
+  K.registerOverlay({ name: "prPos", totalStep: 1, lock: true, needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates: c, bounding, overlay, chart }) => {
+      const d = overlay.extendData; if (!d || c.length < 4) return [];
+      const [e, tp, sl, end] = c, W = bounding.width;
+      const xr = Math.max(end.x + (d.live ? chart.getBarSpace().bar * 4 : 0), e.x + 10), a = d.live ? .16 : .09;
+      const f = [box(e.x, e.y, xr - e.x, tp.y, `rgba(34,197,94,${a})`), box(e.x, e.y, xr - e.x, sl.y, `rgba(239,68,68,${a})`)];
+      if (d.live) {
+        f.push(hline(0, W, tp.y, GOOD, true), hline(0, W, sl.y, BAD, true), hline(0, W, e.y, "#cbd2dc", false),
+          tag(W - 8, tp.y, d.tp, GOOD, "#04130a"), tag(W - 8, sl.y, d.sl, BAD),
+          tag(W - 8, e.y, d.entry, d.pnl >= 0 ? GOOD : BAD, d.pnl >= 0 ? "#04130a" : "#fff"));
+      } else {
+        f.push(hline(e.x, xr, e.y, "rgba(203,210,220,.55)", false),
+          { type: "line", ignoreEvent: true, attrs: { coordinates: [{ x: e.x, y: e.y }, { x: end.x, y: end.y }] },
+            styles: { style: "dashed", dashedValue: [3, 3], color: "#cbd2dc", size: 1 } },
+          tag(end.x + 5, end.y, d.res, d.win ? GOOD : BAD, d.win ? "#04130a" : "#fff", "left"));
+      }
+      return f;
+    },
+    createYAxisFigures: ({ coordinates: c, overlay }) => {
+      const d = overlay.extendData; if (!d?.live || c.length < 3) return [];
+      return [[0, "#cbd2dc", "#0b0e13"], [1, GOOD, "#04130a"], [2, BAD, "#fff"]]
+        .map(([i, bg, fg]) => tag(0, c[i].y, num(overlay.points[i].value), bg, fg, "left"));
+    } });
+  // orden pendiente (límite o stop)
+  K.registerOverlay({ name: "prOrder", totalStep: 1, lock: true, needDefaultPointFigure: false,
+    createPointFigures: ({ coordinates: c, bounding, overlay }) => {
+      const d = overlay.extendData; if (!d || !c.length) return [];
+      return [hline(0, bounding.width, c[0].y, BLUE, true), tag(bounding.width - 8, c[0].y, d.txt, BLUE)];
+    },
+    createYAxisFigures: ({ coordinates: c, overlay }) =>
+      c.length ? [tag(0, c[0].y, num(overlay.points[0].value), BLUE, "#fff", "left")] : [] });
+  // herramienta "posición larga/corta" para planear (la de TradingView): entrada, TP, SL y ancho
+  K.registerOverlay({ name: "prPlan", totalStep: 2, needDefaultPointFigure: true,
+    createPointFigures: ({ coordinates: c, overlay }) => {
+      if (c.length < 4) return [];
+      const [e, tp, sl, end] = c, p = overlay.points, w = Math.max(end.x - e.x, 10), cx = e.x + w / 2;
+      const up = tp.y < e.y, ent = p[0].value, rew = Math.abs(p[1].value - ent), rsk = Math.abs(p[2].value - ent), k = prPPT() * prQty();
+      return [box(e.x, e.y, w, tp.y, "rgba(34,197,94,.20)"), box(e.x, e.y, w, sl.y, "rgba(239,68,68,.20)"),
+        hline(e.x, e.x + w, e.y, "#cbd2dc", false),
+        tag(cx, tp.y + (up ? -4 : 4), `Objetivo ${num(rew)} (${num(rew / ent * 100)}%) ${money(rew * k)}`, GOOD, "#04130a", "center", up ? "bottom" : "top"),
+        tag(cx, sl.y + (up ? 4 : -4), `Stop ${num(rsk)} (${num(rsk / ent * 100)}%) ${money(-rsk * k)}`, BAD, "#fff", "center", up ? "top" : "bottom"),
+        tag(cx, e.y, `R:R ${rsk ? num(rew / rsk) : "—"}`, "#2a3140", "#eef1f5", "center")];
+    },
+    performEventPressedMove: ({ points: p }) => {
+      if (p.length < 4) return;
+      for (const j of [1, 2]) { p[j].timestamp = p[0].timestamp; p[j].dataIndex = p[0].dataIndex; }
+      p[3].value = p[0].value;
+    } });
+  K.registerOverlay({ name: "prRect", totalStep: 3, needDefaultPointFigure: true,
+    createPointFigures: ({ coordinates: c }) => c.length < 2 ? [] : [{ type: "rect",
+      attrs: { x: Math.min(c[0].x, c[1].x), y: Math.min(c[0].y, c[1].y), width: Math.abs(c[1].x - c[0].x), height: Math.abs(c[1].y - c[0].y) },
+      styles: { style: "stroke_fill", color: "rgba(59,130,246,.14)", borderColor: "rgba(96,165,250,.85)", borderSize: 1 } }] });
+}
+
+function prStyles() {
+  const ink2 = css("--ink-2"), ink3 = css("--ink-3"), line = css("--line"), rule = css("--rule"), mono = MONO();
+  const axis = { axisLine: { color: rule }, tickLine: { color: rule }, tickText: { color: ink3, family: mono, size: 11 } };
+  const cross = { line: { color: "#5b6573", style: "dashed", dashedValue: [4, 3] },
+    text: { backgroundColor: "#2a3140", borderColor: "#2a3140", color: "#eef1f5", family: mono } };
+  const bar = { style: "fill", borderStyle: "solid", borderSize: 1, borderDashedValue: [2, 2],
+    upColor: "rgba(34,197,94,.45)", downColor: "rgba(239,68,68,.45)", noChangeColor: ink3 };
+  return {
+    grid: { horizontal: { color: line }, vertical: { color: line } },
+    candle: { bar: { upColor: GOOD, downColor: BAD, noChangeColor: ink3, upBorderColor: GOOD, downBorderColor: BAD,
+        noChangeBorderColor: ink3, upWickColor: GOOD, downWickColor: BAD, noChangeWickColor: ink3 },
+      priceMark: { high: { color: ink3 }, low: { color: ink3 },
+        last: { upColor: GOOD, downColor: BAD, noChangeColor: ink3, line: { style: "dashed", dashedValue: [2, 2] }, text: { family: mono } } },
+      tooltip: { title: { color: "#eef1f5", family: mono, size: 12 }, legend: { color: ink2, family: mono, size: 11 } } },
+    indicator: { bars: [bar], lastValueMark: { show: false },
+      tooltip: { title: { color: ink3, family: mono, size: 11 }, legend: { color: ink2, family: mono, size: 11 } } },
+    xAxis: axis, yAxis: axis, separator: { color: rule },
+    crosshair: { horizontal: cross, vertical: cross },
+    overlay: { point: { color: "#ffb020", borderColor: "rgba(255,176,32,.35)", activeColor: "#ffb020", activeBorderColor: "rgba(255,176,32,.35)" },
+      line: { color: "#60a5fa" }, text: { color: "#eef1f5", family: mono } } };
+}
+
+/* ── arranque ── */
 async function prInit() {
   if (PR.init) { prPaint(); return; }
   PR.init = true;
-  PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, ema50: false, ema200: false, vwap: true });
+  PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, ema50: false, ema200: false, vwap: true, vol: true });
   PR.log = lsGet("pr.log", []);
-  PR.lines = lsGet("pr.lines", []);
   try { PR.ds = (await api("/api/backtest/options")).datasets || []; } catch { PR.ds = []; }
   $("pr-data").innerHTML = PR.ds.length ? PR.ds.map((d, i) => `<option value="${i}">${esc(d.symbol)} · ${esc(d.data)} (${esc(d.first)} → ${esc(d.last)})</option>`).join("")
     : `<option>sin datos descargados</option>`;
   const best = PR.ds.findIndex(d => d.data === "DATABENTO");
   if (best >= 0) $("pr-data").value = best;
+  PR.sym = PR.ds[+$("pr-data").value]?.symbol || "NQ";
+  prInstOptions();
   $("pr-tf").innerHTML = Object.keys(TF_SEC).map(t => `<button type="button" data-tf="${t}" aria-pressed="${t === PR.tf}">${t}</button>`).join("");
   $("pr-tf").querySelectorAll("button").forEach(b => b.onclick = () => prSetTf(b.dataset.tf));
-  prIndButtons();
-  const LWc = window.LightweightCharts;
-  if (!PR.chart && LWc) {
-    const bg = css("--panel"), line = css("--line");
-    PR.chart = LWc.createChart($("pr-chart"), { autoSize: true,
-      layout: { background: { type: "solid", color: bg }, textColor: css("--ink-3"), fontFamily: css("--mono"), fontSize: 11,
-        panes: { separatorColor: line } },
-      grid: { vertLines: { color: line }, horzLines: { color: line } }, crosshair: { mode: LWc.CrosshairMode.Normal },
-      rightPriceScale: { borderColor: line }, timeScale: { borderColor: line, timeVisible: true, rightOffset: 12, barSpacing: 8,
-        tickMarkFormatter: t => fmtHM.format(new Date(t * 1000)) },
-      localization: { locale: "es-MX", timeFormatter: t => dhm(new Date(t * 1000)), priceFormatter: p => p.toFixed(2) } });
-    PR.candle = PR.chart.addSeries(LWc.CandlestickSeries, { upColor: css("--good"), downColor: css("--critical"),
-      borderVisible: false, wickUpColor: css("--good"), wickDownColor: css("--critical") });
-    PR.vol = PR.chart.addSeries(LWc.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1);
-    const panes = PR.chart.panes(); if (panes[1]) { panes[0].setStretchFactor(6); panes[1].setStretchFactor(1); }
-    for (const [k, , col] of IND) PR.series[k] = PR.chart.addSeries(LWc.LineSeries, { color: col, lineWidth: k === "vwap" ? 2 : 1,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    PR.markers = LWc.createSeriesMarkers(PR.candle, []);
-    PR.chart.subscribeClick(p => {
-      if (!PR.lineMode || !p.point) return;
-      const price = PR.candle.coordinateToPrice(p.point.y);
-      if (price == null) return;
-      PR.lines.push(+price.toFixed(2)); lsSet("pr.lines", PR.lines); prDrawLines();
-      PR.lineMode = false; $("pr-line").classList.remove("on");
-    });
-  }
-  if (!$("pr-date").value) prRandom(false);
-  prPaint(); prLog();
+  prIndButtons(); prTools(); prChart(); prLog(); prPaint();
+  if (!PR.ds.length) { $("pr-msg").textContent = "No hay datos históricos descargados (market_data/NQ/…_1m.csv)."; return; }
+  prRandom(true);
+}
+
+function prChart() {
+  if (PR.kl || !window.klinecharts) { if (!window.klinecharts) $("pr-msg").textContent = "No se pudo cargar la librería de gráficas."; return; }
+  prRegister();
+  const kl = PR.kl = klinecharts.init($("pr-kl"), { locale: "es", timezone: NY, styles: prStyles() });
+  kl.setSymbol({ ticker: PR.sym, pricePrecision: 2, volumePrecision: 0 });
+  kl.setPeriod(prPeriod());
+  kl.setOffsetRightDistance(innerWidth < 640 ? 60 : 140);
+  kl.setDataLoader({
+    getBars: ({ type, callback }) => {
+      callback(type === "init" ? PR.bars.slice(0, PR.ptr + 1).map(kbar) : [], false);
+      if (type === "init") setTimeout(prAfterLoad, 0);
+    },
+    subscribeBar: ({ callback }) => { PR.push = callback; },
+    unsubscribeBar: () => { PR.push = null; } });
+  prApplyInd();
+  prBindChart();
+}
+const prPeriod = () => { const m = TF_SEC[PR.tf] / 60; return m >= 60 ? { type: "hour", span: m / 60 } : { type: "minute", span: m }; };
+
+function prAfterLoad() {
+  if (!PR.kl || !PR.bars.length) return;
+  prRestoreDrawings(); prDrawHist(); prDrawTrade(); prDrawOrder();
+  PR.kl.scrollToRealTime(); prPaint();
+}
+
+function prInstOptions() {
+  const [[mk, mv], [bk, bv]] = PV[PR.sym] || PV.NQ;
+  $("pr-inst").innerHTML = `<option value="${mv}" data-k="${mk}" selected>${mk} ($${mv}/pt)</option><option value="${bv}" data-k="${bk}">${bk} ($${bv}/pt)</option>`;
 }
 
 function prIndButtons() {
-  $("pr-ind").innerHTML = IND.map(([k, lab, col]) => `<button class="pbtn" type="button" data-k="${k}" aria-pressed="${!!PR.ind[k]}"
-    style="${PR.ind[k] ? `background:${col};color:#000;border-color:transparent` : `color:${col}`}">${lab}</button>`).join("");
+  $("pr-ind").innerHTML = IND.map(([k, lab, col]) => `<button class="chipbtn" type="button" data-k="${k}" aria-pressed="${!!PR.ind[k]}"
+    style="${PR.ind[k] ? `background:${col}` : `color:${col}`}">${lab}</button>`).join("");
   $("pr-ind").querySelectorAll("button").forEach(b => b.onclick = () => {
-    PR.ind[b.dataset.k] = !PR.ind[b.dataset.k]; lsSet("pr.ind", PR.ind);
-    prIndButtons(); if (PR.bars.length) prIndicators(true);
-  });
+    PR.ind[b.dataset.k] = !PR.ind[b.dataset.k]; lsSet("pr.ind", PR.ind); prIndButtons(); prApplyInd(); });
 }
+function prApplyInd() {
+  const kl = PR.kl; if (!kl) return;
+  for (const n of ["EMA", "VWAP", "BOLL", "VOL", "RSI", "MACD"]) kl.removeIndicator({ name: n });
+  const L = (color, size = 1.2) => ({ style: "solid", smooth: false, size, color, dashedValue: [2, 2] });
+  const emas = IND.filter(([k]) => EMA_LEN[k] && PR.ind[k]);
+  if (emas.length) kl.createIndicator({ name: "EMA", calcParams: emas.map(([k]) => EMA_LEN[k]), paneId: "candle_pane",
+    styles: { lines: emas.map(([, , c]) => L(c)) } }, true);
+  if (PR.ind.vwap) kl.createIndicator({ name: "VWAP", paneId: "candle_pane", styles: { lines: [L("#e2e8f0", 1.6)] } }, true);
+  if (PR.ind.boll) kl.createIndicator({ name: "BOLL", paneId: "candle_pane", styles: { lines: ["#94a3b8", "#64748b", "#94a3b8"].map(c => L(c, 1)) } }, true);
+  for (const [k, n, h] of [["vol", "VOL", 70], ["rsi", "RSI", 90], ["macd", "MACD", 100]]) {
+    if (!PR.ind[k]) continue;
+    kl.createIndicator({ name: n, paneId: "pr_" + k, ...(n === "VOL" ? { calcParams: [20] } : {}) });
+    kl.setPaneOptions({ id: "pr_" + k, height: h });
+  }
+}
+
+/* ── herramientas de dibujo ── */
+function prTools() {
+  const on = n => n === "magnet" ? PR.magnet : n === "hide" ? PR.hidden : n === "cursor" ? !PR.tool : PR.tool === n;
+  $("pr-tools").innerHTML = TOOLS.map(t => t === "|" ? "<hr>" :
+    `<button type="button" data-tool="${t[0]}" title="${esc(t[1])}" aria-label="${esc(t[1])}" aria-pressed="${on(t[0])}"><svg viewBox="0 0 24 24">${ICON[t[0]]}</svg></button>`).join("");
+  $("pr-tools").querySelectorAll("button").forEach(b => b.onclick = () => prSetTool(b.dataset.tool));
+}
+const drawKey = () => "pr.draw." + PR.sym;
+const prHandlers = () => ({
+  onDrawEnd: ev => { const o = ev.overlay; if (o.name === "prPlan") prExpandPlan(o); prToolDone(); setTimeout(prSaveDrawings, 0); },
+  onPressedMoveEnd: () => prSaveDrawings(),
+  onSelected: ev => { PR.sel = ev.overlay.id; },
+  onDeselected: ev => { if (PR.sel === ev.overlay.id) PR.sel = null; },
+  onRemoved: () => prSaveDrawings() });
+function prSaveDrawings() {
+  if (PR.restoring || !PR.kl) return;
+  const list = PR.kl.getOverlays({ groupId: "draw" }).filter(o => o.id !== PR.toolId && o.points?.length)
+    .map(o => ({ name: o.name, points: o.points.map(p => ({ timestamp: p.timestamp, value: p.value })), extendData: o.extendData ?? null }))
+    .filter(o => o.points.every(p => isFinite(p.timestamp) && isFinite(p.value)));
+  lsSet(drawKey(), list);
+}
+function prRestoreDrawings() {
+  PR.restoring = true;
+  try {
+    PR.kl.removeOverlay({ groupId: "draw" });
+    for (const d of lsGet(drawKey(), [])) PR.kl.createOverlay({ ...d, groupId: "draw", visible: !PR.hidden, ...prHandlers() });
+  } finally { PR.restoring = false; }
+}
+function prExpandPlan(o) {
+  const p0 = o.points[0]; if (!p0 || o.points.length >= 4) return;
+  const long = o.extendData?.dir !== "SHORT", tk = prTicket(), v = tick(p0.value), t = p0.timestamp;
+  PR.kl.overrideOverlay({ id: o.id, points: [{ timestamp: t, value: v }, { timestamp: t, value: long ? v + tk.tpPts : v - tk.tpPts },
+    { timestamp: t, value: long ? v - tk.slPts : v + tk.slPts }, { timestamp: t + 20 * TF_SEC[PR.tf] * 1000, value: v }] });
+}
+function prSetTool(name) {
+  if (!PR.kl) return;
+  if (name === "magnet") { PR.magnet = !PR.magnet; prTools(); return; }
+  if (name === "hide") {
+    PR.hidden = !PR.hidden;
+    for (const o of PR.kl.getOverlays({ groupId: "draw" })) PR.kl.overrideOverlay({ id: o.id, visible: !PR.hidden });
+    prTools(); return;
+  }
+  if (name === "trash") {
+    if (confirm("¿Borrar todos los dibujos de " + PR.sym + "?")) { PR.restoring = true; PR.kl.removeOverlay({ groupId: "draw" }); PR.restoring = false; lsSet(drawKey(), []); }
+    return;
+  }
+  const same = PR.tool === name;
+  prCancelTool();
+  if (name === "cursor" || same) return;
+  let extendData = null;
+  if (name === "simpleAnnotation") { extendData = prompt("Texto de la nota:"); if (!extendData) return; }
+  const [ov, dir] = name === "planL" ? ["prPlan", "LONG"] : name === "planS" ? ["prPlan", "SHORT"] : [name, null];
+  PR.tool = name;
+  PR.toolId = PR.kl.createOverlay({ name: ov, groupId: "draw", extendData: dir ? { dir } : extendData,
+    mode: PR.magnet ? "weak_magnet" : "normal", ...prHandlers() });
+  prTools();
+}
+function prCancelTool() {
+  if (PR.toolId && PR.kl) { PR.restoring = true; PR.kl.removeOverlay({ id: PR.toolId }); PR.restoring = false; }
+  PR.tool = PR.toolId = null; prTools();
+}
+function prToolDone() { PR.tool = PR.toolId = null; prTools(); }
+
+/* ── arrastrar TP / SL / orden y menú del clic derecho ── */
+function prXY(e) {
+  const r = $("pr-kl").getBoundingClientRect(), p = e.touches?.[0] || e.changedTouches?.[0] || e;
+  return [p.clientX - r.left, p.clientY - r.top];
+}
+function prPriceAt(x, y) {
+  const r = PR.kl.convertFromPixel([{ x, y }], { paneId: "candle_pane", absolute: true });
+  const v = (Array.isArray(r) ? r[0] : r)?.value;
+  return isFinite(v) ? v : null;
+}
+function prYOf(v) {
+  const b = prBar(); if (!b) return null;
+  const r = PR.kl.convertToPixel({ timestamp: b.t * 1000, value: v }, { paneId: "candle_pane", absolute: true });
+  return (Array.isArray(r) ? r[0] : r)?.y;
+}
+function prHit(x, y) {
+  if (!PR.kl || !prBar()) return null;
+  const c = [];
+  if (PR.pos) c.push(["tp", PR.pos.tp], ["sl", PR.pos.sl]);
+  if (PR.order) c.push(["ord", PR.order.px]);
+  let best = null, bd = 7;
+  for (const [k, v] of c) { const d = Math.abs((prYOf(v) ?? -1e9) - y); if (d < bd) { bd = d; best = k; } }
+  return best;
+}
+function prBindChart() {
+  const host = $("pr-kl");
+  const start = e => {
+    if (PR.tool || (e.button ?? 0) > 0) return;
+    const k = prHit(...prXY(e)); if (!k) return;
+    e.stopPropagation(); e.preventDefault();
+    PR.drag = k; host.classList.add("grab");
+  };
+  host.addEventListener("mousedown", start, true);
+  host.addEventListener("touchstart", start, { capture: true, passive: false });
+  host.addEventListener("mousemove", e => { if (!PR.drag && !PR.tool) host.classList.toggle("grab", !!prHit(...prXY(e))); }, true);
+  const move = e => {
+    if (!PR.drag) return;
+    if (e.cancelable) e.preventDefault();
+    const v = prPriceAt(...prXY(e)); if (v != null) prDragTo(PR.drag, tick(v));
+  };
+  window.addEventListener("mousemove", move);
+  window.addEventListener("touchmove", move, { passive: false });
+  const end = () => {
+    if (!PR.drag) return;
+    const k = PR.drag; PR.drag = null; host.classList.remove("grab");
+    if (k === "ord" && PR.order) prToast(`Orden movida a ${num(PR.order.px)}`);
+    else if (PR.pos) prToast(k === "tp" ? `Objetivo en ${num(PR.pos.tp)}` : `Stop en ${num(PR.pos.sl)}`);
+    prPaint();
+  };
+  window.addEventListener("mouseup", end); window.addEventListener("touchend", end);
+  host.addEventListener("contextmenu", prMenu, true);
+  document.addEventListener("mousedown", e => { if (!$("pr-menu").contains(e.target)) prMenuHide(); });
+}
+function prDragTo(k, v) {
+  const b = prBar(); if (!b) return;
+  if (k === "ord" && PR.order) { PR.order.px = v; PR.order.kind = prKind(PR.order.dir, v); prDrawOrder(); prPaint(); return; }
+  const p = PR.pos; if (!p) return;
+  const long = isLong(p.dir);
+  // nunca del lado que se ejecutaría al instante
+  if (k === "tp") p.tp = long ? Math.max(v, b.c + TICK) : Math.min(v, b.c - TICK);
+  else p.sl = long ? Math.min(v, b.c - TICK) : Math.max(v, b.c + TICK);
+  prDrawTrade(); prPaint();
+}
+function prMenu(e) {
+  e.preventDefault(); e.stopPropagation();
+  const b = prBar(); if (!b || !PR.kl) return;
+  const v = prPriceAt(...prXY(e)); if (v == null) return;
+  const px = tick(v), q = `${prQty()} ${prInst()}`, items = [];
+  if (!PR.pos && !PR.order) {
+    for (const dir of ["LONG", "SHORT"]) items.push(`<button type="button" class="${isLong(dir) ? "b" : "s"}" data-a="place" data-dir="${dir}" data-px="${px}">
+      ${isLong(dir) ? "Comprar" : "Vender"} ${prKind(dir, px) === "lmt" ? "límite" : "stop"} ${q} @ ${num(px)}</button>`);
+  }
+  if (PR.pos) items.push(`<button type="button" data-a="close">Cerrar posición a mercado</button>`);
+  if (PR.order) items.push(`<button type="button" data-a="cancel">Cancelar orden pendiente</button>`);
+  items.push("<hr>", `<button type="button" data-a="hline" data-px="${px}">Línea horizontal en ${num(px)}</button>`);
+  const m = $("pr-menu");
+  m.innerHTML = items.join(""); m.hidden = false;
+  m.style.left = Math.min(e.clientX, innerWidth - 260) + "px"; m.style.top = Math.min(e.clientY, innerHeight - m.offsetHeight - 8) + "px";
+  m.onclick = ev => {
+    const t = ev.target.closest("[data-a]"); if (!t) return;
+    const a = t.dataset.a; prMenuHide();
+    if (a === "place") prPlace(t.dataset.dir, +t.dataset.px);
+    else if (a === "close") prExit(null, "Cierre manual");
+    else if (a === "cancel") prCancelOrder();
+    else if (a === "hline") {
+      PR.kl.createOverlay({ name: "horizontalStraightLine", groupId: "draw", points: [{ timestamp: b.t * 1000, value: +t.dataset.px }], ...prHandlers() });
+      prSaveDrawings();
+    }
+  };
+}
+function prMenuHide() { $("pr-menu").hidden = true; }
+
+/* ── controles ── */
 $("pr-go").onclick = () => prLoad();
 $("pr-random").onclick = () => prRandom(true);
 $("pr-step").onclick = () => prStep();
 $("pr-play").onclick = () => prPlay();
 $("pr-speed").onchange = () => { if (PR.timer) { prPlay(); prPlay(); } };
-$("pr-line").onclick = () => { PR.lineMode = !PR.lineMode; $("pr-line").classList.toggle("on", PR.lineMode); };
-$("pr-clear").onclick = () => { PR.lines = []; lsSet("pr.lines", []); prDrawLines(); };
-$("pr-buy").onclick = () => prOpen("LONG");
-$("pr-sell").onclick = () => prOpen("SHORT");
-$("pr-close").onclick = () => prExit(null, "Cierre manual");
-$("pr-reset").onclick = () => { if (confirm("¿Borrar todo el récord de práctica?")) { PR.log = []; lsSet("pr.log", []); prLog(); } };
+$("pr-data").onchange = () => { PR.sym = PR.ds[+$("pr-data").value]?.symbol || PR.sym; prInstOptions(); prPaint(); };
+$("pr-buy").onclick = () => prOrderBtn("LONG");
+$("pr-sell").onclick = () => prOrderBtn("SHORT");
+$("pr-otype").querySelectorAll("button").forEach(b => b.onclick = () => {
+  PR.otype = b.dataset.t;
+  $("pr-otype").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  $("pr-lpx-wrap").hidden = PR.otype !== "lmt";
+  if (PR.otype === "lmt" && prBar()) $("pr-lpx").value = prBar().c.toFixed(2);
+  prPaint();
+});
+["pr-qty", "pr-inst", "pr-sl", "pr-tp", "pr-lpx"].forEach(i => $(i).addEventListener("input", () => prPaint()));
+$("pr-pos").onclick = e => {
+  const a = e.target.closest("[data-a]")?.dataset.a; if (!a) return;
+  const p = PR.pos, b = prBar();
+  if (a === "close") prExit(null, "Cierre manual");
+  else if (a === "half" && p && p.qty > 1) prExit(null, "Cierre parcial", Math.floor(p.qty / 2));
+  else if (a === "be" && p && b) {
+    const long = isLong(p.dir);
+    if (long ? b.c - TICK < p.entry : b.c + TICK > p.entry) { prToast("El precio aún no pasa la entrada: el stop a BE se ejecutaría ya.", "bad"); return; }
+    p.sl = p.entry; prToast("Stop a breakeven"); prDrawTrade(); prPaint();
+  } else if (a === "rev" && p && b) { const q = p.qty, dir = isLong(p.dir) ? "SHORT" : "LONG"; prExit(null, "Invertir"); prFill(dir, b.c, b.t, { ...prTicket(), qty: q }, "Invertida"); }
+  else if (a === "cancel") prCancelOrder();
+};
+$("pr-reset").onclick = () => { if (confirm("¿Reiniciar la cuenta de práctica y borrar el historial?")) { PR.log = []; lsSet("pr.log", []); prDrawHist(); prLog(); prPaint(); } };
 
 function prKey(e) {
-  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "")) return;
   const k = e.key.toLowerCase();
+  if (e.key === "Escape") { prCancelTool(); prMenuHide(); return; }
+  if ((e.key === "Delete" || e.key === "Backspace") && PR.sel && PR.kl) { e.preventDefault(); PR.kl.removeOverlay({ id: PR.sel }); PR.sel = null; return; }
+  if (e.shiftKey) return;                      // Shift+flechas / Shift± = mover y zoom de la gráfica
   if (k === " ") { e.preventDefault(); prPlay(); }
   else if (e.key === "ArrowRight") { e.preventDefault(); prStep(); }
-  else if (k === "b") prOpen("LONG"); else if (k === "s") prOpen("SHORT");
-  else if (k === "c") prExit(null, "Cierre manual");
-  else if (k === "l") $("pr-line").click(); else if (k === "r") prRandom(true);
+  else if (k === "b") prOrderBtn("LONG"); else if (k === "s") prOrderBtn("SHORT");
+  else if (k === "c") { if (PR.pos) prExit(null, "Cierre manual"); else prCancelOrder(); }
+  else if (k === "r") prRandom(true);
 }
 
+/* ── datos y reproducción ── */
 function prRandom(load) {
   const d = PR.ds[+$("pr-data").value]; if (!d) return;
   const a = Date.parse(d.first + "T12:00:00Z") + 5 * 864e5, b = Date.parse(d.last + "T12:00:00Z") - 3 * 864e5;
@@ -1083,95 +1493,64 @@ function prRandom(load) {
   if (load) prLoad();
 }
 
-async function prFetch(date, at) {
-  const d = PR.ds[+$("pr-data").value]; if (!d) return null;
+async function prFetch(d, date, at) {
   $("pr-msg").textContent = "Cargando velas… (la primera vez prepara los datos, puede tardar un minuto)";
   try {
     return await api(`/api/replay/bars?symbol=${d.symbol}&data=${encodeURIComponent(d.data)}&date=${date}&tf=${PR.tf}&at=${at}&days_before=3&days_after=2`);
   } catch (e) { $("pr-msg").textContent = "No se pudieron cargar las velas: " + e.message; return null; }
 }
 
-/** Carga la ventana y deja visibles solo las velas que CERRARON antes de `endT`. */
+/** Carga la ventana y deja visibles solo las velas que CERRARON antes de `endT`.
+ *  Sin `endT` es un día nuevo: una posición abierta del día anterior se descarta. */
 async function prLoad(endT = null) {
-  if (PR.busy) return; PR.busy = true;
+  if (PR.busy || !PR.kl) return;
+  const d = PR.ds[+$("pr-data").value]; if (!d) return;
+  if (!endT && (PR.pos || PR.order)) {
+    if (!confirm("Tienes una posición u orden abierta. ¿Descartarla y cambiar de día?")) return;
+    PR.pos = PR.order = null;
+  }
+  PR.busy = true;
   if (PR.timer) prPlay();
-  const date = endT ? fmtDate.format(new Date(endT * 1000)) : $("pr-date").value;
-  const at = endT ? fmtHM.format(new Date(endT * 1000)) : ($("pr-time").value || "09:30");
-  const r = await prFetch(date, at);
-  PR.busy = false;
-  if (!r) return;
-  if (!r.bars.length) { $("pr-msg").textContent = "No hay velas para ese día (¿fin de semana o feriado?). Prueba otro."; return; }
-  PR.bars = r.bars;
-  const T = endT ?? r.at_t, sec = TF_SEC[PR.tf];
-  PR.ptr = -1;
-  for (let i = 0; i < PR.bars.length; i++) { if (PR.bars[i].t + sec <= T) PR.ptr = i; else break; }
-  if (PR.ptr < 0) PR.ptr = 0;
-  $("pr-msg").textContent = "";
-  prRedraw(); PR.chart.timeScale().scrollToRealTime();
+  try {
+    const date = endT ? fmtDate.format(new Date(endT * 1000)) : $("pr-date").value;
+    const at = endT ? fmtHM.format(new Date(endT * 1000)) : ($("pr-time").value || "09:30");
+    const r = await prFetch(d, date, at);
+    if (!r) return;
+    if (!r.bars.length) { $("pr-msg").textContent = "No hay velas para ese día (¿fin de semana o feriado?). Prueba otro."; return; }
+    PR.bars = r.bars;
+    const T = endT ?? r.at_t, sec = TF_SEC[PR.tf];
+    PR.ptr = 0;
+    for (let i = 0; i < PR.bars.length; i++) { if (PR.bars[i].t + sec <= T) PR.ptr = i; else break; }
+    $("pr-msg").textContent = "";
+    if (PR.sym !== d.symbol) { PR.sym = d.symbol; prInstOptions(); }
+    if (PR.kl.getSymbol()?.ticker !== d.symbol) PR.kl.setSymbol({ ticker: d.symbol, pricePrecision: 2, volumePrecision: 0 });
+    const per = PR.kl.getPeriod(), want = prPeriod();
+    if (!per || per.type !== want.type || per.span !== want.span) PR.kl.setPeriod(want);
+    else PR.kl.resetData();
+  } finally { PR.busy = false; }
 }
 
 function prSetTf(tf) {
   if (tf === PR.tf) return;
-  const endT = PR.bars.length && PR.ptr >= 0 ? PR.bars[PR.ptr].t + TF_SEC[PR.tf] : null;
+  const endT = PR.bars.length ? PR.bars[PR.ptr].t + TF_SEC[PR.tf] : null;
   PR.tf = tf;
   $("pr-tf").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.tf === tf));
-  if (PR.bars.length) prLoad(endT);
-}
-
-const prCandle = b => ({ time: b.t, open: b.o, high: b.h, low: b.l, close: b.c });
-const prVol = b => ({ time: b.t, value: b.v, color: (b.c >= b.o ? css("--good") : css("--critical")) + "55" });
-
-function prRedraw() {
-  const shown = PR.bars.slice(0, PR.ptr + 1);
-  PR.candle.setData(shown.map(prCandle)); PR.vol.setData(shown.map(prVol));
-  prIndicators(true); prDrawLines(); prDrawPos(); prMarkers(); prPaint();
-}
-
-/** EMA y VWAP (VWAP se reinicia a las 18:00 NY, inicio de sesión de futuros). */
-function prCalc() {
-  const out = {};
-  for (const [k, , , n] of IND) {
-    if (!n) continue;
-    const a = 2 / (n + 1); let e = null;
-    out[k] = PR.bars.map(b => (e = e == null ? b.c : e + a * (b.c - e)));
-  }
-  let pv = 0, vv = 0, prevHour = null;
-  const hourNY = new Intl.DateTimeFormat("en-US", { timeZone: NY, hour: "2-digit", hour12: false });
-  out.vwap = PR.bars.map(b => {
-    const h = +hourNY.format(new Date(b.t * 1000)) % 24;
-    if (prevHour != null && prevHour < 18 && h >= 18) { pv = 0; vv = 0; }
-    prevHour = h;
-    const tp = (b.h + b.l + b.c) / 3, v = b.v || 1; pv += tp * v; vv += v; return pv / vv;
-  });
-  return out;
-}
-function prIndicators(full) {
-  if (!PR.series.ema9) return;
-  if (full || !PR.calc || PR.calc.n !== PR.bars.length) PR.calc = { n: PR.bars.length, ...prCalc() };
-  for (const [k] of IND) {
-    const s = PR.series[k];
-    if (!PR.ind[k]) { s.setData([]); continue; }
-    if (full) s.setData(PR.calc[k].slice(0, PR.ptr + 1).map((v, i) => ({ time: PR.bars[i].t, value: v })));
-    else s.update({ time: PR.bars[PR.ptr].t, value: PR.calc[k][PR.ptr] });
-  }
-}
-
-function prDrawLines() {
-  for (const l of PR.lineObjs) PR.candle.removePriceLine(l);
-  PR.lineObjs = PR.lines.map(p => PR.candle.createPriceLine({ price: p, color: "#60a5fa", lineWidth: 1,
-    lineStyle: 0, axisLabelVisible: true, title: "" }));
+  if (endT) prLoad(endT);
 }
 
 async function prStep() {
-  if (!PR.bars.length) return;
+  if (!PR.bars.length || PR.busy) return;
   if (PR.ptr >= PR.bars.length - 1) {                   // se acabó lo cargado: trae más
+    const playing = !!PR.timer;
     await prLoad(PR.bars[PR.ptr].t + TF_SEC[PR.tf]);
-    if (PR.ptr >= PR.bars.length - 1) { if (PR.timer) prPlay(); return; }
+    if (PR.ptr >= PR.bars.length - 1) return;
+    if (playing) prPlay();
+    return;
   }
   PR.ptr++;
   const b = PR.bars[PR.ptr];
-  PR.candle.update(prCandle(b)); PR.vol.update(prVol(b)); prIndicators(false);
-  prCheckPos(b); prPaint();
+  PR.push?.(kbar(b));
+  prOnBar(b);
 }
 
 function prPlay() {
@@ -1181,73 +1560,181 @@ function prPlay() {
   $("pr-play").textContent = "❚❚ Pausa"; $("pr-play").classList.add("on");
 }
 
-/* ── operar en práctica ── */
-const prPV = () => (+$("pr-qty").value || 1) * (+$("pr-inst").value || 2);
-function prOpen(dir) {
-  if (!PR.bars.length || PR.pos) return;
-  const b = PR.bars[PR.ptr], sl = +$("pr-sl").value, tp = +$("pr-tp").value;
-  const long = dir === "LONG";
-  PR.pos = { dir, entry: b.c, t: b.t, sl: long ? b.c - sl : b.c + sl, tp: long ? b.c + tp : b.c - tp, pv: prPV(),
-    label: `${$("pr-qty").value} ${$("pr-inst").selectedOptions[0].textContent.split(" ")[0]}` };
-  prDrawPos(); prMarkers(); prPaint();
+/* ── simulación de órdenes (vela a vela) ── */
+const prQty = () => Math.max(1, Math.round(+$("pr-qty").value || 1));
+const prPPT = () => +$("pr-inst").value || 2;
+const prInst = () => $("pr-inst").selectedOptions[0]?.dataset.k || "MNQ";
+const prTicket = () => ({ qty: prQty(), ppt: prPPT(), inst: prInst(),
+  slPts: Math.max(TICK, tick(+$("pr-sl").value || 20)), tpPts: Math.max(TICK, tick(+$("pr-tp").value || 40)) });
+/** Comprar por debajo del precio = límite; por encima = stop (y al revés para vender). */
+const prKind = (dir, px) => { const c = prBar()?.c ?? px; return isLong(dir) ? (px < c ? "lmt" : "stp") : (px > c ? "lmt" : "stp"); };
+
+function prOrderBtn(dir) {
+  const b = prBar(); if (!b || PR.pos || PR.order) return;
+  if (PR.otype === "mkt") prFill(dir, b.c, b.t, prTicket(), "a mercado");
+  else prPlace(dir, tick(+$("pr-lpx").value || b.c));
 }
-function prCheckPos(b) {
-  const p = PR.pos; if (!p) return;
-  const long = p.dir === "LONG";
-  const hitSl = long ? b.l <= p.sl : b.h >= p.sl, hitTp = long ? b.h >= p.tp : b.l <= p.tp;
-  if (hitSl) prExit(p.sl, hitTp ? "Stop (tocó ambos: se asume el stop)" : "Stop");
-  else if (hitTp) prExit(p.tp, "Objetivo");
+function prPlace(dir, px) {
+  if (PR.pos || PR.order || !prBar()) return;
+  PR.order = { dir, px, kind: prKind(dir, px), ...prTicket() };
+  prToast(`Orden ${isLong(dir) ? "de compra" : "de venta"} ${PR.order.kind === "lmt" ? "límite" : "stop"} @ ${num(px)} — arrástrala para moverla`);
+  prDrawOrder(); prPaint();
 }
-function prExit(price, why) {
-  const p = PR.pos; if (!p) return;
-  const b = PR.bars[PR.ptr], px = price ?? b.c;
-  const pts = p.dir === "LONG" ? px - p.entry : p.entry - px;
-  PR.log.push({ dir: p.dir, entry: p.entry, exit: px, t_in: p.t, t_out: b.t, pts, usd: pts * p.pv, label: p.label, why,
-    risk: Math.abs(p.entry - p.sl) });
-  lsSet("pr.log", PR.log); PR.pos = null;
-  prDrawPos(); prMarkers(); prLog(); prPaint();
+function prCancelOrder() { if (!PR.order) return; PR.order = null; prToast("Orden cancelada"); prDrawOrder(); prPaint(); }
+
+function prFill(dir, px, t, tk, how) {
+  const long = isLong(dir);
+  PR.pos = { dir, entry: px, t, qty: tk.qty, ppt: tk.ppt, inst: tk.inst, sym: PR.sym, risk: tk.slPts,
+    sl: tick(long ? px - tk.slPts : px + tk.slPts), tp: tick(long ? px + tk.tpPts : px - tk.tpPts) };
+  prToast(`${long ? "Compra" : "Venta"} ${tk.qty} ${tk.inst} @ ${num(px)} · ${how}`, long ? "good" : "bad");
+  prDrawTrade(); prPaint();
 }
-function prDrawPos() {
-  for (const l of PR.posLines) PR.candle.removePriceLine(l);
-  PR.posLines = [];
-  const p = PR.pos; if (!p) return;
-  const L = (price, color, title, style = 0) => PR.posLines.push(PR.candle.createPriceLine({ price, color, lineWidth: 2, lineStyle: style, axisLabelVisible: true, title }));
-  L(p.entry, "#cbd2dc", p.dir === "LONG" ? "Compra" : "Venta"); L(p.sl, css("--critical"), "SL", 2); L(p.tp, css("--good"), "TP", 2);
+function prExit(price, why, part = 0) {
+  const p = PR.pos, b = prBar(); if (!p || !b) return;
+  const px = price ?? b.c, q = part ? Math.min(part, p.qty) : p.qty;
+  const pts = isLong(p.dir) ? px - p.entry : p.entry - px, usd = pts * q * p.ppt;
+  PR.log.push({ sym: p.sym, dir: p.dir, entry: p.entry, exit: px, tp: p.tp, sl: p.sl, t_in: p.t, t_out: b.t, pts, usd,
+    qty: q, inst: p.inst, label: `${q} ${p.inst}`, why, risk: p.risk, r: p.risk ? pts / p.risk : null });
+  lsSet("pr.log", PR.log);
+  prToast(`${why}: ${sgn(pts)} pts · ${money(usd)}`, usd >= 0 ? "good" : "bad");
+  p.qty -= q; if (p.qty <= 0) PR.pos = null;
+  prDrawTrade(); prDrawHist(); prLog(); prPaint();
 }
-function prMarkers() {
-  if (!PR.markers || !PR.bars.length) return;
-  const lo = PR.bars[0].t, hi = PR.bars[PR.ptr]?.t ?? lo;
-  const mk = [];
-  for (const x of [...PR.log, ...(PR.pos ? [{ ...PR.pos, t_in: PR.pos.t }] : [])]) {
-    const long = x.dir === "LONG";
-    if (x.t_in >= lo && x.t_in <= hi) mk.push({ time: x.t_in, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", color: long ? css("--good") : css("--critical") });
-    if (x.t_out && x.t_out >= lo && x.t_out <= hi) mk.push({ time: x.t_out, position: long ? "aboveBar" : "belowBar", shape: "circle", color: x.pts >= 0 ? css("--good") : css("--critical"), text: sgn(x.pts, 1) });
+
+function prOnBar(b) {
+  const o = PR.order;
+  if (o) {
+    const long = isLong(o.dir), lim = o.kind === "lmt";
+    const hit = lim ? (long ? b.l <= o.px : b.h >= o.px) : (long ? b.h >= o.px : b.l <= o.px);
+    if (hit) {                                       // si la vela abrió más allá, se llena a la apertura
+      const fill = lim === long ? Math.min(o.px, b.o) : Math.max(o.px, b.o);
+      PR.order = null; prDrawOrder();
+      prFill(o.dir, fill, b.t, o, lim ? "orden límite" : "orden stop");
+    }
+  } else if (PR.pos && b.t > PR.pos.t) {           // el stop y el objetivo cuentan desde la vela siguiente
+    const p = PR.pos, long = isLong(p.dir);
+    const hitSl = long ? b.l <= p.sl : b.h >= p.sl, hitTp = long ? b.h >= p.tp : b.l <= p.tp;
+    if (hitSl) {
+      const why = hitTp ? "Stop (la vela tocó ambos)" : p.sl === p.entry ? "Breakeven"
+        : (long ? p.sl > p.entry : p.sl < p.entry) ? "Stop en ganancia" : "Stop";
+      prExit(long ? Math.min(p.sl, b.o) : Math.max(p.sl, b.o), why);
+    } else if (hitTp) prExit(long ? Math.max(p.tp, b.o) : Math.min(p.tp, b.o), "Objetivo");
   }
-  PR.markers.setMarkers(mk.sort((a, b) => a.time - b.time));
+  // regla Apex: todo plano antes de las 16:59 ET
+  const endHM = fmtHM.format(new Date((b.t + TF_SEC[PR.tf]) * 1000));
+  if (endHM >= "16:55" && endHM < "18:00") {
+    if (PR.order) { PR.order = null; prDrawOrder(); }
+    if (PR.pos) prExit(b.c, "Cierre 16:55 (Apex)");
+  }
+  prDrawTrade(); prPaint();
+}
+
+/* ── dibujo de la posición, la orden y los trades cerrados ── */
+function prSetOverlay(key, spec) {
+  const kl = PR.kl; if (!kl) return;
+  const id = PR.ids[key], alive = id && kl.getOverlays({ id }).length;
+  if (!spec) { if (alive) kl.removeOverlay({ id }); PR.ids[key] = null; return; }
+  if (alive) kl.overrideOverlay({ id, points: spec.points, extendData: spec.extendData });
+  else PR.ids[key] = kl.createOverlay({ ...spec, groupId: key, zLevel: 5 });
+}
+function prDrawTrade() {
+  const p = PR.pos, b = prBar();
+  if (!p || !b || p.sym !== PR.sym) return prSetOverlay("trade", null);
+  const long = isLong(p.dir), k = p.qty * p.ppt, pnl = (long ? b.c - p.entry : p.entry - b.c) * k, T = p.t * 1000;
+  prSetOverlay("trade", { name: "prPos", extendData: { live: true, pnl,
+      entry: `${long ? "▲" : "▼"} ${p.qty} ${p.inst}  ${money(pnl)}`,
+      tp: `TP ${money((long ? p.tp - p.entry : p.entry - p.tp) * k)}`, sl: `SL ${money((long ? p.sl - p.entry : p.entry - p.sl) * k)}` },
+    points: [{ timestamp: T, value: p.entry }, { timestamp: T, value: p.tp }, { timestamp: T, value: p.sl }, { timestamp: b.t * 1000, value: p.entry }] });
+}
+function prDrawOrder() {
+  const o = PR.order;
+  if (!o || !prBar()) return prSetOverlay("order", null);
+  prSetOverlay("order", { name: "prOrder", points: [{ timestamp: prBar().t * 1000, value: o.px }],
+    extendData: { txt: `${isLong(o.dir) ? "Compra" : "Venta"} ${o.kind === "lmt" ? "límite" : "stop"} ${o.qty} ${o.inst}` } });
+}
+function prDrawHist() {
+  const kl = PR.kl, b = prBar(); if (!kl || !b) return;
+  kl.removeOverlay({ groupId: "hist" });
+  const lo = PR.bars[0].t;
+  for (const x of PR.log) {
+    // solo trades ya cerrados en el tiempo de la repetición (nunca muestra el futuro)
+    if ((x.sym || "NQ") !== PR.sym || x.t_in < lo || x.t_out > b.t) continue;
+    const long = isLong(x.dir), T = x.t_in * 1000, r = x.risk || 20;
+    const tp = x.tp ?? (long ? x.entry + 2 * r : x.entry - 2 * r), sl = x.sl ?? (long ? x.entry - r : x.entry + r);
+    kl.createOverlay({ name: "prPos", groupId: "hist", extendData: { live: false, win: x.pts >= 0, res: `${money(x.usd)} · ${sgn(x.pts)} pts` },
+      points: [{ timestamp: T, value: x.entry }, { timestamp: T, value: tp }, { timestamp: T, value: sl }, { timestamp: x.t_out * 1000, value: x.exit }] });
+  }
+}
+
+/* ── paneles ── */
+function prToast(msg, tone = "") {
+  const box = $("pr-toasts"), el = document.createElement("div");
+  el.className = "prtoast " + tone; el.textContent = msg; box.prepend(el);
+  while (box.children.length > 4) box.lastChild.remove();
+  setTimeout(() => el.classList.add("out"), 3200); setTimeout(() => el.remove(), 3700);
 }
 function prPaint() {
-  const b = PR.bars[PR.ptr];
+  const b = prBar(), p = PR.pos, o = PR.order;
   $("pr-clock").textContent = b ? `${dhm(new Date(b.t * 1000))} ET · ${PR.tf}` : "";
-  $("pr-px").textContent = b ? num(b.c) : "";
-  const p = PR.pos;
-  ["pr-buy", "pr-sell"].forEach(i => $(i).disabled = !!p || !b); $("pr-close").disabled = !p;
-  if (!p) { $("pr-pos").innerHTML = `<div class="sub" style="color:var(--ink-3);font-size:13px">Sin posición. Entra al cierre de la vela actual con B / S.</div>`; return; }
-  const pts = b ? (p.dir === "LONG" ? b.c - p.entry : p.entry - b.c) : 0;
-  $("pr-pos").innerHTML = `<div class="state" style="font-size:11px;font-weight:800;letter-spacing:.1em;color:${p.dir === "LONG" ? css("--good") : css("--critical")}">
-      ● ${p.dir === "LONG" ? "COMPRA" : "VENTA"} · ${esc(p.label)}</div>
-    <div class="big ${cls(pts)}" style="font:700 28px var(--mono);margin:6px 0 2px">${sgn(pts)} pts</div>
-    <div class="usd" style="font:13px var(--mono);color:var(--ink-2)">${pts < 0 ? "−" : "+"}$${Math.abs(pts * p.pv).toFixed(0)}</div>
-    <dl class="kv"><dt>Entrada</dt><dd>${num(p.entry)}</dd><dt>Stop</dt><dd>${num(p.sl)}</dd><dt>Objetivo</dt><dd>${num(p.tp)}</dd></dl>`;
+  $("pr-badge").innerHTML = b ? `<b>REPLAY</b> · ${esc(PR.sym)} · ${esc(PR.tf)} · ${esc(fmtDay.format(new Date(b.t * 1000)))} ${esc(fmtHM.format(new Date((b.t + TF_SEC[PR.tf]) * 1000)))} ET` : "";
+  const px = b ? num(b.c) : "—";
+  $("pr-bid").textContent = px; $("pr-ask").textContent = px; $("pr-px").textContent = b ? px : "";
+  $("pr-buy").disabled = $("pr-sell").disabled = !b || !!p || !!o;
+  const tk = prTicket(), k = tk.qty * tk.ppt;
+  $("pr-sum").innerHTML = `<span>Riesgo <b class="neg">${money(-tk.slPts * k)}</b></span><span>Objetivo <b class="pos">${money(tk.tpPts * k)}</b></span>` +
+    `<span>R:R <b>${num(tk.tpPts / tk.slPts, 1)}</b></span>`;
+  if (PR.otype === "lmt" && b) {
+    const lp = tick(+$("pr-lpx").value || b.c);
+    $("pr-buy").querySelector("small").textContent = `Comprar ${prKind("LONG", lp) === "lmt" ? "límite" : "stop"} · B`;
+    $("pr-sell").querySelector("small").textContent = `Vender ${prKind("SHORT", lp) === "lmt" ? "límite" : "stop"} · S`;
+    $("pr-bid").textContent = $("pr-ask").textContent = num(lp);
+  } else { $("pr-buy").querySelector("small").textContent = "Comprar · B"; $("pr-sell").querySelector("small").textContent = "Vender · S"; }
+
+  if (p && b) {
+    const long = isLong(p.dir), pts = long ? b.c - p.entry : p.entry - b.c, usd = pts * p.qty * p.ppt, kk = p.qty * p.ppt;
+    $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag ${long ? "l" : "s"}">${long ? "LARGO" : "CORTO"}</span>
+        ${p.qty} ${esc(p.inst)} @ ${num(p.entry)}</div>
+      <div class="posbig ${cls(usd)}">${money(usd)}</div>
+      <div class="possub">${sgn(pts)} pts · ${p.risk ? sgn(pts / p.risk) + "R" : ""}</div>
+      <dl class="kv"><dt>Stop</dt><dd>${num(p.sl)} <span class="${cls((long ? p.sl - p.entry : p.entry - p.sl))}">(${money((long ? p.sl - p.entry : p.entry - p.sl) * kk)})</span></dd>
+        <dt>Objetivo</dt><dd>${num(p.tp)} <span class="pos">(${money((long ? p.tp - p.entry : p.entry - p.tp) * kk)})</span></dd>
+        <dt>Entrada</dt><dd>${esc(dhm(new Date(p.t * 1000)))}</dd></dl>
+      <div class="posact"><button class="pbtn" data-a="close" type="button">Cerrar</button>
+        <button class="pbtn" data-a="half" type="button" ${p.qty > 1 ? "" : "disabled"}>Cerrar ½</button>
+        <button class="pbtn" data-a="be" type="button">SL a BE</button><button class="pbtn" data-a="rev" type="button">Invertir</button></div>
+      <p class="hint">Arrastra las líneas <b>TP</b> y <b>SL</b> en la gráfica para moverlas.</p>`;
+  } else if (o) {
+    $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag o">PENDIENTE</span>
+        ${isLong(o.dir) ? "Compra" : "Venta"} ${o.kind === "lmt" ? "límite" : "stop"} ${o.qty} ${esc(o.inst)}</div>
+      <div class="posbig">${num(o.px)}</div>
+      <div class="possub">al ejecutarse: stop ${num(o.slPts)} pts · objetivo ${num(o.tpPts)} pts</div>
+      <div class="posact"><button class="pbtn" data-a="cancel" type="button" style="grid-column:span 4">Cancelar orden (C)</button></div>
+      <p class="hint">Arrastra la línea azul en la gráfica para mover el precio.</p>`;
+  } else {
+    $("pr-pos").innerHTML = `<p class="hint" style="margin:0">Sin posición. <b>B</b> / <b>S</b> compra o vende al precio actual;
+      <b>clic derecho</b> en la gráfica pone una orden límite o stop en ese precio.</p>`;
+  }
+  prAcct();
+}
+function prAcct() {
+  const L = PR.log, n = L.length, b = prBar(), p = PR.pos;
+  const real = L.reduce((s, x) => s + x.usd, 0);
+  const gw = L.filter(x => x.usd > 0).reduce((s, x) => s + x.usd, 0), gl = -L.filter(x => x.usd < 0).reduce((s, x) => s + x.usd, 0);
+  const open = p && b ? (isLong(p.dir) ? b.c - p.entry : p.entry - b.c) * p.qty * p.ppt : 0;
+  const rs = L.filter(x => x.r != null && isFinite(x.r)), w = L.filter(x => x.pts > 0).length;
+  $("pr-acct").innerHTML = [["Balance", "$" + num(ACCOUNT0 + real + open, 0), ""], ["P&L abierto", money(open), cls(open)],
+    ["P&L realizado", money(real), cls(real)], ["Aciertos", n ? `${Math.round(w / n * 100)}% de ${n}` : "—", ""],
+    ["Profit factor", gl ? num(gw / gl) : gw ? "∞" : "—", ""],
+    ["Promedio", rs.length ? sgn(rs.reduce((s, x) => s + x.r, 0) / rs.length) + "R" : "—", ""]]
+    .map(([k, v, c]) => `<div><span class="k">${k}</span><span class="v ${c}">${v}</span></div>`).join("");
 }
 function prLog() {
-  const L = PR.log, n = L.length, w = L.filter(x => x.pts > 0).length;
-  const usd = L.reduce((s, x) => s + x.usd, 0), pts = L.reduce((s, x) => s + x.pts, 0);
-  $("pr-stats").innerHTML = n ? `${n} trades · ${Math.round(w / n * 100)}% · <span class="${cls(usd)}">${usd < 0 ? "−" : "+"}$${Math.abs(usd).toFixed(0)}</span>` : "";
-  $("pr-log").innerHTML = n ? L.slice().reverse().slice(0, 30).map(x => `<li><span class="ic">${x.pts > 0 ? "✅" : x.pts < 0 ? "🛑" : "➖"}</span>
+  const L = PR.log;
+  $("pr-log").innerHTML = L.length ? L.slice().reverse().slice(0, 30).map(x => `<li><span class="ic">${x.pts > 0 ? "✅" : x.pts < 0 ? "🛑" : "➖"}</span>
       <div><b>${x.dir === "LONG" ? "Compra" : "Venta"}</b> ${num(x.entry)} → ${num(x.exit)}
       <div class="t">${esc(dhm(new Date(x.t_in * 1000)))} · ${esc(x.why)} · ${esc(x.label)}</div></div>
-      <span class="res ${cls(x.pts)}">${sgn(x.pts, 1)}<br><small>${x.usd < 0 ? "−" : "+"}$${Math.abs(x.usd).toFixed(0)}</small></span></li>`).join("")
-    : `<li class="empty" style="display:block">Todavía no has practicado. Carga un día, dale Play y entra con B o S.</li>`;
+      <span class="res ${cls(x.usd)}">${money(x.usd)}<br><small>${sgn(x.pts, 1)} pts</small></span></li>`).join("")
+    : `<li class="empty" style="display:block">Todavía no has practicado. Dale Play y entra con B o S.</li>`;
 }
 
 /* ═══════════════════════════ ciclo ═══════════════════════════ */

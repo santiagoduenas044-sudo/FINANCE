@@ -194,11 +194,17 @@ def test_chart_library_is_served_without_a_token(engine, registry, monkeypatch):
     assert r.status_code == 200
     assert "Lightweight Charts" in r.text[:400]
     assert c.get("/static/vendor/lightweight-charts.LICENSE.txt").status_code == 200
+    # the practice tab's TradingView-style chart (KLineChart, Apache-2.0)
+    r = c.get("/static/vendor/klinecharts.min.js")
+    assert r.status_code == 200 and "klinecharts" in r.text[:2000]
+    assert c.get("/static/vendor/klinecharts.LICENSE.txt").status_code == 200
+    assert c.get("/static/vendor/klinecharts.NOTICE.txt").status_code == 200
 
 
 def test_index_references_the_vendored_chart_library(engine, registry):
     html = TestClient(create_app(_runtime(engine, registry))).get("/").text
     assert "/static/vendor/lightweight-charts.standalone.production.js" in html
+    assert "/static/vendor/klinecharts.min.js" in html
     # served locally, never from a third-party CDN
     assert "unpkg.com" not in html and "cdn." not in html
 
