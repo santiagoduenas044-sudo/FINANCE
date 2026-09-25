@@ -26,3 +26,15 @@ def test_databento_bars_load_as_bot_bars(tmp_path):
     # close-labeled internally: the 09:30 ET bar closes at 09:31 ET
     assert bars.index[0] == pd.Timestamp("2026-06-10 09:31", tz="America/New_York")
     assert list(bars["close"]) == [1.5, 2.5, 3.5]
+
+
+def test_a_second_download_adds_to_the_file(tmp_path):
+    out = tmp_path / "NQ" / "DATABENTO_1m.csv"
+    def bars(start):
+        idx = pd.date_range(start, periods=2, freq="1min", tz="UTC")
+        return pd.DataFrame({"open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5,
+                             "volume": 1}, index=idx)
+    fetch.to_bot_csv(bars("2026-06-10 13:30"), out)
+    fetch.to_bot_csv(bars("2015-06-10 13:30"), out)       # older years, same file
+    df = pd.read_csv(out, index_col="datetime", parse_dates=True)
+    assert len(df) == 4 and df.index.is_monotonic_increasing

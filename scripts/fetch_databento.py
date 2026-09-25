@@ -50,6 +50,11 @@ def to_bot_csv(df: pd.DataFrame, out: Path) -> Path:
     bars = df[["open", "high", "low", "close", "volume"]].copy()
     bars.index = idx.tz_convert("America/New_York").tz_localize(None)
     bars.index.name = "datetime"
+    if out.exists():
+        # add to what is already there (e.g. older years next to the last
+        # five) instead of replacing it; the newest download wins on overlap
+        old = pd.read_csv(out, index_col="datetime", parse_dates=True)
+        bars = pd.concat([old[bars.columns], bars])
     bars = bars[~bars.index.duplicated(keep="last")].sort_index()
     out.parent.mkdir(parents=True, exist_ok=True)
     bars.to_csv(out)
@@ -87,7 +92,8 @@ def main() -> int:
     if df.empty:
         raise SystemExit("Databento no devolvió barras para ese rango.")
     out = to_bot_csv(df, DATA_DIR / a.symbol / f"{CONTRACT}_1m.csv")
-    print(f"{len(df):,} barras guardadas en {out.relative_to(ROOT)}")
+    total = sum(1 for _ in open(out)) - 1
+    print(f"{len(df):,} barras nuevas · {total:,} en total en {out.relative_to(ROOT)}")
     return 0
 
 
