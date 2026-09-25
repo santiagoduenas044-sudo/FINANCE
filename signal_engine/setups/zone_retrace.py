@@ -195,8 +195,15 @@ class ZoneRetraceDetector(SetupDetector):
         bull = z.bullish
         plan_r = abs(z.mid - z.stop)
         tp1, _ = self._target(ctx, analysis, z.mid, plan_r, bull, p.tp1_r, p.tp1_max_r, p.tp1_r)
-        final, basis = self._target(ctx, analysis, z.mid, plan_r, bull, p.min_target_r,
-                                    p.max_target_r, p.fallback_target_r, beyond=tp1)
+        if p.fixed_target_r:
+            k = p.fixed_target_r
+            final = z.mid + k * plan_r if bull else z.mid - k * plan_r
+            basis = f"{k:g}:1 fijo"
+        else:
+            final, basis = self._target(ctx, analysis, z.mid, plan_r, bull, p.min_target_r,
+                                        p.max_target_r, p.fallback_target_r, beyond=tp1)
+        if p.single_target:
+            tp1 = final
         return {"stop": z.stop, "tp1": tp1, "final": final, "basis": basis,
                 "plan_r": plan_r, "tp1_rr": round(abs(tp1 - z.mid) / plan_r, 2),
                 "plan_rr": round(abs(final - z.mid) / plan_r, 1),
@@ -214,7 +221,7 @@ class ZoneRetraceDetector(SetupDetector):
         if risk <= 0 or risk > p.max_risk_points or beyond_tp1 \
                 or (entry <= stop if bull else entry >= stop):
             return None
-        tps = [tp1, final]
+        tps = [final] if p.single_target else [tp1, final]
         direction = z.direction
         side = "compra" if bull else "venta"
         return SetupCandidate(

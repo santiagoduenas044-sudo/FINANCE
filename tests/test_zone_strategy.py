@@ -204,3 +204,26 @@ def test_plan_chart_renders():
     png = render_plan_png(bars, direction="SHORT", zone_bottom=11, zone_top=12, entry=11.5,
                           stop=15, tp1=8, final=2, status="ESPERANDO")
     assert png[:4] == b"\x89PNG"
+
+
+def test_fixed_two_to_one_single_target():
+    from signal_engine.data.context import AnalysisContext, TimeframeView
+    from signal_engine.features.analyzer import MarketAnalysis
+    from signal_engine.setups.zone_retrace import ZoneRetraceDetector
+
+    z5 = _bars([(95, 100, 94, 99), (99, 118, 98, 117), (117, 125, 110, 124)],
+               T0 - pd.Timedelta(minutes=15), "5min")
+    one = _bars([(120, 121, 112, 113), (112, 113, 103, 104), (104, 109, 102, 108)],
+                z5.index[-1] + pd.Timedelta(minutes=1))
+    ctx = AnalysisContext("NQ", one.index[-1], "RTH", htf=TimeframeView("1H", z5.iloc[:0]),
+                          structure=TimeframeView("5m", z5), execution=TimeframeView("1m", one))
+    p = ZoneRetraceParams(enabled=True, fixed_target_r=2.0, single_target=True)
+    (c,) = ZoneRetraceDetector(p).detect(ctx, MarketAnalysis("NQ", one.index[-1], {}))
+    assert c.take_profits == [105 + 2 * 20]                  # mid 105, R 20 -> 2:1
+
+
+def test_dollars_are_for_five_micros():
+    from signal_engine.data.contracts import ContractRegistry
+    from signal_engine.runtime.engine import position_usd_per_point
+    g = EngineConfig.load(strategy="zones").ghost
+    assert position_usd_per_point(ContractRegistry.load(), g, "NQ") == {"5 MNQ": 10.0}

@@ -277,6 +277,10 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
           <div class="pb tight scroll" id="bt-policies"></div>
         </div>
       </div>
+      <div class="panel mb">
+        <div class="ph"><span class="mn">RR</span><h2>Objetivos (R:R) · mismas señales</h2></div>
+        <div class="pb tight scroll" id="bt-targets"></div>
+      </div>
       <div class="grid g-2 mb">
         <div class="panel">
           <div class="ph"><span class="mn">HR</span><h2>Por hora de entrada (ET)</h2></div>
@@ -331,7 +335,8 @@ const dhm = iso => { const d = okDate(iso); return d ? fmtDay.format(d) + " " + 
 const nyDay = iso => { const d = okDate(iso); return d ? fmtDate.format(d) : null; };
 // $ por punto: contrato grande y micro (el micro primero, es lo que se opera)
 const PV = { NQ: [["MNQ", 2], ["NQ", 20]], ES: [["MES", 5], ["ES", 50]] };
-const usd = (pts, sym) => (PV[sym] || []).map(([k, v]) =>
+const posPV = sym => { const p = S.status?.position?.[sym]; return p ? Object.entries(p) : (PV[sym] || []); };
+const usd = (pts, sym) => posPV(sym).map(([k, v]) =>
   `${pts < 0 ? "−" : "+"}$${Math.abs(pts * v).toLocaleString("en-US", { maximumFractionDigits: 0 })} ${k}`).join(" · ");
 const EXIT_ES = { TP1: "TP1", TP2: "Objetivo final", STOP: "Stop", INVALIDATION: "Invalidada",
   CANCELLED: "Cancelada", EXPIRED: "Expirada", EOD: "Cierre fin de día" };
@@ -773,7 +778,7 @@ function btRow(label, s, pv, extra = "") {
 function btTable(rows) {
   const R = `style="text-align:right"`;
   return `<table><thead><tr><th></th><th ${R}>Trades</th><th ${R}>Acierto</th><th ${R}>Esperanza</th>
-    <th ${R}>PF</th><th ${R}>Neto</th><th ${R}>Caída</th><th ${R}>$ (1 ${esc(BT.data?.meta?.symbol || "")})</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <th ${R}>PF</th><th ${R}>Neto</th><th ${R}>Caída</th><th ${R}>$ (${esc(BT.data?.meta?.position || "1 " + (BT.data?.meta?.symbol || ""))})</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 function btEquitySvg(eq, note = "costos incluidos") {
@@ -822,7 +827,7 @@ function renderBacktest() {
   const d = BT.data;
   if (!d) {
     $("bt-head").innerHTML = `<div class="empty"><span class="ic">◇</span>Todavía no hay backtests. Elige fechas y dale a CORRER.</div>`;
-    ["bt-tiles", "bt-equity", "bt-policies", "bt-hours", "bt-mix", "bt-trades"].forEach(i => $(i).innerHTML = "");
+    ["bt-tiles", "bt-equity", "bt-policies", "bt-targets", "bt-hours", "bt-mix", "bt-trades"].forEach(i => $(i).innerHTML = "");
     return;
   }
   const m = d.meta || {}, t = d.total, pv = m.point_value;
@@ -833,7 +838,7 @@ function renderBacktest() {
     &nbsp;<span class="pill"><span class="k">costo</span><span class="v">${num(m.cost_points, 2)} pts/trade</span></span>`
     + (t && t.n < 30 ? `<p class="foot">⚠ Menos de 30 operaciones: no alcanza para sacar conclusiones.</p>` : "");
   $("bt-tiles").innerHTML = !t ? "" :
-    tile("Resultado neto", sgn(t.net, 1) + "R", pv ? `${t.pts >= 0 ? "+" : "−"}$${Math.abs(t.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 })} con 1 ${esc(m.symbol)} · ${sgn(t.pts, 1)} pts` : "", t.net >= 0 ? "good" : "critical") +
+    tile("Resultado neto", sgn(t.net, 1) + "R", pv ? `${t.pts >= 0 ? "+" : "−"}$${Math.abs(t.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 })} con ${esc(m.position || "1 " + m.symbol)} · ${sgn(t.pts, 1)} pts` : "", t.net >= 0 ? "good" : "critical") +
     tile("Operaciones · acierto", `${t.n} · ${(t.wr * 100).toFixed(0)}%`, `esperanza ${sgn(t.exp, 3)}R por trade`, t.exp >= 0 ? "good" : "critical") +
     tile("Factor de beneficio", t.pf == null ? "∞" : num(t.pf, 2), "ganado ÷ perdido", (t.pf ?? 9) >= 1 ? "good" : "critical") +
     tile("Máxima caída", "−" + num(t.dd, 1) + "R", "peor racha, en múltiplos de tu stop", "critical");
@@ -842,6 +847,11 @@ function renderBacktest() {
   const bestNet = Math.max(...pol.map(([, s]) => s?.net ?? -1e9));
   $("bt-policies").innerHTML = btTable(pol.map(([k, s]) => btRow(k, s, pv, s && s.net === bestNet ? ' class="best"' : "")).join(""))
     + `<p class="foot" style="padding:0 8px 8px">Cada fila vuelve a jugar las mismas señales aprobadas con otra regla de stop. Verde = mayor neto.</p>`;
+  const tg = Object.entries(d.targets || {});
+  const bestT = Math.max(...tg.map(([, s]) => s?.net ?? -1e9));
+  $("bt-targets").innerHTML = tg.length ? btTable(tg.map(([k, s]) => btRow(k, s, pv, s && s.net === bestT ? ' class="best"' : "")).join(""))
+    + `<p class="foot" style="padding:0 8px 8px">Mismas entradas y stops; solo cambia dónde se toma la ganancia. R = distancia de la óptima al stop.</p>`
+    : `<div class="empty">Este backtest es anterior a la comparación de objetivos.</div>`;
   $("bt-hours").innerHTML = btTable(Object.entries(d.by_hour || {}).map(([h, s]) => btRow(h, s, pv)).join(""));
   $("bt-mix").innerHTML = btTable(
     Object.entries(d.by_kind || {}).map(([k, s]) => btRow(k === "directa" ? "⚡ señal directa" : "🟢 con aviso", s, pv)).join("") +

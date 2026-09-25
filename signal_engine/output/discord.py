@@ -358,6 +358,8 @@ def _embed(title: str, description: str, color: int, footer: str) -> dict:
 
 
 def _targets_line(tp1, final, rr=None, *, breakeven: bool = False) -> str:
+    if final is None or final == tp1:          # single target
+        return f"🎯 TP {_px(tp1)}" + (f" ({rr:g}R)" if rr else "")
     out = f"🎯 TP1 {_px(tp1)}" + (" → stop a BE" if breakeven else "")
     if final is not None:
         out += f" · TP {_px(final)}" + (f" ({rr:g}R)" if rr else "")

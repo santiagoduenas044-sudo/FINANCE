@@ -748,20 +748,10 @@ class BotRuntime:
             return None
 
     def _point_values(self, symbol: str) -> dict | None:
-        """{"NQ": 20.0, "MNQ": 2.0}: dollars per point for the contract and its
-        micro — only when the operator/CME confirmed them; None otherwise
-        (never a guessed number)."""
-        try:
-            out = {}
-            if self.registry.display_confirmed(symbol):
-                out[symbol] = self.registry.spec(symbol).point_value
-            for sym in self.registry.symbols():
-                spec = self.registry.spec(sym)
-                if spec.micro_of == symbol and self.registry.display_confirmed(sym):
-                    out[sym] = spec.point_value
-            return out or None
-        except Exception:  # noqa: BLE001
-            return None
+        """{"5 MNQ": 10.0}: dollars per index point for the configured position
+        (ghost.contracts of the symbol or its micro) — only from confirmed
+        specs; None otherwise (never a guessed number)."""
+        return position_usd_per_point(self.registry, self.data_engine.cfg.ghost, symbol)
 
     def _persist_ghost(self, decision) -> None:
         if self.ghost_log_path is None:
@@ -936,6 +926,8 @@ class BotRuntime:
             "trades_today": self.trades_today,
             "daily_realized_pnl": self.daily_realized_pnl,
             "feed_info": self.feed_info,
+            # $ per point of the traded position, per symbol, for the dashboard
+            "position": {sym: self._point_values(sym) for sym in (self.live_feeds or {})},
             "components": {
                 name: {"status": h.status.value, "detail": h.detail}
                 for name, h in self.component_health.items()
@@ -1043,6 +1035,22 @@ def _idea_reject_reason(reasons: list[str]) -> str:
         if r in _IDEA_REJECT_ES:
             return "reaccionó, pero " + _IDEA_REJECT_ES[r]
     return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
+
+
+def position_usd_per_point(registry, gcfg, symbol: str) -> dict | None:
+    """{label: $ per point} for the position the operator trades, e.g.
+    {"5 MNQ": 10.0}. None when the contract's point value is not confirmed."""
+    try:
+        contract = symbol
+        if gcfg.trade_micro:
+            contract = next((s for s in registry.symbols()
+                             if registry.spec(s).micro_of == symbol), symbol)
+        if not registry.display_confirmed(contract):
+            return None
+        n = max(1, int(gcfg.contracts))
+        return {f"{n} {contract}": n * registry.spec(contract).point_value}
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _stop_move_worth_telling(trade, ncfg) -> bool:

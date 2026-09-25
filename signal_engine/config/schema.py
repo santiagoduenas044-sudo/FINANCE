@@ -143,6 +143,12 @@ class ZoneRetraceParams(BaseModel):
     min_target_r: float = 2.0         # structural final target must pay at least this
     max_target_r: float = 5.0         # ...and no more than this
     fallback_target_r: float = 3.0    # no structure in range -> fixed R
+    # Fixed risk:reward instead of the structural target: e.g. 2.0 = "2:1",
+    # the final target sits 2x the stop distance from the midpoint.
+    fixed_target_r: Optional[float] = None
+    # One target only (no TP1 / partial): the whole position rides to the
+    # final target or the stop.
+    single_target: bool = False
     expiration_bars: int = 5
     # The point values above are NQ points. Other symbols scale them: ES moves
     # roughly a quarter of NQ's points for the same % move.
@@ -392,6 +398,11 @@ class GhostConfig(BaseModel):
     # price at trail_distance_r R behind it.
     trail_start_r: Optional[float] = None
     trail_distance_r: float = 1.0
+    # Position size used for every dollar figure (Discord, dashboard,
+    # backtest, record): `contracts` of the symbol's micro when trade_micro
+    # (NQ -> MNQ), else of the symbol itself. Display/accounting only.
+    contracts: int = 1
+    trade_micro: bool = False
     # Force-flatten any open position the moment the bar's session is no
     # longer RTH (data.sessions classifies the 16:00 ET bar itself as
     # ETH/CLOSED, so this fires AT the 4pm close using that bar's real close

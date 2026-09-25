@@ -28,6 +28,7 @@ Paper replay only: no broker, no orders, nothing written to data_store/.
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import os
 import sys
@@ -48,7 +49,7 @@ from signal_engine.data.models import SESSION  # noqa: E402
 from signal_engine.data.providers.csv_provider import CsvProvider  # noqa: E402
 from signal_engine.ghost.brain import GhostBrain  # noqa: E402
 from signal_engine.paper.tracker import PaperTradeTracker  # noqa: E402
-from signal_engine.runtime.engine import BotRuntime, eod_due  # noqa: E402
+from signal_engine.runtime.engine import BotRuntime, eod_due, position_usd_per_point  # noqa: E402
 from signal_engine.runtime.ideas import IdeaBoard  # noqa: E402
 from signal_engine.setups.engine import SetupEngine  # noqa: E402
 from signal_engine.signals.engine import SignalEngine  # noqa: E402
@@ -58,6 +59,9 @@ CONTRACT = "YAHOO"
 TICKERS = {"NQ": "NQ=F", "ES": "ES=F"}
 # Round trip, in index points: ~$4.50 all-in commission + 1 tick slippage each side.
 COST_POINTS = {"NQ": 0.75, "ES": 0.6}
+# Trading micros instead (MNQ/MES): ~$1.50 round-trip commission+fees per
+# contract is 0.75 pt on MNQ ($2/pt), 0.3 pt on MES ($5/pt), + 1 tick each side.
+COST_POINTS_MICRO = {"NQ": 1.25, "ES": 0.8}
 HISTORY_DAYS = 5          # 5m execution; a 1m execution needs only 2 (see replay)
 
 
@@ -200,6 +204,27 @@ STOP_POLICIES = {
 }
 
 
+# Target variants on the SAME approved signals: the plan's R is |midpoint -
+# stop| (what the message shows); None = the plan as configured.
+TARGET_VARIANTS = {
+    "plan actual": None,
+    "2:1 fijo (1 objetivo)": [2.0],
+    "1.5:1 fijo (1 objetivo)": [1.5],
+    "3:1 fijo (1 objetivo)": [3.0],
+    "TP1 1R + TP 2R": [1.0, 2.0],
+}
+
+
+def _with_targets(s, rs: list[float]):
+    mid = (s.market_context or {}).get("zone_mid", s.entry)
+    r = abs(mid - s.stop)
+    long = s.direction.value == "LONG"
+    tps = [mid + k * r if long else mid - k * r for k in rs]
+    if (tps[0] <= s.entry) if long else (tps[0] >= s.entry):
+        return None                        # fill already past that target
+    return replace(s, take_profits=tps)
+
+
 def _tracker(cfg, policy: dict) -> PaperTradeTracker:
     g = cfg.ghost
     base = dict(breakeven_after_tp1=g.breakeven_after_tp1, partial_at_tp1=g.partial_at_tp1,
@@ -255,12 +280,18 @@ def shadow(cfg, de, exec_bars, decisions):
                "approved": d.action != "NO_TRADE",
                "reasons": [r.value for r in d.no_trade_reasons],
                "risk_pts": t.initial_risk, "pnl_pts": t.pnl_points,
-               "exit": t.exit_reason.value if t.exit_reason else "?", "policy_pnl": {}}
+               "exit": t.exit_reason.value if t.exit_reason else "?", "policy_pnl": {},
+               "target_pnl": {}}
         if row["approved"]:
             for name, pol in STOP_POLICIES.items():
                 v = _simulate(s, cfg, arr, pol) if pol else t
                 if v is not None:
                     row["policy_pnl"][name] = v.pnl_points
+            for name, rs in TARGET_VARIANTS.items():
+                s2 = s if rs is None else _with_targets(s, rs)
+                v = None if s2 is None else (t if rs is None else _simulate(s2, cfg, arr, {}))
+                if v is not None:
+                    row["target_pnl"][name] = v.pnl_points
         out.append(row)
     return out
 
@@ -299,14 +330,24 @@ def warn(n):
     return "  (!) menos de 30 — no concluyas nada de esta fila" if n < 30 else ""
 
 
+def position(cfg, symbol) -> tuple[str, float]:
+    """(label, $ per point) of the position every $ figure is computed for,
+    e.g. ("5 MNQ", 10.0)."""
+    reg = ContractRegistry.load()
+    pos = position_usd_per_point(reg, cfg.ghost, symbol)
+    if pos:
+        return next(iter(pos.items()))
+    return f"1 {symbol}", reg.spec(symbol).point_value
+
+
 def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow_rows,
            cost, ideas, shadow_path: Path | None = None):
-    pv = ContractRegistry.load().spec(symbol).point_value
+    label, pv = position(cfg, symbol)
     days = len({ts.date() for ts in steps})
     print(f"\n=== AUDITORÍA CON DATOS REALES — {symbol} ===")
     print(f"Datos: {exec_bars.index[0]:%Y-%m-%d} a {exec_bars.index[-1]:%Y-%m-%d} · "
-          f"{days} sesiones RTH reproducidas · costo {cost} pts ida y vuelta "
-          f"(${cost * pv:.0f}/contrato)")
+          f"{days} sesiones RTH reproducidas · costo {cost} pts ida y vuelta · "
+          f"$ calculados para {label} (${pv:g}/pt)")
 
     print("\n-- Embudo (RTH) --")
     print("  candidatos por setup: " + ", ".join(f"{k} {v}" for k, v in candidates.most_common()))
@@ -353,11 +394,16 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
         rows = [x for x in shadow_rows if reason in x["reasons"]]
         if rows:
             print(line(f"rechazo {reason}", stats(rows, cost)))
+    print("\n-- Objetivos (R:R): mismas señales aprobadas --")
+    for name in TARGET_VARIANTS:
+        rows = [{"pnl_pts": x["target_pnl"][name], "risk_pts": x["risk_pts"]}
+                for x in shadow_rows if name in x.get("target_pnl", {})]
+        print(line(name, stats(rows, cost), pv))
     print("\n-- Manejo del stop: mismas señales aprobadas, distintas reglas --")
     for name in STOP_POLICIES:
         rows = [{"pnl_pts": x["policy_pnl"][name], "risk_pts": x["risk_pts"]}
                 for x in shadow_rows if name in x.get("policy_pnl", {})]
-        print(line(name, stats(rows, cost)))
+        print(line(name, stats(rows, cost), pv))
     print("\nLectura: si 'rechazadas' rinde igual o mejor que 'aprobadas', el filtro de GHOST"
           "\nno está separando nada. Si los scores altos no rinden más que los bajos, el"
           "\nscore de confluencia no predice resultado. Un exp menor que 0 después de costos"
@@ -379,10 +425,10 @@ def _json_safe(x):
     return x
 
 
-def summary(symbol, strategy, contract, steps, tracker, candidates, decisions, shadow_rows,
-            cost, ideas) -> dict:
+def summary(symbol, cfg, strategy, contract, steps, tracker, candidates, decisions,
+            shadow_rows, cost, ideas) -> dict:
     """Everything report() prints, as data for the dashboard's backtest view."""
-    pv = ContractRegistry.load().spec(symbol).point_value
+    label, pv = position(cfg, symbol)
     closed = sorted(tracker.closed_trades, key=lambda t: t.closed_at)
     rows = [{"pnl_pts": t.pnl_points, "risk_pts": t.initial_risk, "hour": t.opened_at.hour,
              "exit": t.exit_reason.value,
@@ -407,7 +453,7 @@ def summary(symbol, strategy, contract, steps, tracker, candidates, decisions, s
                  "start": steps[0].strftime("%Y-%m-%d") if len(steps) else None,
                  "end": steps[-1].strftime("%Y-%m-%d") if len(steps) else None,
                  "sessions": len({ts.date() for ts in steps}), "cost_points": cost,
-                 "point_value": pv,
+                 "point_value": pv, "position": label,
                  "generated_at": pd.Timestamp.now(tz="America/New_York").isoformat()},
         "funnel": {"candidates": dict(candidates),
                    "scored": sum(1 for d in decisions if d.signal is not None),
@@ -425,6 +471,9 @@ def summary(symbol, strategy, contract, steps, tracker, candidates, decisions, s
         "policies": {name: stats([{"pnl_pts": x["policy_pnl"][name], "risk_pts": x["risk_pts"]}
                                   for x in approved if name in x["policy_pnl"]], cost)
                      for name in STOP_POLICIES},
+        "targets": {name: stats([{"pnl_pts": x["target_pnl"][name], "risk_pts": x["risk_pts"]}
+                                 for x in approved if name in x.get("target_pnl", {})], cost)
+                    for name in TARGET_VARIANTS},
         "equity": equity,
         "trades": trades[-500:],
     }
@@ -451,17 +500,17 @@ def main() -> None:
     if not a.csv_root and not a.offline:
         print(f"Descargando {a.days} días de {TICKERS[a.symbol]} a 1 minuto...", file=sys.stderr)
         print(f"  guardado en {download(a.symbol, a.days).relative_to(ROOT)}", file=sys.stderr)
-    cost = a.cost_points if a.cost_points is not None else COST_POINTS[a.symbol]
-
     cfg, de, exec_bars, steps, tracker, cands, decisions, ideas = replay(
         a.symbol, CsvProvider(root), a.contract, strategy, a.start, a.end, a.progress_file)
+    cost = a.cost_points if a.cost_points is not None else \
+        (COST_POINTS_MICRO if cfg.ghost.trade_micro else COST_POINTS)[a.symbol]
     _progress(a.progress_file, stage="shadow", pct=1.0)
     rows = shadow(cfg, de, exec_bars, decisions)
     report(a.symbol, cfg, exec_bars, steps, tracker, cands, decisions, rows, cost, ideas,
            shadow_path=Path(a.json_out).with_suffix(".shadow.csv") if a.json_out else None)
     if a.json_out:
-        data = summary(a.symbol, a.strategy, a.contract, steps, tracker, cands, decisions,
-                       rows, cost, ideas)
+        data = summary(a.symbol, cfg, a.strategy, a.contract, steps, tracker, cands,
+                       decisions, rows, cost, ideas)
         Path(a.json_out).parent.mkdir(parents=True, exist_ok=True)
         Path(a.json_out).write_text(json.dumps(_json_safe(data)))
     _progress(a.progress_file, stage="done", pct=1.0)
