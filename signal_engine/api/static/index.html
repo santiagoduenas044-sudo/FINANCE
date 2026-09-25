@@ -182,6 +182,30 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .comp div { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); font-size: 12px; }
 .comp small { color: var(--ink-3); margin-left: auto; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 
+/* práctica (repetición de velas) */
+.pxbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 14px; }
+.pxbar + .pxbar { border-top: 1px solid var(--line); }
+.pxbar select, .pxbar input, .trade input, .trade select { background: var(--bg); color: var(--ink-1);
+  border: 1px solid var(--rule); border-radius: 6px; font: 13px var(--mono); padding: 5px 7px; color-scheme: dark; }
+.pbtn { padding: 6px 11px; border-radius: 7px; background: var(--panel-2); border: 1px solid var(--rule);
+  color: var(--ink-1); font-size: 12px; font-weight: 700; }
+.pbtn.on { background: var(--amber); color: #1a1200; border-color: transparent; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 7px; overflow: hidden; }
+.seg button { padding: 6px 10px; font: 700 12px var(--mono); color: var(--ink-2); background: var(--panel-2); }
+.seg button[aria-pressed="true"] { background: var(--ink-1); color: var(--bg); }
+.pxlab { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+#pr-chart { height: 560px; position: relative; }
+#pr-msg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); pointer-events: none;
+  text-align: center; padding: 20px; z-index: 3; }
+.trade { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.trade label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); }
+.trade label, .trade input, .trade select { min-width: 0; width: 100%; }
+.trade .buy, .trade .sell { padding: 10px; border-radius: 8px; font-weight: 800; font-size: 14px; }
+.trade .buy { background: var(--good); color: #04130a; } .trade .sell { background: var(--critical); color: #fff; }
+.trade .close { grid-column: span 2; }
+.keys-help { color: var(--ink-3); font-size: 12px; line-height: 1.8; }
+.keys-help kbd { font: 11px var(--mono); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 4px;
+  padding: 0 5px; color: var(--ink-1); }
 footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 18px; }
 
 @media (max-width: 1080px) {
@@ -220,7 +244,8 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
   <button type="button" data-view="panel" aria-current="page"><kbd>1</kbd>Panel</button>
   <button type="button" data-view="history"><kbd>2</kbd>Historial</button>
   <button type="button" data-view="backtest"><kbd>3</kbd>Backtest</button>
-  <button type="button" data-view="system"><kbd>4</kbd>Sistema</button>
+  <button type="button" data-view="practice"><kbd>4</kbd>Práctica</button>
+  <button type="button" data-view="system"><kbd>5</kbd>Sistema</button>
 </nav>
 <div class="banner" id="sim-banner" hidden>⚠ Datos simulados: se está reproduciendo el histórico de muestra, no es el mercado real.</div>
 
@@ -312,7 +337,58 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
       </div>
     </section>
 
-  <!-- ═════════ 4 · SISTEMA ═════════ -->
+  <!-- ═════════ 4 · PRÁCTICA ═════════ -->
+  <section class="view" id="v-practice">
+    <div class="card mb">
+      <div class="pxbar">
+        <select id="pr-data" aria-label="Datos"></select>
+        <input type="date" id="pr-date" aria-label="Día">
+        <input type="time" id="pr-time" value="09:30" step="60" aria-label="Hora de inicio (NY)">
+        <button class="pbtn" id="pr-go" type="button">Ir</button>
+        <button class="pbtn" id="pr-random" type="button">🎲 Día al azar</button>
+        <span class="fill"></span>
+        <div class="seg" id="pr-tf" role="group" aria-label="Temporalidad"></div>
+      </div>
+      <div class="pxbar">
+        <button class="pbtn" id="pr-play" type="button">▶ Play</button>
+        <button class="pbtn" id="pr-step" type="button">▶| Siguiente vela</button>
+        <select id="pr-speed" aria-label="Velocidad">
+          <option value="1">1 vela/s</option><option value="2">2 velas/s</option>
+          <option value="5" selected>5 velas/s</option><option value="10">10 velas/s</option></select>
+        <span class="mono" id="pr-clock" style="color:var(--ink-2)"></span>
+        <span class="fill"></span>
+        <span class="pxlab">Indicadores</span>
+        <div id="pr-ind" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        <button class="pbtn" id="pr-line" type="button" title="Tecla L">✏️ Línea</button>
+        <button class="pbtn" id="pr-clear" type="button">Borrar líneas</button>
+      </div>
+    </div>
+    <div class="board">
+      <div class="card chartcard"><div id="pr-chart"><div id="pr-msg">Elige un día y pulsa <b>Ir</b>, o prueba 🎲 Día al azar.</div></div></div>
+      <aside class="side">
+        <div class="card"><h3>Operar <span class="r mono" id="pr-px"></span></h3><div class="body">
+          <div class="trade">
+            <label>Stop (pts)<input type="number" id="pr-sl" value="20" min="1" step="0.25"></label>
+            <label>Objetivo (pts)<input type="number" id="pr-tp" value="40" min="1" step="0.25"></label>
+            <label>Contratos<input type="number" id="pr-qty" value="5" min="1" step="1"></label>
+            <label>Tipo<select id="pr-inst"><option value="2" selected>MNQ ($2/pt)</option><option value="20">NQ ($20/pt)</option></select></label>
+            <button class="buy" id="pr-buy" type="button">Comprar (B)</button>
+            <button class="sell" id="pr-sell" type="button">Vender (S)</button>
+            <button class="pbtn close" id="pr-close" type="button">Cerrar posición (C)</button>
+          </div>
+          <div id="pr-pos" style="margin-top:12px"></div>
+        </div></div>
+        <div class="card"><h3>Mi práctica <span class="r" id="pr-stats"></span></h3>
+          <div class="body"><ul class="ideas" id="pr-log"></ul>
+            <button class="pbtn" id="pr-reset" type="button" style="margin-top:8px">Borrar récord de práctica</button></div></div>
+        <div class="card"><h3>Atajos</h3><div class="body keys-help">
+          <kbd>Espacio</kbd> play/pausa · <kbd>→</kbd> siguiente vela · <kbd>B</kbd> comprar · <kbd>S</kbd> vender ·
+          <kbd>C</kbd> cerrar · <kbd>L</kbd> dibujar línea (clic en la gráfica) · <kbd>R</kbd> día al azar</div></div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ═════════ 5 · SISTEMA ═════════ -->
   <section class="view" id="v-system">
     <div class="card mb"><h3>Salud del bot <span class="r" id="svc-cycles"></span></h3>
       <div class="body"><div class="comp" id="components"></div><p class="foot" id="errbox" hidden></p></div></div>
@@ -366,7 +442,7 @@ function tile(lab, fig, sub, tone) {
 /* ───────────────────────── estado ───────────────────────── */
 const S = { view: "panel", symbol: null, symbols: [], status: null, chart: null,
   open: [], closed: [], ideas: { ideas: [] }, decisions: [], movers: null, tick: 0 };
-const VIEWS = ["panel", "history", "backtest", "system"];
+const VIEWS = ["panel", "history", "backtest", "practice", "system"];
 
 function setView(v) {
   if (!VIEWS.includes(v)) return;
@@ -381,7 +457,8 @@ function setView(v) {
 document.querySelectorAll(".tabs [data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 document.addEventListener("keydown", e => {
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "") || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[1-4]$/.test(e.key)) setView(VIEWS[Number(e.key) - 1]);
+  if (/^[1-5]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
+  if (S.view === "practice") prKey(e);
 });
 
 async function control(action) {
@@ -913,6 +990,266 @@ function renderBacktest() {
 }
 
 
+/* ═══════════════════════════ 4 · PRÁCTICA (repetición de velas) ═══════════════════════════
+   Las velas futuras ya están en el navegador pero NUNCA se dibujan antes de
+   tiempo: el gráfico solo recibe hasta la vela `ptr`. Los indicadores usan
+   solo velas pasadas (EMA/VWAP son causales), así que no hay trampa. */
+const TF_SEC = { "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600 };
+const IND = [["ema9", "EMA 9", "#38bdf8", 9], ["ema20", "EMA 20", "#f472b6", 20], ["ema50", "EMA 50", "#a78bfa", 50],
+             ["ema200", "EMA 200", "#f5c518", 200], ["vwap", "VWAP", "#e2e8f0", 0]];
+const PR = { init: false, chart: null, candle: null, vol: null, series: {}, markers: null, ds: [], bars: [], ptr: -1,
+  tf: "5m", timer: null, lineMode: false, lines: [], lineObjs: [], pos: null, posLines: [], log: [], ind: {}, busy: false };
+const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+async function prInit() {
+  if (PR.init) { prPaint(); return; }
+  PR.init = true;
+  PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, ema50: false, ema200: false, vwap: true });
+  PR.log = lsGet("pr.log", []);
+  PR.lines = lsGet("pr.lines", []);
+  try { PR.ds = (await api("/api/backtest/options")).datasets || []; } catch { PR.ds = []; }
+  $("pr-data").innerHTML = PR.ds.length ? PR.ds.map((d, i) => `<option value="${i}">${esc(d.symbol)} · ${esc(d.data)} (${esc(d.first)} → ${esc(d.last)})</option>`).join("")
+    : `<option>sin datos descargados</option>`;
+  const best = PR.ds.findIndex(d => d.data === "DATABENTO");
+  if (best >= 0) $("pr-data").value = best;
+  $("pr-tf").innerHTML = Object.keys(TF_SEC).map(t => `<button type="button" data-tf="${t}" aria-pressed="${t === PR.tf}">${t}</button>`).join("");
+  $("pr-tf").querySelectorAll("button").forEach(b => b.onclick = () => prSetTf(b.dataset.tf));
+  prIndButtons();
+  const LWc = window.LightweightCharts;
+  if (!PR.chart && LWc) {
+    const bg = css("--panel"), line = css("--line");
+    PR.chart = LWc.createChart($("pr-chart"), { autoSize: true,
+      layout: { background: { type: "solid", color: bg }, textColor: css("--ink-3"), fontFamily: css("--mono"), fontSize: 11,
+        panes: { separatorColor: line } },
+      grid: { vertLines: { color: line }, horzLines: { color: line } }, crosshair: { mode: LWc.CrosshairMode.Normal },
+      rightPriceScale: { borderColor: line }, timeScale: { borderColor: line, timeVisible: true, rightOffset: 12, barSpacing: 8,
+        tickMarkFormatter: t => fmtHM.format(new Date(t * 1000)) },
+      localization: { locale: "es-MX", timeFormatter: t => dhm(new Date(t * 1000)), priceFormatter: p => p.toFixed(2) } });
+    PR.candle = PR.chart.addSeries(LWc.CandlestickSeries, { upColor: css("--good"), downColor: css("--critical"),
+      borderVisible: false, wickUpColor: css("--good"), wickDownColor: css("--critical") });
+    PR.vol = PR.chart.addSeries(LWc.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false }, 1);
+    const panes = PR.chart.panes(); if (panes[1]) { panes[0].setStretchFactor(6); panes[1].setStretchFactor(1); }
+    for (const [k, , col] of IND) PR.series[k] = PR.chart.addSeries(LWc.LineSeries, { color: col, lineWidth: k === "vwap" ? 2 : 1,
+      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    PR.markers = LWc.createSeriesMarkers(PR.candle, []);
+    PR.chart.subscribeClick(p => {
+      if (!PR.lineMode || !p.point) return;
+      const price = PR.candle.coordinateToPrice(p.point.y);
+      if (price == null) return;
+      PR.lines.push(+price.toFixed(2)); lsSet("pr.lines", PR.lines); prDrawLines();
+      PR.lineMode = false; $("pr-line").classList.remove("on");
+    });
+  }
+  if (!$("pr-date").value) prRandom(false);
+  prPaint(); prLog();
+}
+
+function prIndButtons() {
+  $("pr-ind").innerHTML = IND.map(([k, lab, col]) => `<button class="pbtn" type="button" data-k="${k}" aria-pressed="${!!PR.ind[k]}"
+    style="${PR.ind[k] ? `background:${col};color:#000;border-color:transparent` : `color:${col}`}">${lab}</button>`).join("");
+  $("pr-ind").querySelectorAll("button").forEach(b => b.onclick = () => {
+    PR.ind[b.dataset.k] = !PR.ind[b.dataset.k]; lsSet("pr.ind", PR.ind);
+    prIndButtons(); if (PR.bars.length) prIndicators(true);
+  });
+}
+$("pr-go").onclick = () => prLoad();
+$("pr-random").onclick = () => prRandom(true);
+$("pr-step").onclick = () => prStep();
+$("pr-play").onclick = () => prPlay();
+$("pr-speed").onchange = () => { if (PR.timer) { prPlay(); prPlay(); } };
+$("pr-line").onclick = () => { PR.lineMode = !PR.lineMode; $("pr-line").classList.toggle("on", PR.lineMode); };
+$("pr-clear").onclick = () => { PR.lines = []; lsSet("pr.lines", []); prDrawLines(); };
+$("pr-buy").onclick = () => prOpen("LONG");
+$("pr-sell").onclick = () => prOpen("SHORT");
+$("pr-close").onclick = () => prExit(null, "Cierre manual");
+$("pr-reset").onclick = () => { if (confirm("¿Borrar todo el récord de práctica?")) { PR.log = []; lsSet("pr.log", []); prLog(); } };
+
+function prKey(e) {
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "")) return;
+  const k = e.key.toLowerCase();
+  if (k === " ") { e.preventDefault(); prPlay(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); prStep(); }
+  else if (k === "b") prOpen("LONG"); else if (k === "s") prOpen("SHORT");
+  else if (k === "c") prExit(null, "Cierre manual");
+  else if (k === "l") $("pr-line").click(); else if (k === "r") prRandom(true);
+}
+
+function prRandom(load) {
+  const d = PR.ds[+$("pr-data").value]; if (!d) return;
+  const a = Date.parse(d.first + "T12:00:00Z") + 5 * 864e5, b = Date.parse(d.last + "T12:00:00Z") - 3 * 864e5;
+  let t; do { t = new Date(a + Math.random() * (b - a)); } while (t.getUTCDay() === 0 || t.getUTCDay() === 6);
+  $("pr-date").value = t.toISOString().slice(0, 10); $("pr-time").value = "09:30";
+  if (load) prLoad();
+}
+
+async function prFetch(date, at) {
+  const d = PR.ds[+$("pr-data").value]; if (!d) return null;
+  $("pr-msg").textContent = "Cargando velas… (la primera vez prepara los datos, puede tardar un minuto)";
+  try {
+    return await api(`/api/replay/bars?symbol=${d.symbol}&data=${encodeURIComponent(d.data)}&date=${date}&tf=${PR.tf}&at=${at}&days_before=3&days_after=2`);
+  } catch (e) { $("pr-msg").textContent = "No se pudieron cargar las velas: " + e.message; return null; }
+}
+
+/** Carga la ventana y deja visibles solo las velas que CERRARON antes de `endT`. */
+async function prLoad(endT = null) {
+  if (PR.busy) return; PR.busy = true;
+  if (PR.timer) prPlay();
+  const date = endT ? fmtDate.format(new Date(endT * 1000)) : $("pr-date").value;
+  const at = endT ? fmtHM.format(new Date(endT * 1000)) : ($("pr-time").value || "09:30");
+  const r = await prFetch(date, at);
+  PR.busy = false;
+  if (!r) return;
+  if (!r.bars.length) { $("pr-msg").textContent = "No hay velas para ese día (¿fin de semana o feriado?). Prueba otro."; return; }
+  PR.bars = r.bars;
+  const T = endT ?? r.at_t, sec = TF_SEC[PR.tf];
+  PR.ptr = -1;
+  for (let i = 0; i < PR.bars.length; i++) { if (PR.bars[i].t + sec <= T) PR.ptr = i; else break; }
+  if (PR.ptr < 0) PR.ptr = 0;
+  $("pr-msg").textContent = "";
+  prRedraw(); PR.chart.timeScale().scrollToRealTime();
+}
+
+function prSetTf(tf) {
+  if (tf === PR.tf) return;
+  const endT = PR.bars.length && PR.ptr >= 0 ? PR.bars[PR.ptr].t + TF_SEC[PR.tf] : null;
+  PR.tf = tf;
+  $("pr-tf").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.tf === tf));
+  if (PR.bars.length) prLoad(endT);
+}
+
+const prCandle = b => ({ time: b.t, open: b.o, high: b.h, low: b.l, close: b.c });
+const prVol = b => ({ time: b.t, value: b.v, color: (b.c >= b.o ? css("--good") : css("--critical")) + "55" });
+
+function prRedraw() {
+  const shown = PR.bars.slice(0, PR.ptr + 1);
+  PR.candle.setData(shown.map(prCandle)); PR.vol.setData(shown.map(prVol));
+  prIndicators(true); prDrawLines(); prDrawPos(); prMarkers(); prPaint();
+}
+
+/** EMA y VWAP (VWAP se reinicia a las 18:00 NY, inicio de sesión de futuros). */
+function prCalc() {
+  const out = {};
+  for (const [k, , , n] of IND) {
+    if (!n) continue;
+    const a = 2 / (n + 1); let e = null;
+    out[k] = PR.bars.map(b => (e = e == null ? b.c : e + a * (b.c - e)));
+  }
+  let pv = 0, vv = 0, prevHour = null;
+  const hourNY = new Intl.DateTimeFormat("en-US", { timeZone: NY, hour: "2-digit", hour12: false });
+  out.vwap = PR.bars.map(b => {
+    const h = +hourNY.format(new Date(b.t * 1000)) % 24;
+    if (prevHour != null && prevHour < 18 && h >= 18) { pv = 0; vv = 0; }
+    prevHour = h;
+    const tp = (b.h + b.l + b.c) / 3, v = b.v || 1; pv += tp * v; vv += v; return pv / vv;
+  });
+  return out;
+}
+function prIndicators(full) {
+  if (!PR.series.ema9) return;
+  if (full || !PR.calc || PR.calc.n !== PR.bars.length) PR.calc = { n: PR.bars.length, ...prCalc() };
+  for (const [k] of IND) {
+    const s = PR.series[k];
+    if (!PR.ind[k]) { s.setData([]); continue; }
+    if (full) s.setData(PR.calc[k].slice(0, PR.ptr + 1).map((v, i) => ({ time: PR.bars[i].t, value: v })));
+    else s.update({ time: PR.bars[PR.ptr].t, value: PR.calc[k][PR.ptr] });
+  }
+}
+
+function prDrawLines() {
+  for (const l of PR.lineObjs) PR.candle.removePriceLine(l);
+  PR.lineObjs = PR.lines.map(p => PR.candle.createPriceLine({ price: p, color: "#60a5fa", lineWidth: 1,
+    lineStyle: 0, axisLabelVisible: true, title: "" }));
+}
+
+async function prStep() {
+  if (!PR.bars.length) return;
+  if (PR.ptr >= PR.bars.length - 1) {                   // se acabó lo cargado: trae más
+    await prLoad(PR.bars[PR.ptr].t + TF_SEC[PR.tf]);
+    if (PR.ptr >= PR.bars.length - 1) { if (PR.timer) prPlay(); return; }
+  }
+  PR.ptr++;
+  const b = PR.bars[PR.ptr];
+  PR.candle.update(prCandle(b)); PR.vol.update(prVol(b)); prIndicators(false);
+  prCheckPos(b); prPaint();
+}
+
+function prPlay() {
+  if (PR.timer) { clearInterval(PR.timer); PR.timer = null; $("pr-play").textContent = "▶ Play"; $("pr-play").classList.remove("on"); return; }
+  if (!PR.bars.length) return;
+  PR.timer = setInterval(prStep, 1000 / +$("pr-speed").value);
+  $("pr-play").textContent = "❚❚ Pausa"; $("pr-play").classList.add("on");
+}
+
+/* ── operar en práctica ── */
+const prPV = () => (+$("pr-qty").value || 1) * (+$("pr-inst").value || 2);
+function prOpen(dir) {
+  if (!PR.bars.length || PR.pos) return;
+  const b = PR.bars[PR.ptr], sl = +$("pr-sl").value, tp = +$("pr-tp").value;
+  const long = dir === "LONG";
+  PR.pos = { dir, entry: b.c, t: b.t, sl: long ? b.c - sl : b.c + sl, tp: long ? b.c + tp : b.c - tp, pv: prPV(),
+    label: `${$("pr-qty").value} ${$("pr-inst").selectedOptions[0].textContent.split(" ")[0]}` };
+  prDrawPos(); prMarkers(); prPaint();
+}
+function prCheckPos(b) {
+  const p = PR.pos; if (!p) return;
+  const long = p.dir === "LONG";
+  const hitSl = long ? b.l <= p.sl : b.h >= p.sl, hitTp = long ? b.h >= p.tp : b.l <= p.tp;
+  if (hitSl) prExit(p.sl, hitTp ? "Stop (tocó ambos: se asume el stop)" : "Stop");
+  else if (hitTp) prExit(p.tp, "Objetivo");
+}
+function prExit(price, why) {
+  const p = PR.pos; if (!p) return;
+  const b = PR.bars[PR.ptr], px = price ?? b.c;
+  const pts = p.dir === "LONG" ? px - p.entry : p.entry - px;
+  PR.log.push({ dir: p.dir, entry: p.entry, exit: px, t_in: p.t, t_out: b.t, pts, usd: pts * p.pv, label: p.label, why,
+    risk: Math.abs(p.entry - p.sl) });
+  lsSet("pr.log", PR.log); PR.pos = null;
+  prDrawPos(); prMarkers(); prLog(); prPaint();
+}
+function prDrawPos() {
+  for (const l of PR.posLines) PR.candle.removePriceLine(l);
+  PR.posLines = [];
+  const p = PR.pos; if (!p) return;
+  const L = (price, color, title, style = 0) => PR.posLines.push(PR.candle.createPriceLine({ price, color, lineWidth: 2, lineStyle: style, axisLabelVisible: true, title }));
+  L(p.entry, "#cbd2dc", p.dir === "LONG" ? "Compra" : "Venta"); L(p.sl, css("--critical"), "SL", 2); L(p.tp, css("--good"), "TP", 2);
+}
+function prMarkers() {
+  if (!PR.markers || !PR.bars.length) return;
+  const lo = PR.bars[0].t, hi = PR.bars[PR.ptr]?.t ?? lo;
+  const mk = [];
+  for (const x of [...PR.log, ...(PR.pos ? [{ ...PR.pos, t_in: PR.pos.t }] : [])]) {
+    const long = x.dir === "LONG";
+    if (x.t_in >= lo && x.t_in <= hi) mk.push({ time: x.t_in, position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown", color: long ? css("--good") : css("--critical") });
+    if (x.t_out && x.t_out >= lo && x.t_out <= hi) mk.push({ time: x.t_out, position: long ? "aboveBar" : "belowBar", shape: "circle", color: x.pts >= 0 ? css("--good") : css("--critical"), text: sgn(x.pts, 1) });
+  }
+  PR.markers.setMarkers(mk.sort((a, b) => a.time - b.time));
+}
+function prPaint() {
+  const b = PR.bars[PR.ptr];
+  $("pr-clock").textContent = b ? `${dhm(new Date(b.t * 1000))} ET · ${PR.tf}` : "";
+  $("pr-px").textContent = b ? num(b.c) : "";
+  const p = PR.pos;
+  ["pr-buy", "pr-sell"].forEach(i => $(i).disabled = !!p || !b); $("pr-close").disabled = !p;
+  if (!p) { $("pr-pos").innerHTML = `<div class="sub" style="color:var(--ink-3);font-size:13px">Sin posición. Entra al cierre de la vela actual con B / S.</div>`; return; }
+  const pts = b ? (p.dir === "LONG" ? b.c - p.entry : p.entry - b.c) : 0;
+  $("pr-pos").innerHTML = `<div class="state" style="font-size:11px;font-weight:800;letter-spacing:.1em;color:${p.dir === "LONG" ? css("--good") : css("--critical")}">
+      ● ${p.dir === "LONG" ? "COMPRA" : "VENTA"} · ${esc(p.label)}</div>
+    <div class="big ${cls(pts)}" style="font:700 28px var(--mono);margin:6px 0 2px">${sgn(pts)} pts</div>
+    <div class="usd" style="font:13px var(--mono);color:var(--ink-2)">${pts < 0 ? "−" : "+"}$${Math.abs(pts * p.pv).toFixed(0)}</div>
+    <dl class="kv"><dt>Entrada</dt><dd>${num(p.entry)}</dd><dt>Stop</dt><dd>${num(p.sl)}</dd><dt>Objetivo</dt><dd>${num(p.tp)}</dd></dl>`;
+}
+function prLog() {
+  const L = PR.log, n = L.length, w = L.filter(x => x.pts > 0).length;
+  const usd = L.reduce((s, x) => s + x.usd, 0), pts = L.reduce((s, x) => s + x.pts, 0);
+  $("pr-stats").innerHTML = n ? `${n} trades · ${Math.round(w / n * 100)}% · <span class="${cls(usd)}">${usd < 0 ? "−" : "+"}$${Math.abs(usd).toFixed(0)}</span>` : "";
+  $("pr-log").innerHTML = n ? L.slice().reverse().slice(0, 30).map(x => `<li><span class="ic">${x.pts > 0 ? "✅" : x.pts < 0 ? "🛑" : "➖"}</span>
+      <div><b>${x.dir === "LONG" ? "Compra" : "Venta"}</b> ${num(x.entry)} → ${num(x.exit)}
+      <div class="t">${esc(dhm(new Date(x.t_in * 1000)))} · ${esc(x.why)} · ${esc(x.label)}</div></div>
+      <span class="res ${cls(x.pts)}">${sgn(x.pts, 1)}<br><small>${x.usd < 0 ? "−" : "+"}$${Math.abs(x.usd).toFixed(0)}</small></span></li>`).join("")
+    : `<li class="empty" style="display:block">Todavía no has practicado. Carga un día, dale Play y entra con B o S.</li>`;
+}
+
 /* ═══════════════════════════ ciclo ═══════════════════════════ */
 function renderAll() {
   paintHeader();
@@ -920,6 +1257,7 @@ function renderAll() {
   else if (S.view === "history") renderHistory();
   else if (S.view === "backtest") renderBacktest();
   else if (S.view === "system") renderSystem();
+  else if (S.view === "practice") prInit();
 }
 let busy = false;
 async function refresh(force = false) {

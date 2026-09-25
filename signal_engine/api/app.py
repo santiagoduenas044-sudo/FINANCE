@@ -24,6 +24,7 @@ from ..runtime.models import BotStatus
 
 from ..live.movers import MoversService
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
+from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -62,6 +63,7 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     app.state.started_at = time.time()
     backtests = backtests or BacktestManager(Path(__file__).resolve().parents[2])
     movers = movers or MoversService()
+    replay = ReplayData(backtests.root)
 
     # -- CORS: only when explicitly configured (never a wildcard) ---------- #
     if settings.cors_origins:
@@ -257,6 +259,17 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             "event": {"kind": event.kind, "timestamp": event.timestamp.isoformat(),
                      "detail": event.detail},
         }
+
+    @app.get("/api/replay/bars")
+    def replay_bars(symbol: str = "NQ", data: str = "DATABENTO", date: str = "",
+                    tf: str = "5m", days_before: int = 3, days_after: int = 2,
+                    at: str = "09:30") -> dict:
+        """Historical bars around a day for the manual practice (bar replay)."""
+        try:
+            return replay.bars(symbol=symbol, data=data, date=date, tf=tf,
+                               days_before=days_before, days_after=days_after, at=at)
+        except ReplayError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
     @app.get("/api/market/movers")
     def get_movers() -> dict:
