@@ -60,7 +60,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--symbol", default="NQ", help="raíz CME: NQ, ES, MNQ...")
     ap.add_argument("--start", required=True, help="YYYY-MM-DD")
-    ap.add_argument("--end", help="YYYY-MM-DD (default: hoy)")
+    ap.add_argument("--end", help="YYYY-MM-DD (default: hace 2 días; lo más reciente "
+                                  "requiere suscripción)")
     ap.add_argument("--yes", action="store_true", help="no preguntar antes de cobrar")
     a = ap.parse_args()
     try:
@@ -68,7 +69,10 @@ def main() -> int:
     except ImportError:
         raise SystemExit("Instala el cliente primero: .venv/bin/pip install databento")
 
-    end = a.end or pd.Timestamp.now(tz="UTC").normalize().strftime("%Y-%m-%d")
+    # Usage-based historical access stops ~1 day behind real time; the
+    # newest hours need a live subscription (HTTP 422 dataset_unavailable_range).
+    end = a.end or (pd.Timestamp.now(tz="UTC").normalize()
+                    - pd.Timedelta(days=2)).strftime("%Y-%m-%d")
     query = dict(dataset=DATASET, symbols=f"{a.symbol}.v.0", stype_in="continuous",
                  schema=SCHEMA, start=a.start, end=end)
     client = db.Historical(api_key())
