@@ -255,6 +255,32 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                      "detail": event.detail},
         }
 
+    @app.get("/api/ideas")
+    def get_ideas() -> dict:
+        """Trade ideas (heads-up / confirmed / direct / cancelled) of the most
+        recent trading day, each with its trade's live or final result."""
+        board = getattr(runtime, "idea_board", None)
+        if board is None:
+            return {"enabled": False, "day": None, "ideas": []}
+        ideas = list(board.ideas.values())
+        day = max((i.day for i in ideas), default=None)
+        trades = []
+        if runtime.paper_tracker is not None:
+            trades = list(runtime.paper_tracker.open_trades) + \
+                list(runtime.paper_tracker.closed_trades)
+        by_num = {}
+        for t in trades:
+            ctx = t.context or {}
+            if ctx.get("idea_number") is not None and \
+                    t.opened_at.tz_convert("America/New_York").date().isoformat() == day:
+                by_num[(t.instrument, ctx["idea_number"])] = t.to_dict()
+        out = []
+        for i in sorted((i for i in ideas if i.day == day), key=lambda i: i.number):
+            d = i.to_event()
+            d["trade"] = by_num.get((i.symbol, i.number))
+            out.append(d)
+        return {"enabled": True, "day": day, "ideas": out}
+
     # -- Backtests (dashboard "Backtest" view) ------------------------------ #
     @app.get("/api/backtest/options")
     def backtest_options() -> dict:

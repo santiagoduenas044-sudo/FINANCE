@@ -3,129 +3,154 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
-<title>GHOST Terminal</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%23ff9f1c'/%3E%3Ctext x='8' y='12.5' font-family='monospace' font-size='12' font-weight='bold' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
+<meta name="theme-color" content="#0b0e13">
+<title>GHOST · Panel</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffb020'/%3E%3Ctext x='8' y='12' font-family='sans-serif' font-size='11' font-weight='bold' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
 <style>
+/* Una sola idea por pantalla: lo que el operador necesita decidir está grande y
+   arriba; el resto (historial, backtest, sistema) vive en su pestaña. */
 :root {
   color-scheme: dark;
-  --bg: #000; --panel: #050607; --hdr: #12151b; --hdr-2: #0b1a33;
-  --line: #181b21; --rule: #2a2e36; --focus: #ffc061;
-  --amber: #ff9f1c; --amber-2: #ffc061; --amber-dim: rgba(255,159,28,.38);
-  --ink-1: #f1f1f1; --ink-2: #aeb3bb; --ink-3: #6b7079;
-  --good: #1fd873; --critical: #ff3b3b; --warning: #ffd21f; --blue: #2d7dff;
-  --plus: #3d9bff; --minus: #ff7a1a;
-  --series-1: #00c8ff; --series-2: #f5d90a; --series-3: #ff9f1c;
-  --series-4: #a78bfa; --series-6: #ff4fd8;
-  --ord-1: #7fb2ff; --ord-2: #4d8fff; --ord-3: #2d6ee6; --ord-4: #1fd873;
-  --surface-1: #000; --surface-3: #1c2029;
-  --mono: "SF Mono", SFMono-Regular, Menlo, Consolas, "Roboto Mono", "DejaVu Sans Mono", monospace;
-  --sans: var(--mono);
+  --bg: #0b0e13; --panel: #11151c; --panel-2: #161b24; --rule: #1f2530; --line: #171c24;
+  --ink-1: #eef1f5; --ink-2: #a3abb8; --ink-3: #6b7482;
+  --amber: #ffb020; --amber-dim: rgba(255, 176, 32, .14);
+  --good: #22c55e; --good-dim: rgba(34, 197, 94, .14);
+  --critical: #ef4444; --critical-dim: rgba(239, 68, 68, .14);
+  --warning: #f5c518; --info: #3b82f6;
+  --mono: "SF Mono", SFMono-Regular, Menlo, Consolas, "Roboto Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --r: 10px;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); }
-body { color: var(--ink-1); font: 12px/1.35 var(--mono); -webkit-font-smoothing: antialiased;
-  font-variant-numeric: tabular-nums; overflow: hidden; }
+html, body { margin: 0; background: var(--bg); }
+body { color: var(--ink-1); font: 14px/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
-:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
-.num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .pos { color: var(--good); } .neg { color: var(--critical); } .zero { color: var(--ink-2); }
-code { color: var(--amber-2); font: inherit; }
 
-/* ─── armazón: barra de comando · teclas de función · área · línea de estado ─── */
-/* minmax(0,1fr): sin esto la columna crece al ancho mínimo de su contenido
-   (tablas, barras de botones) y en el celular la página se sale de la pantalla */
-.term { height: 100dvh; display: grid; grid-template-rows: auto auto auto 1fr auto;
-  grid-template-columns: minmax(0, 1fr); }
-
-.cmdbar { display: flex; align-items: stretch; gap: 1px; background: var(--rule);
-  border-bottom: 1px solid var(--rule); min-height: 36px; }
-.cmdbar > * { background: var(--bg); display: flex; align-items: center; padding: 0 10px; }
-.brand { background: var(--amber) !important; color: #000; font-weight: 800; letter-spacing: .12em; }
-.cmd { gap: 6px; flex: 0 1 230px; min-width: 150px; }
-.cmd label { color: var(--amber); font-weight: 700; }
-.cmd input { flex: 1; min-width: 0; background: transparent; border: 0; color: var(--ink-1);
-  font: inherit; text-transform: uppercase; caret-color: var(--amber); }
-.cmd input::placeholder { color: var(--ink-3); }
-.cmd input:focus { outline: none; }
-.cmd .go { background: var(--good); color: #000; font-weight: 800; padding: 1px 6px; font-size: 10px; }
-.sec { flex-direction: column; align-items: flex-start !important; justify-content: center; line-height: 1.15; }
-.sec .tk { color: var(--amber); font-weight: 800; letter-spacing: .04em; }
-.sec .nm { color: var(--ink-2); font-size: 10px; text-transform: uppercase; }
-.quote { gap: 10px; }
-.quote .last { font-size: 20px; font-weight: 700; color: var(--ink-1); }
-.quote .chg { font-weight: 700; }
-.quote .ref { color: var(--ink-3); font-size: 10px; text-transform: uppercase; }
+/* ── barra superior ── */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 18px;
+  padding: 10px 18px; background: rgba(11, 14, 19, .92); backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.brand { font-weight: 800; letter-spacing: .14em; color: var(--amber); font-size: 13px; }
+.symtabs { display: flex; gap: 4px; }
+.symtabs button { padding: 3px 10px; border-radius: 999px; color: var(--ink-2); font-weight: 600; font-size: 12px; }
+.symtabs button[aria-current] { background: var(--panel-2); color: var(--ink-1); }
+.quote { display: flex; align-items: baseline; gap: 10px; }
+.quote .last { font: 700 24px/1 var(--mono); }
+.quote .chg { font: 600 13px var(--mono); }
+.chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--rule); font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.dot.ok { background: var(--good); box-shadow: 0 0 0 3px var(--good-dim); }
+.dot.warn { background: var(--warning); } .dot.bad { background: var(--critical); }
+.today { display: flex; flex-direction: column; line-height: 1.15; }
+.today .k { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); }
+.today .v { font: 700 16px var(--mono); }
 .fill { flex: 1; }
-.kvp { gap: 6px; white-space: nowrap; }
-.kvp .k { color: var(--amber); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
-.kvp .v { color: var(--ink-1); font-weight: 700; }
-.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); display: inline-block; }
-.dot.live { animation: blink 1.6s steps(2, start) infinite; }
-@keyframes blink { 50% { opacity: .35; } }
-.keys { gap: 1px; padding: 0 !important; background: var(--rule) !important; }
-.keys button { height: 100%; padding: 0 12px; font-weight: 800; letter-spacing: .06em; color: #000;
-  font-size: 11px; }
-.keys .k-go { background: var(--good); } .keys .k-hold { background: var(--warning); }
-.keys .k-halt { background: var(--critical); color: #fff; }
-.keys button:disabled { background: #1b1e24; color: var(--ink-3); cursor: default; }
+.ctl { display: flex; gap: 6px; }
+.ctl button { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 700; background: var(--panel-2);
+  border: 1px solid var(--rule); color: var(--ink-2); }
+.ctl button.go { background: var(--good); color: #04130a; border-color: transparent; }
+.ctl button.halt:hover { color: var(--critical); }
+.ctl button:disabled { background: var(--panel); color: var(--ink-3); border-color: var(--rule); opacity: .6; cursor: default; }
 
-.fkeys { display: flex; align-items: stretch; gap: 1px; background: var(--rule);
-  border-bottom: 1px solid var(--rule); overflow-x: auto; scrollbar-width: none; }
-.fkeys::-webkit-scrollbar { display: none; }
-.fkeys button, .fkeys .sym { background: var(--hdr); padding: 5px 12px; color: var(--amber);
-  font-weight: 700; letter-spacing: .05em; white-space: nowrap; text-transform: uppercase; }
-.fkeys button b { color: var(--ink-1); margin-right: 5px; }
-.fkeys button[aria-current="page"] { background: var(--amber); color: #000; }
-.fkeys button[aria-current="page"] b { color: #000; }
-.fkeys .gap { flex: 1; background: var(--hdr); min-width: 8px; }
-.fkeys .symtab { background: var(--hdr); color: var(--ink-2); }
-.fkeys .symtab[aria-pressed="true"] { background: var(--hdr-2); color: var(--ink-1);
-  box-shadow: inset 0 -2px 0 var(--amber); }
+/* ── pestañas ── */
+.tabs { display: flex; gap: 2px; padding: 0 14px; border-bottom: 1px solid var(--rule); overflow-x: auto; }
+.tabs button { padding: 11px 14px; color: var(--ink-3); font-weight: 600; font-size: 13px; border-bottom: 2px solid transparent;
+  white-space: nowrap; }
+.tabs button[aria-current] { color: var(--ink-1); border-bottom-color: var(--amber); }
+.tabs kbd { font: 10px var(--mono); color: var(--ink-3); margin-right: 5px; }
+.banner { margin: 12px 18px 0; padding: 9px 12px; border-radius: 8px; background: rgba(245, 197, 24, .1);
+  border: 1px solid rgba(245, 197, 24, .35); color: var(--warning); font-size: 13px; }
 
-.banner { display: flex; gap: 10px; align-items: center; padding: 5px 12px; background: #3a2600;
-  color: var(--warning); border-bottom: 1px solid var(--warning); font-weight: 700; }
-.banner[hidden] { display: none; }
+main { padding: 14px 18px 40px; max-width: 1500px; margin: 0 auto; }
+.view { display: none; } .view[data-active] { display: block; }
 
-main { min-height: 0; overflow: hidden; position: relative; }
-.view { display: none; height: 100%; overflow: auto; padding: 6px; }
-.view[data-active] { display: block; }
-.view.tape[data-active] { display: grid; }
+/* ── tarjetas ── */
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r); min-width: 0; }
+.card > h3 { margin: 0; padding: 12px 14px 0; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.card > h3 .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.card .body { padding: 10px 14px 14px; }
 
-.status { display: flex; gap: 1px; background: var(--rule); border-top: 1px solid var(--rule);
-  font-size: 11px; min-height: 22px; }
-.status > * { background: var(--hdr); padding: 3px 10px; display: flex; align-items: center;
-  gap: 6px; white-space: nowrap; }
-.status .warnk { color: #000; background: var(--amber); font-weight: 800; }
-.status .news { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); }
-.status .news b { color: var(--amber); font-weight: 700; }
+/* ── panel principal ── */
+.board { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 14px; align-items: start; }
+.side { display: grid; gap: 14px; }
+.chartcard { overflow: hidden; }
+.chartbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+  font-size: 12px; color: var(--ink-3); }
+.chartbar b { color: var(--ink-1); font-weight: 600; }
+.chartbar button { padding: 3px 9px; border-radius: 6px; background: var(--panel-2); color: var(--ink-2);
+  font-size: 11px; font-weight: 700; }
+#chart { height: 520px; position: relative; }
+#chartmsg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3); pointer-events: none; }
+.legendrow { display: flex; gap: 14px; flex-wrap: wrap; padding: 8px 14px 10px; font-size: 11px; color: var(--ink-3);
+  border-top: 1px solid var(--line); }
+.sw { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 5px; }
 
-/* ─── paneles estilo launchpad ─── */
-.panel { background: var(--panel); border: 1px solid var(--rule); display: flex; flex-direction: column;
-  min-width: 0; min-height: 0; }
-.ph { display: flex; align-items: center; gap: 8px; background: var(--hdr); border-bottom: 1px solid var(--rule);
-  padding: 3px 8px; min-height: 26px; flex-wrap: wrap; }
-.ph .mn { background: var(--hdr-2); color: var(--ink-2); font-size: 10px; font-weight: 700;
-  padding: 1px 5px; letter-spacing: .06em; }
-.ph h2 { margin: 0; font-size: 11px; font-weight: 700; color: var(--amber); letter-spacing: .08em;
-  text-transform: uppercase; }
+/* "Ahora": lo único que importa en este momento */
+.now .state { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.now .headline { font-size: 19px; font-weight: 700; margin: 4px 0 2px; }
+.now .sub { color: var(--ink-2); font-size: 13px; }
+.now .big { font: 700 34px/1.1 var(--mono); margin: 10px 0 2px; }
+.now .usd { color: var(--ink-2); font: 13px var(--mono); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin-top: 12px; font-size: 13px; }
+.kv dt { color: var(--ink-3); } .kv dd { margin: 0; text-align: right; font-family: var(--mono); }
+.badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font: 700 10px var(--sans);
+  letter-spacing: .04em; vertical-align: 1px; margin-left: 6px; }
+.badge.good { background: var(--good-dim); color: var(--good); }
+.badge.warn { background: var(--amber-dim); color: var(--amber); }
+.rail { position: relative; height: 8px; border-radius: 4px; margin: 16px 0 6px;
+  background: linear-gradient(90deg, var(--critical-dim), var(--panel-2) 40%, var(--good-dim)); }
+.rail .mk { position: absolute; top: -4px; width: 3px; height: 16px; border-radius: 2px; background: var(--ink-1); }
+.rail .tk { position: absolute; top: 0; width: 1px; height: 8px; background: var(--ink-3); }
+.railx { display: flex; justify-content: space-between; font: 11px var(--mono); color: var(--ink-3); }
+
+.stats4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.stat .k { font-size: 11px; color: var(--ink-3); }
+.stat .v { font: 700 18px var(--mono); margin-top: 2px; }
+.stat .s { font-size: 11px; color: var(--ink-3); font-family: var(--mono); }
+
+.ideas { list-style: none; margin: 0; padding: 0; }
+.ideas li { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; padding: 9px 0;
+  border-top: 1px solid var(--line); font-size: 13px; }
+.ideas li:first-child { border-top: 0; }
+.ideas .ic { font-size: 16px; text-align: center; }
+.ideas .t { color: var(--ink-3); font: 11px var(--mono); }
+.ideas .res { font: 700 13px var(--mono); text-align: right; }
+.empty { color: var(--ink-3); text-align: center; padding: 18px 8px; font-size: 13px; line-height: 1.5; }
+
+/* ── tablas / tiles (historial, backtest, sistema) ── */
+.grid { display: grid; gap: 14px; } .g-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } .mb { margin-bottom: 14px; }
+.tile { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r); padding: 12px 14px; min-width: 0; }
+.tile .lab { color: var(--ink-3); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+.tile .fig { font: 700 24px var(--mono); margin: 4px 0 2px; }
+.tile .sub { color: var(--ink-3); font-size: 12px; }
+.tile.good .fig { color: var(--good); } .tile.critical .fig { color: var(--critical); }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; color: var(--ink-3); font-weight: 600; font-size: 11px; padding: 8px 10px;
+  border-bottom: 1px solid var(--rule); white-space: nowrap; position: sticky; top: 0; background: var(--panel); }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; color: var(--ink-2); }
+td.num { font-family: var(--mono); }
+.scroll { overflow: auto; max-height: 460px; }
+.tag { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.tag.up { background: var(--good-dim); color: var(--good); } .tag.down { background: var(--critical-dim); color: var(--critical); }
+.foot { color: var(--ink-3); font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
+svg.chart { width: 100%; height: 190px; display: block; }
+svg.chart .grid { stroke: var(--line); stroke-width: 1; }
+/* piezas compartidas con la vista de backtest */
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--r); min-width: 0; overflow: hidden; }
+.ph { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.ph .mn { display: none; }
+.ph h2 { margin: 0; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 700; }
 .ph .gap { flex: 1; }
-.pb { padding: 8px; overflow: auto; min-height: 0; }
-.pb.tight { padding: 0; }
-.pill { display: inline-flex; gap: 5px; align-items: center; color: var(--ink-2); font-size: 11px; }
-.pill .k { color: var(--ink-3); text-transform: uppercase; font-size: 10px; }
-.pill .v { color: var(--ink-1); font-weight: 700; }
-.foot { color: var(--ink-3); font-size: 11px; margin: 8px 0 0; line-height: 1.45; }
-.foot b { color: var(--ink-1); }
-.empty { color: var(--ink-3); padding: 14px 6px; text-align: center; line-height: 1.5; }
-.empty .ic { display: block; color: var(--amber-dim); font-size: 16px; margin-bottom: 4px; }
-h3.sec { margin: 0 0 8px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--amber); font-weight: 700; }
-.grid { display: grid; gap: 6px; }
-.g-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.g-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.g-brain { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
-.mb { margin-bottom: 6px; }
+.pb { padding: 12px 14px; } .pb.tight { padding: 0; }
+.pill { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--ink-2); }
+.pill .k { color: var(--ink-3); font-size: 11px; } .pill .v { color: var(--ink-1); font-weight: 600; }
+.t { font-family: var(--mono); }
 /* backtest */
 .btform { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
 .btform label { display: flex; flex-direction: column; gap: 3px; color: var(--ink-3); font-size: 10px;
@@ -139,373 +164,86 @@ h3.sec { margin: 0 0 8px; font-size: 10px; letter-spacing: .12em; text-transform
 .btbar > div { height: 100%; width: 0; background: var(--amber); transition: width .4s; }
 .btnote { color: var(--ink-3); font-size: 11px; margin-top: 6px; }
 tr.best td { background: rgba(31, 216, 115, .08); }
+.btform button { border-radius: 8px; }
+.btform select, .btform input, #bt-runs { border-radius: 6px; padding: 5px 8px; }
 
-.tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; font-size: 10px;
-  font-weight: 800; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap;
-  border: 1px solid currentColor; }
-.tag.up { color: var(--good); } .tag.down { color: var(--critical); }
-.tag.warn { color: var(--warning); } .tag.flat { color: var(--ink-2); }
+.comp { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+.comp div { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); font-size: 12px; }
+.comp small { color: var(--ink-3); margin-left: auto; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
 
-.kv { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
-  border-bottom: 1px dotted var(--line); }
-.kv .k { color: var(--amber); text-transform: uppercase; font-size: 11px; }
-.kv .v { color: var(--ink-1); text-align: right; font-weight: 600; }
+footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 18px; }
 
-.tile { background: var(--panel); border: 1px solid var(--rule); padding: 8px 10px; min-width: 0; }
-.tile .lab { color: var(--amber); font-size: 10px; text-transform: uppercase; letter-spacing: .1em;
-  font-weight: 700; }
-.tile .fig { font-size: 22px; font-weight: 700; margin: 3px 0 1px; color: var(--ink-1);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile .sub { color: var(--ink-3); font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
-.spark { display: block; width: 100%; height: 26px; margin-top: 6px; }
-
-table { width: 100%; border-collapse: collapse; }
-th { position: sticky; top: 0; background: var(--hdr-2); color: var(--ink-1); font-size: 10px;
-  text-transform: uppercase; letter-spacing: .06em; text-align: left; padding: 4px 8px;
-  font-weight: 700; white-space: nowrap; z-index: 1; }
-td { padding: 3px 8px; border-bottom: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
-tbody tr:nth-child(even) td { background: #07090c; }
-tr.click { cursor: pointer; }
-tr.click:hover td { background: #101620; }
-tr.click[aria-selected="true"] td { background: var(--hdr-2); color: var(--ink-1); }
-td.t { color: var(--amber); }
-.scroll { overflow: auto; }
-
-/* ─── TAPE ─── */
-.view.tape { grid-template-columns: minmax(0, 1fr) 330px; grid-template-rows: minmax(0, 1fr) 200px;
-  gap: 6px; }
-.chartp { grid-row: 1; grid-column: 1; }
-.side { grid-row: 1 / span 2; grid-column: 2; display: flex; flex-direction: column; gap: 6px;
-  min-height: 0; overflow: auto; }
-.logp { grid-row: 2; grid-column: 1; }
-.tb { display: flex; flex-wrap: wrap; gap: 1px; background: var(--rule); }
-.tb button { background: var(--bg); color: var(--ink-2); padding: 2px 7px; font-size: 10px;
-  font-weight: 700; letter-spacing: .04em; min-height: 22px; }
-.tb button:hover { color: var(--ink-1); background: #151a22; }
-.tb button[aria-pressed="true"] { color: #000; }
-.dataline { display: flex; flex-wrap: wrap; gap: 2px 12px; padding: 4px 8px; font-size: 11px;
-  border-bottom: 1px solid var(--line); min-height: 25px; background: var(--bg); }
-.dataline .t { color: var(--amber); font-weight: 700; }
-.dataline i { font-style: normal; color: var(--ink-3); margin-right: 3px; }
-.dataline b { color: var(--ink-1); font-weight: 600; }
-.chartbox { position: relative; flex: 1; min-height: 0; }
-#chart { position: absolute; inset: 0; }
-.chartmsg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-3);
-  pointer-events: none; }
-.chartmsg[hidden] { display: none; }
-.help { color: var(--ink-3); font-size: 10px; padding: 3px 8px; border-top: 1px solid var(--line); }
-.help b { color: var(--amber); font-weight: 700; }
-
-.read ol { margin: 0; padding: 0; list-style: none; counter-reset: r; }
-.read li { counter-increment: r; padding: 3px 0 3px 22px; position: relative; color: var(--ink-1);
-  border-bottom: 1px dotted var(--line); }
-.read li::before { content: counter(r) ")"; position: absolute; left: 0; color: var(--amber);
-  font-weight: 700; }
-.mtf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule); }
-.mtfc { background: var(--bg); padding: 6px; text-align: center; }
-.mtfc .tf { color: var(--ink-1); font-weight: 800; }
-.mtfc .role { color: var(--ink-3); font-size: 10px; text-transform: uppercase; }
-.mtfc .arrow { font-size: 16px; line-height: 1.2; }
-.mtfc .bias { font-size: 11px; font-weight: 700; text-transform: uppercase; }
-.lrow { display: grid; grid-template-columns: 1fr auto 54px; gap: 8px; padding: 2px 0;
-  border-bottom: 1px dotted var(--line); align-items: center; }
-.lrow .kind { color: var(--ink-2); font-size: 11px; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; }
-.lrow .p { color: var(--ink-1); font-weight: 600; }
-.lrow .d { color: var(--ink-3); text-align: right; font-size: 11px; }
-.lrow.now { background: #1a1204; }
-.lrow.now .p { color: var(--amber); }
-
-/* ─── gráficas SVG, cascadas y barras ─── */
-svg.chart { display: block; width: 100%; height: 170px; }
-svg.chart .grid { stroke: var(--line); stroke-width: 1; }
-svg.chart .axis { stroke: var(--rule); stroke-width: 1; }
-.meter .top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; }
-.meter .score { font-size: 26px; font-weight: 800; }
-.meter .of { color: var(--ink-3); }
-.meter .track { position: relative; height: 10px; background: #111418; border: 1px solid var(--rule);
-  margin-bottom: 20px; }
-.meter .fill { position: absolute; left: 0; top: 0; bottom: 0; }
-.meter .thr { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--warning); }
-.meter .thrlab { position: absolute; top: 13px; transform: translateX(-50%); font-size: 10px;
-  color: var(--warning); white-space: nowrap; }
-.wf { display: grid; gap: 3px; }
-.wfrow { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) 40px; gap: 8px;
-  align-items: center; }
-.wfrow .n { color: var(--ink-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wfrow .n small { display: block; color: var(--ink-3); font-size: 10px; overflow: hidden;
-  text-overflow: ellipsis; }
-.wftrack { position: relative; height: 10px; background: #0c0f13;
-  background-image: linear-gradient(var(--rule), var(--rule)); background-size: 1px 100%;
-  background-repeat: no-repeat; background-position: center; }
-.wfbar { position: absolute; top: 0; bottom: 0; }
-.wfrow .p { text-align: right; font-weight: 800; }
-.rbars { display: grid; gap: 7px; }
-.rbar { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
-.rbar .lab { color: var(--ink-1); font-size: 11px; }
-.rbar .tr { height: 6px; background: #0c0f13; margin-top: 3px; }
-.rbar .fl { height: 100%; }
-.rbar .ct { font-weight: 800; color: var(--ink-1); min-width: 36px; text-align: right; }
-.funnel { display: grid; gap: 2px; }
-.fstage { display: grid; grid-template-columns: 220px 1fr 90px; gap: 10px; align-items: center; }
-.fstage .n { color: var(--ink-1); font-weight: 700; }
-.fstage .n small { display: block; color: var(--ink-3); font-weight: 400; font-size: 10px; }
-.fstage .fbar { height: 18px; display: block; }
-.fstage .c { text-align: right; }
-.fstage .c b { color: var(--ink-1); font-size: 14px; display: block; }
-.fstage .c small { color: var(--ink-3); }
-.fdrop { display: grid; grid-template-columns: 220px 1fr 90px; gap: 10px; color: var(--critical);
-  font-size: 10px; padding-left: 4px; }
-.filters { display: flex; gap: 1px; background: var(--rule); }
-.filters button { background: var(--bg); padding: 2px 8px; color: var(--ink-2); font-size: 10px;
-  font-weight: 700; text-transform: uppercase; }
-.filters button[aria-pressed="true"] { background: var(--amber); color: #000; }
-.comp { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 1px;
-  background: var(--rule); }
-.compc { background: var(--bg); padding: 6px 8px; }
-.compc .cn { color: var(--amber); font-size: 10px; text-transform: uppercase; font-weight: 700; }
-.compc .cs { display: flex; align-items: center; gap: 6px; font-weight: 800; }
-.compc .cd { color: var(--ink-3); font-size: 10px; margin-top: 2px; overflow-wrap: anywhere; }
-.err { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--critical); color: var(--critical);
-  overflow-wrap: anywhere; }
-.err[hidden] { display: none; }
-
-/* ─── pantallas estrechas: una columna, la página hace scroll ─── */
-@media (max-width: 1100px) {
-  body { overflow: auto; }
-  .term { height: auto; min-height: 100dvh; }
-  main { overflow: visible; }
-  .view { height: auto; overflow: visible; }
-  .view.tape { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-  .chartp, .side, .logp { grid-row: auto; grid-column: 1; }
-  .chartp { height: 64vh; min-height: 380px; }
-  .logp { max-height: 320px; }
-  .side { overflow: visible; }
-  .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .g-2, .g-brain { grid-template-columns: minmax(0, 1fr); }
-  .status { position: sticky; bottom: 0; }
+@media (max-width: 1080px) {
+  .board { grid-template-columns: minmax(0, 1fr); }
+  .side { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 }
-@media (max-width: 720px) {
-  .cmdbar { flex-wrap: wrap; }
-  .cmdbar .kvp.opt { display: none; }
-  .cmd { flex: 1 1 100%; order: 9; min-height: 30px; border-top: 1px solid var(--rule); }
-  .quote .last { font-size: 17px; }
-  .keys { margin-left: auto; }
-  .fstage, .fdrop { grid-template-columns: 120px 1fr 64px; }
-  .status .opt { display: none; }
+@media (max-width: 640px) {
+  .top { gap: 10px 14px; padding: 10px 14px; }
+  .quote .last { font-size: 21px; }
+  .ctl { width: 100%; } .ctl button { flex: 1; }
+  main { padding: 12px 12px 30px; }
+  #chart { height: 360px; }
+  .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g-2 { grid-template-columns: minmax(0, 1fr); }
+  .opt { display: none; }
+  /* en el celular, lo que está pasando va antes que la gráfica */
+  .board { display: flex; flex-direction: column-reverse; }
 }
 </style>
 </head>
 <body>
-<div class="term">
-  <!-- ═════════ barra de comando ═════════ -->
-  <header class="cmdbar">
-    <div class="brand" title="GHOST — terminal de señales en papel">GHOST</div>
-    <form class="cmd" id="cmdform" autocomplete="off" role="search">
-      <label for="cmd">&gt;</label>
-      <input id="cmd" type="text" spellcheck="false" placeholder="NQ · TRADES · 1-6" aria-label="Línea de comando">
-      <button class="go" type="submit" title="Ejecutar">GO</button>
-    </form>
-    <div class="sec"><span class="tk" id="sec-tk">—</span><span class="nm" id="sec-nm">sin instrumento</span></div>
-    <div class="quote">
-      <span class="last num" id="px-v">—</span>
-      <span class="chg num" id="px-d"></span>
-      <span class="ref" id="px-ref"></span>
-    </div>
-    <div class="fill"></div>
-    <div class="kvp"><span class="dot" id="feed-dot"></span><span class="k">Feed</span><span class="v" id="feed-t">—</span></div>
-    <div class="kvp opt"><span class="k">Latido</span><span class="v" id="hb">—</span></div>
-    <div class="kvp opt"><span class="k">NY</span><span class="v num" id="clock">—</span></div>
-    <div class="kvp"><span class="dot" id="status-dot"></span><span class="v" id="status-t">OFFLINE</span></div>
-    <div class="keys">
-      <button class="k-go" id="b-start" type="button">INICIAR</button>
-      <button class="k-hold" id="b-pause" type="button">PAUSA</button>
-      <button class="k-halt" id="b-stop" type="button">DETENER</button>
-    </div>
-  </header>
-
-  <!-- ═════════ teclas de función ═════════ -->
-  <nav class="fkeys" aria-label="Pantallas">
-    <button type="button" data-view="tape" aria-current="page"><b>1</b>Tape</button>
-    <button type="button" data-view="brain"><b>2</b>Cerebro</button>
-    <button type="button" data-view="funnel"><b>3</b>Embudo</button>
-    <button type="button" data-view="trades"><b>4</b>Trades</button>
-    <button type="button" data-view="audit"><b>5</b>Auditoría</button>
-    <button type="button" data-view="backtest"><b>6</b>Backtest</button>
-    <div class="gap"></div>
-    <div id="symtabs" style="display:flex;gap:1px" role="group" aria-label="Instrumento"></div>
-  </nav>
-
-  <div class="banner" id="sim-banner" hidden>
-    <span>⚠</span><span>DATOS SIMULADOS — reproduciendo el histórico de muestra, no es mercado real.</span>
+<header class="top">
+  <span class="brand">GHOST</span>
+  <div class="symtabs" id="symtabs" role="group" aria-label="Instrumento"></div>
+  <div class="quote"><span class="last" id="px">—</span><span class="chg" id="px-chg"></span></div>
+  <span class="chip" id="status-chip"><span class="dot" id="status-dot"></span><span id="status-t">Conectando…</span></span>
+  <span class="chip opt" id="feed-chip"><span class="dot" id="feed-dot"></span><span id="feed-t">Datos —</span></span>
+  <div class="fill"></div>
+  <div class="today"><span class="k">Hoy</span><span class="v" id="day-pnl">—</span></div>
+  <div class="ctl">
+    <button class="go" id="b-start" type="button">Iniciar</button>
+    <button id="b-pause" type="button">Pausa</button>
+    <button class="halt" id="b-stop" type="button">Detener</button>
   </div>
+</header>
+<nav class="tabs" aria-label="Pantallas">
+  <button type="button" data-view="panel" aria-current="page"><kbd>1</kbd>Panel</button>
+  <button type="button" data-view="history"><kbd>2</kbd>Historial</button>
+  <button type="button" data-view="backtest"><kbd>3</kbd>Backtest</button>
+  <button type="button" data-view="system"><kbd>4</kbd>Sistema</button>
+</nav>
+<div class="banner" id="sim-banner" hidden>⚠ Datos simulados: se está reproduciendo el histórico de muestra, no es el mercado real.</div>
 
-  <main>
-    <!-- ═════════ 1 · TAPE ═════════ -->
-    <section class="view tape" id="v-tape" data-active>
-      <div class="panel chartp">
-        <div class="ph">
-          <span class="mn">GP</span><h2 id="chart-title">Gráfico</h2>
-          <div class="tb" id="legend" aria-label="Capas"></div>
-          <div class="gap"></div>
-          <div class="tb" aria-label="Rango">
-            <button type="button" data-range="24" title="Últimas 2 horas">2H</button>
-            <button type="button" data-range="72" title="Últimas 6 horas">6H</button>
-            <button type="button" data-range="276" title="Último día">1D</button>
-            <button type="button" id="z-fit" title="Todo el histórico cargado">MAX</button>
-          </div>
-          <div class="tb" aria-label="Zoom">
-            <button type="button" id="z-out" title="Alejar (tecla −)">−</button>
-            <button type="button" id="z-in" title="Acercar (tecla +)">+</button>
-            <button type="button" id="z-live" title="Volver a la última vela (tecla 0)">VIVO ▸|</button>
-          </div>
+<main>
+  <!-- ═════════ 1 · PANEL ═════════ -->
+  <section class="view" id="v-panel" data-active>
+    <div class="board">
+      <div class="card chartcard">
+        <div class="chartbar"><b id="chart-title">—</b><span id="lastbar"></span><div class="fill"></div>
+          <button type="button" id="b-live">EN VIVO</button></div>
+        <div id="chart"><div id="chartmsg">Cargando gráfico…</div></div>
+        <div class="legendrow">
+          <span><span class="sw" style="background:var(--amber)"></span>Zona que vigila el bot</span>
+          <span><span class="sw" style="background:#cbd2dc"></span>Entrada</span>
+          <span><span class="sw" style="background:var(--critical)"></span>Stop</span>
+          <span><span class="sw" style="background:var(--good)"></span>Objetivos</span>
         </div>
-        <div class="dataline" id="dataline"></div>
-        <div class="chartbox">
-          <div id="chart"></div>
-          <div class="chartmsg" id="chartmsg">Esperando datos de mercado…</div>
-        </div>
-        <div class="help"><b>Arrastra</b> para mover · <b>rueda / pellizco</b> zoom ·
-          <b>arrastra el eje de precio</b> para estirar · <b>doble clic en un eje</b> reajusta ·
-          <b>← →</b> mover · <b>+ −</b> zoom · <b>0</b> vivo</div>
       </div>
-
       <aside class="side">
-        <div class="panel read">
-          <div class="ph"><span class="mn">MKT</span><h2>Lo que veo</h2></div>
-          <div class="pb" id="read-body"><div class="empty"><span class="ic">◇</span>GHOST aún no analiza este instrumento.</div></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">MTF</span><h2>Sesgo multi-timeframe</h2><div class="gap"></div>
-            <span class="tag flat" id="mtf-align">—</span></div>
-          <div class="pb tight"><div class="mtf" id="mtf"></div></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">POS</span><h2>Posición abierta</h2><div class="gap"></div>
-            <span class="tag flat" id="open-tag" hidden></span></div>
-          <div class="pb" id="open-body"><div class="empty"><span class="ic">◇</span>Sin operación abierta.</div></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">LVL</span><h2>Niveles clave</h2><div class="gap"></div>
-            <span class="pill"><span class="v" id="lvl-n">0</span></span></div>
-          <div class="pb"><div id="ladder"></div></div>
-        </div>
+        <div class="card now"><h3>Ahora</h3><div class="body" id="now"></div></div>
+        <div class="card"><h3>Hoy <span class="r" id="today-date"></span></h3><div class="body"><div class="stats4" id="today"></div></div></div>
+        <div class="card"><h3>Ideas de hoy <span class="r" id="ideas-n"></span></h3><div class="body"><ul class="ideas" id="ideas"></ul></div></div>
       </aside>
+    </div>
+  </section>
 
-      <div class="panel logp">
-        <div class="ph"><span class="mn">LOG</span><h2>Decisiones de GHOST</h2><div class="gap"></div>
-          <span class="pill"><span class="k">últimas</span><span class="v" id="log-n">0</span></span></div>
-        <div class="pb tight scroll" id="tape-log"></div>
-      </div>
-    </section>
+  <!-- ═════════ 2 · HISTORIAL ═════════ -->
+  <section class="view" id="v-history">
+    <div class="grid g-4 mb" id="perf-tiles"></div>
+    <div class="card mb"><h3>Curva de resultados <span class="r" id="eq-total"></span></h3><div class="body"><div id="equity"></div></div></div>
+    <div class="card"><h3>Operaciones cerradas <span class="r" id="closed-n"></span></h3><div class="scroll" id="closed-table"></div></div>
+  </section>
 
-    <!-- ═════════ 2 · CEREBRO ═════════ -->
-    <section class="view" id="v-brain">
-      <div class="grid g-4 mb" id="brain-tiles"></div>
-      <div class="grid g-brain mb">
-        <div class="panel">
-          <div class="ph"><span class="mn">CNF</span><h2>Cascada de confluencia</h2><div class="gap"></div>
-            <span class="tag flat" id="cf-verdict">—</span></div>
-          <div class="pb" id="cf-body"></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">MKT</span><h2>Estado de mercado</h2><div class="gap"></div>
-            <span class="pill"><span class="v" id="ms-sym">—</span></span></div>
-          <div class="pb" id="ms-body"></div>
-        </div>
-      </div>
-      <div class="grid g-2">
-        <div class="panel">
-          <div class="ph"><span class="mn">FCT</span><h2>Peso real de cada factor</h2></div>
-          <div class="pb"><div class="rbars" id="factor-bars"></div><p class="foot" id="factor-foot"></p></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">HST</span><h2>Distribución del score</h2><div class="gap"></div>
-            <span class="pill"><span class="k">umbral</span><span class="v" id="thr-v">—</span></span></div>
-          <div class="pb"><div id="score-hist"></div></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═════════ 3 · EMBUDO ═════════ -->
-    <section class="view" id="v-funnel">
-      <div class="grid g-4 mb" id="funnel-tiles"></div>
-      <div class="panel mb">
-        <div class="ph"><span class="mn">FNL</span><h2>Embudo de decisión</h2><div class="gap"></div>
-          <span class="pill"><span class="k">muestra</span><span class="v" id="fn-n">0</span></span></div>
-        <div class="pb">
-          <div class="funnel" id="funnel"></div>
-          <p class="foot">Reconstruido en vivo desde <code>/api/ghost/decisions</code>. Cada etapa es un filtro
-            real del pipeline; la cifra roja es lo que se perdió ahí.</p>
-        </div>
-      </div>
-      <div class="grid g-2">
-        <div class="panel">
-          <div class="ph"><span class="mn">RJT</span><h2>Motivos de rechazo</h2></div>
-          <div class="pb"><div class="rbars" id="reject-bars"></div></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">SET</span><h2>Conversión por setup</h2></div>
-          <div class="pb tight scroll" id="setup-conv"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═════════ 4 · TRADES ═════════ -->
-    <section class="view" id="v-trades">
-      <div class="grid g-4 mb" id="perf-tiles"></div>
-      <div class="grid g-2 mb">
-        <div class="panel">
-          <div class="ph"><span class="mn">EQ</span><h2>Curva de capital</h2><div class="gap"></div>
-            <span class="pill"><span class="k">acum.</span><span class="v" id="eq-total">—</span></span></div>
-          <div class="pb"><div id="equity"></div></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">RD</span><h2>Distribución de R por operación</h2></div>
-          <div class="pb"><div id="rdist"></div></div>
-        </div>
-      </div>
-      <div class="panel mb">
-        <div class="ph"><span class="mn">OPN</span><h2>Operaciones abiertas</h2><div class="gap"></div>
-          <span class="pill"><span class="v" id="open-n">0</span></span></div>
-        <div class="pb tight scroll" id="open-table"></div>
-      </div>
-      <div class="panel">
-        <div class="ph"><span class="mn">BLT</span><h2>Operaciones cerradas</h2><div class="gap"></div>
-          <span class="pill"><span class="v" id="closed-n">0</span></span></div>
-        <div class="pb tight scroll" id="closed-table"></div>
-      </div>
-    </section>
-
-    <!-- ═════════ 5 · AUDITORÍA ═════════ -->
-    <section class="view" id="v-audit">
-      <div class="panel mb">
-        <div class="ph"><span class="mn">AUD</span><h2>Registro de decisiones GHOST</h2><div class="gap"></div>
-          <div class="filters" id="audit-filters">
-            <button type="button" data-f="all" aria-pressed="true">Todas</button>
-            <button type="button" data-f="trade" aria-pressed="false">Aprobadas</button>
-            <button type="button" data-f="no" aria-pressed="false">No-trade</button>
-          </div></div>
-        <div class="pb tight scroll" style="max-height:440px" id="audit-table"></div>
-      </div>
-      <div class="grid g-2">
-        <div class="panel">
-          <div class="ph"><span class="mn">DES</span><h2>Detalle de la decisión</h2></div>
-          <div class="pb" id="audit-detail"></div>
-        </div>
-        <div class="panel">
-          <div class="ph"><span class="mn">SYS</span><h2>Salud del motor</h2><div class="gap"></div>
-            <span class="pill"><span class="k">ciclos</span><span class="v" id="svc-cycles">—</span></span></div>
-          <div class="pb">
-            <div class="comp" id="components"></div>
-            <div id="engine-kv" style="margin-top:8px"></div>
-            <div class="err" id="errbox" hidden></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ═════════ 6 · BACKTEST ═════════ -->
+    <!-- ═════════ 3 · BACKTEST ═════════ -->
     <section class="view" id="v-backtest">
       <div class="panel mb">
         <div class="ph"><span class="mn">BT</span><h2>Nueva prueba</h2><div class="gap"></div>
@@ -555,30 +293,22 @@ svg.chart .axis { stroke: var(--rule); stroke-width: 1; }
         <div class="pb tight scroll" style="max-height:420px" id="bt-trades"></div>
       </div>
     </section>
-  </main>
 
-  <!-- ═════════ línea de estado ═════════ -->
-  <footer class="status">
-    <span class="warnk">PAPER</span>
-    <span class="opt">SIN BRÓKER · NINGUNA ORDEN ES REAL</span>
-    <span class="news" id="news"></span>
-    <span class="opt" id="lastbar">—</span>
-  </footer>
-</div>
+  <!-- ═════════ 4 · SISTEMA ═════════ -->
+  <section class="view" id="v-system">
+    <div class="card mb"><h3>Salud del bot <span class="r" id="svc-cycles"></span></h3>
+      <div class="body"><div class="comp" id="components"></div><p class="foot" id="errbox" hidden></p></div></div>
+    <div class="card"><h3>Últimas decisiones del filtro <span class="r">aprobadas y descartadas</span></h3>
+      <div class="scroll" id="decisions"></div></div>
+  </section>
+</main>
+<footer>Paper trading · sin bróker · ninguna orden es real</footer>
 
 <script src="/static/vendor/lightweight-charts.standalone.production.js"></script>
 <script>
-"use strict";
-/* ═══════════════════════════════════════════════════════════════════════════
-   GHOST Terminal — lectura del bot en papel.
-   Estrictamente de solo lectura salvo /api/control/{start,pause,stop}.
-   Gráfico: TradingView Lightweight Charts (vendor/, Apache-2.0), servido local.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
 /* ───────────────────────── utilidades ───────────────────────── */
 const $ = id => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get("token") || "";
-
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
@@ -586,1220 +316,378 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(path + " → " + r.status);
   return r.json();
 }
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c =>
-  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const num = (v, d = 2) => (v == null || !isFinite(v)) ? "—" : Number(v).toFixed(d);
-const sgn = (v, d = 2) => (v == null || !isFinite(v)) ? "—"
-  : (v > 0 ? "+" : "") + Number(v).toFixed(d);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const num = (v, d = 2) => (v == null || !isFinite(v)) ? "—" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const sgn = (v, d = 2) => (v == null || !isFinite(v)) ? "—" : (v > 0 ? "+" : v < 0 ? "−" : "") + num(Math.abs(v), d);
 const cls = v => v == null || !isFinite(v) ? "zero" : v > 0 ? "pos" : v < 0 ? "neg" : "zero";
-const NY = "America/New_York";
-const fmtHM  = new Intl.DateTimeFormat("es-MX", { timeZone: NY, hour: "2-digit", minute: "2-digit", hour12: false });
-const fmtDHM = new Intl.DateTimeFormat("es-MX", { timeZone: NY, day: "2-digit", month: "short",
-  hour: "2-digit", minute: "2-digit", hour12: false });
-const fmtDay = new Intl.DateTimeFormat("es-MX", { timeZone: NY, day: "2-digit", month: "short" });
-const fmtMon = new Intl.DateTimeFormat("es-MX", { timeZone: NY, month: "short", year: "2-digit" });
-const fmtWk  = new Intl.DateTimeFormat("es-MX", { timeZone: NY, weekday: "short", day: "2-digit",
-  month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
-/** «LUN 08 JUN 02:55» en hora de Nueva York, sin los «de» ni comas del locale. */
-function stamp(d) {
-  const p = Object.fromEntries(fmtWk.formatToParts(d).map(x => [x.type, x.value]));
-  const clean = s => String(s || "").replace(/\./g, "").toUpperCase();
-  return `${clean(p.weekday)} ${p.day} ${clean(p.month)} ${p.hour}:${p.minute}`;
-}
-const fmtClock = new Intl.DateTimeFormat("es-MX", { timeZone: NY, hour: "2-digit", minute: "2-digit",
-  second: "2-digit", hour12: false });
-const okDate = iso => { const d = new Date(iso); return isNaN(d) ? null : d; };
-const hm  = iso => { const d = okDate(iso); return d ? fmtHM.format(d) : "—"; };
-const dhm = iso => { const d = okDate(iso); return d ? fmtDHM.format(d) : "—"; };
-function ago(iso) {
-  if (!iso) return "—";
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (!isFinite(s)) return "—";
-  if (s < 60) return Math.max(0, Math.round(s)) + "s";
-  if (s < 3600) return Math.round(s / 60) + "m";
-  return Math.round(s / 3600) + "h";
-}
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const NY = "America/New_York";
+const fmtHM = new Intl.DateTimeFormat("es-MX", { timeZone: NY, hour: "2-digit", minute: "2-digit", hour12: false });
+const fmtDay = new Intl.DateTimeFormat("es-MX", { timeZone: NY, day: "2-digit", month: "short" });
+const fmtDate = new Intl.DateTimeFormat("en-CA", { timeZone: NY });   // AAAA-MM-DD en NY
+const okDate = iso => { const d = new Date(iso); return isNaN(d) ? null : d; };
+const hm = iso => { const d = okDate(iso); return d ? fmtHM.format(d) : "—"; };
+const dhm = iso => { const d = okDate(iso); return d ? fmtDay.format(d) + " " + fmtHM.format(d) : "—"; };
+const nyDay = iso => { const d = okDate(iso); return d ? fmtDate.format(d) : null; };
+// $ por punto: contrato grande y micro (el micro primero, es lo que se opera)
+const PV = { NQ: [["MNQ", 2], ["NQ", 20]], ES: [["MES", 5], ["ES", 50]] };
+const usd = (pts, sym) => (PV[sym] || []).map(([k, v]) =>
+  `${pts < 0 ? "−" : "+"}$${Math.abs(pts * v).toLocaleString("en-US", { maximumFractionDigits: 0 })} ${k}`).join(" · ");
+const EXIT_ES = { TP1: "TP1", TP2: "Objetivo final", STOP: "Stop", INVALIDATION: "Invalidada",
+  CANCELLED: "Cancelada", EXPIRED: "Expirada", EOD: "Cierre fin de día" };
+const REASON_ES = { active_trade: "ya había un trade abierto", cooldown: "pausa tras un stop",
+  too_late_in_session: "muy tarde", invalid_session: "fuera de horario", excessive_volatility: "volatilidad excesiva",
+  setup_incomplete: "setup incompleto", insufficient_rr: "R:R insuficiente", target_too_close: "objetivo muy cerca",
+  stale_data: "datos atrasados", duplicate: "duplicada", conflicting_setups: "señales opuestas",
+  stop_too_tight: "stop muy ajustado", stop_too_wide: "stop muy ancho", risk_rejected: "riesgo" };
+function tile(lab, fig, sub, tone) {
+  return `<div class="tile ${tone || ""}"><div class="lab">${esc(lab)}</div><div class="fig">${fig}</div><div class="sub">${sub || ""}</div></div>`;
+}
 
-/* etiquetas legibles — el color nunca viaja solo */
-const BIAS_ES  = { BULLISH: "Alcista", BEARISH: "Bajista", NEUTRAL: "Neutral" };
-const ALIGN_ES = { ALIGNED: "Alineado", CONFLICT: "En conflicto", TRANSITION: "En transición",
-                   MIXED: "Mixto", UNKNOWN: "Desconocido" };
-const VOL_ES = { HIGH: "Alta", LOW: "Baja", NORMAL: "Normal", UNKNOWN: "Desconocida" };
-const REGIME_ES = { TREND_UP: "Tendencia alcista", TREND_DOWN: "Tendencia bajista",
-  RANGE: "Rango", HIGH_VOLATILITY: "Volatilidad alta", LOW_VOLATILITY: "Volatilidad baja",
-  TRANSITION: "Transición", UNKNOWN: "Desconocido" };
-const FACTOR_ES = {
-  htf_alignment: ["Alineación HTF", "el 1H acompaña"],
-  htf_conflict: ["Conflicto HTF", "el 1H se opone"],
-  mtf_structure_alignment: ["Estructura 15m", "el timeframe intermedio acompaña"],
-  structure_alignment: ["Estructura 5m", "la estructura de ejecución acompaña"],
-  against_structure: ["Contra estructura", "opera contra la estructura de ejecución"],
-  liquidity_sweep: ["Barrido de liquidez", "sweep a favor de la tesis"],
-  vwap_alignment: ["Lado del VWAP", "precio del lado correcto"],
-  volume_confirmation: ["Confirmación de volumen", "RVOL sobre el umbral"],
-  rr_quality: ["Calidad de R:R", "relación riesgo/beneficio"],
-  regime_alignment: ["Ajuste de régimen", "el régimen favorece el setup"],
-};
-const REASON_ES = {
-  insufficient_confluence: "Confluencia insuficiente", stop_too_tight: "Stop demasiado ajustado",
-  stop_too_wide: "Stop demasiado ancho", too_late_in_session: "Muy cerca del cierre",
-  setup_incomplete: "Setup incompleto", conflicting_setups: "Setups en conflicto",
-  excessive_volatility: "Volatilidad excesiva", against_structure: "Contra la estructura",
-  conflicting_timeframe: "Conflicto de timeframes", insufficient_rr: "R:R insuficiente",
-  target_too_close: "Objetivo demasiado cerca", invalid_session: "Sesión no válida",
-  stale_data: "Datos obsoletos", active_trade: "Ya hay operación abierta",
-  cooldown: "En enfriamiento", duplicate: "Señal duplicada",
-  invalid_trade_plan: "Plan de operación inválido", risk_rejected: "Rechazado por riesgo",
-};
-const STATUS_ES = { PENDING: "Pendiente", ACTIVE: "Activa", TP1_HIT: "TP1 alcanzado",
-  TP2_HIT: "TP2 alcanzado", STOPPED: "Stop", INVALIDATED: "Invalidada",
-  CANCELLED: "Cancelada", CLOSED: "Cerrada" };
-const EXIT_ES = { TP1: "TP1", TP2: "TP2", STOP: "Stop", INVALIDATION: "Invalidada",
-  CANCELLED: "Cancelada", EXPIRED: "Expirada", EOD: "Cierre de sesión (16:00)" };
-const NAME = { NQ: "E-mini Nasdaq-100", ES: "E-mini S&P 500",
-  MNQ: "Micro E-mini Nasdaq-100", MES: "Micro E-mini S&P 500" };
-const tFactor = n => (FACTOR_ES[n] || [n.replace(/_/g, " "), ""]);
-const tReason = r => REASON_ES[r] || String(r).replace(/_/g, " ");
-
-/* ───────────────────────── estado global ───────────────────────── */
-const S = {
-  view: "tape", symbol: null, symbols: [],
-  status: null, chart: null, ghost: null, decisions: [],
-  stats: null, openTrades: [], closedTrades: [],
-  layers: { vwap: true, ema9: true, ema20: true, estructura: true, señales: true },
-  liveScored: [], liveSeen: new Set(),
-  auditFilter: "all", auditSel: null, tick: 0,
-};
-
-/* ───────────────────────── navegación y comando ───────────────────────── */
-const VIEWS = ["tape", "brain", "funnel", "trades", "audit", "backtest"];
-const VIEW_ALIAS = { TAPE: "tape", GP: "tape", GRAFICO: "tape", GRÁFICO: "tape",
-  CEREBRO: "brain", BRAIN: "brain", EMBUDO: "funnel", FUNNEL: "funnel",
-  TRADES: "trades", OPERACIONES: "trades", AUDIT: "audit", AUDITORIA: "audit", AUDITORÍA: "audit",
-  BACKTEST: "backtest", BT: "backtest" };
+/* ───────────────────────── estado ───────────────────────── */
+const S = { view: "panel", symbol: null, symbols: [], status: null, chart: null,
+  open: [], closed: [], ideas: { ideas: [] }, decisions: [], tick: 0 };
+const VIEWS = ["panel", "history", "backtest", "system"];
 
 function setView(v) {
   if (!VIEWS.includes(v)) return;
   S.view = v;
-  document.querySelectorAll(".fkeys [data-view]").forEach(b => {
-    if (b.dataset.view === v) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
-  });
+  document.querySelectorAll(".tabs [data-view]").forEach(b =>
+    b.dataset.view === v ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
   document.querySelectorAll(".view").forEach(el => el.removeAttribute("data-active"));
   $("v-" + v).setAttribute("data-active", "");
+  if (v === "panel") CH.chart?.timeScale().scrollToRealTime();
   renderAll();
 }
-document.querySelectorAll(".fkeys [data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
-
-async function setSymbol(sym) {
-  if (!sym || sym === S.symbol) return;
-  S.symbol = sym; renderSymTabs();
-  await Promise.all([pollChart(), pollGhost()]); renderAll();
-}
-
-$("cmdform").addEventListener("submit", async e => {
-  e.preventDefault();
-  const inp = $("cmd");
-  const raw = inp.value.trim().toUpperCase().replace(/\s*<?GO>?$/, "").trim();
-  inp.value = "";
-  if (!raw) return;
-  // Tras un comando válido se suelta el foco: si no, las teclas rápidas 1-6
-  // siguientes se escriben en la línea en vez de cambiar de pantalla.
-  if (/^[1-6]$/.test(raw)) { inp.blur(); setView(VIEWS[Number(raw) - 1]); return; }
-  if (VIEW_ALIAS[raw]) { inp.blur(); setView(VIEW_ALIAS[raw]); return; }
-  const sym = raw.replace(/1?\s*(INDEX|COMDTY)?$/, "").trim();
-  if (S.symbols.includes(sym)) { inp.blur(); await setSymbol(sym); setView("tape"); return; }
-  inp.placeholder = `«${raw}» no existe · prueba NQ, TRADES o 1-6`;
-  setTimeout(() => { inp.placeholder = "NQ · TRADES · 1-6"; }, 3500);
-});
-
+document.querySelectorAll(".tabs [data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 document.addEventListener("keydown", e => {
-  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || "");
-  if (e.key === "/" && !typing) { e.preventDefault(); $("cmd").focus(); return; }
-  if (e.key === "Escape" && typing) { document.activeElement.blur(); return; }
-  if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[1-6]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
-  if (S.view !== "tape" || !CH.chart) return;
-  if (e.key === "+" || e.key === "=") { zoomBy(0.7); e.preventDefault(); }
-  else if (e.key === "-" || e.key === "_") { zoomBy(1 / 0.7); e.preventDefault(); }
-  else if (e.key === "ArrowLeft") { panBy(-0.2); e.preventDefault(); }
-  else if (e.key === "ArrowRight") { panBy(0.2); e.preventDefault(); }
-  else if (e.key === "0") { goLive(); }
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^[1-4]$/.test(e.key)) setView(VIEWS[Number(e.key) - 1]);
 });
 
-/* ───────────────────────── control del bot ───────────────────────── */
 async function control(action) {
   ["b-start", "b-pause", "b-stop"].forEach(i => $(i).disabled = true);
-  try { await api("/api/control/" + action, { method: "POST" }); await pollStatus(); }
-  catch (e) { console.error(e); }
-  finally { paintHeader(); }
+  try { await api("/api/control/" + action, { method: "POST" }); await pollStatus(); } catch (e) { console.error(e); }
+  paintHeader();
 }
 $("b-start").onclick = () => control("start");
 $("b-pause").onclick = () => control("pause");
-$("b-stop").onclick  = () => control("stop");
+$("b-stop").onclick = () => control("stop");
 
-/* ═══════════════════════════ CARGA DE DATOS ═══════════════════════════ */
-async function pollStatus() {
-  try { S.status = await api("/api/status"); } catch { S.status = null; }
-}
+/* ───────────────────────── datos ───────────────────────── */
+async function pollStatus() { try { S.status = await api("/api/status"); } catch { S.status = null; } }
 async function pollSymbols() {
-  try {
-    const d = await api("/api/symbols");
-    S.symbols = d.symbols || [];
-    if (!S.symbol && S.symbols.length) S.symbol = S.symbols[0];
-    renderSymTabs();
-  } catch { /* sin símbolos configurados */ }
+  try { S.symbols = (await api("/api/symbols")).symbols || []; } catch { S.symbols = []; }
+  if (!S.symbol) S.symbol = S.symbols.includes("NQ") ? "NQ" : S.symbols[0] || null;
+  $("symtabs").innerHTML = S.symbols.length > 1 ? S.symbols.map(s =>
+    `<button type="button" data-s="${esc(s)}" ${s === S.symbol ? 'aria-current="true"' : ""}>${esc(s)}</button>`).join("") : "";
+  $("symtabs").querySelectorAll("button").forEach(b => b.onclick = async () => {
+    S.symbol = b.dataset.s; S.chart = null; CH.sym = null; await pollSymbols(); await refresh(true);
+  });
 }
 async function pollChart() {
   if (!S.symbol) return;
-  const sym = S.symbol;
-  try {
-    const d = await api(`/api/chart/${sym}?limit=600`);
-    if (sym === S.symbol) S.chart = d;
-  } catch { /* se conserva el último gráfico bueno */ }
-}
-async function pollGhost() {
-  if (!S.symbol) return;
-  try { S.ghost = await api(`/api/ghost/market/${S.symbol}`); } catch { S.ghost = null; }
-  const d = S.ghost?.last_decision;
-  if (d?.confluence) {
-    const key = `${d.timestamp}|${d.setup}|${d.action}`;
-    if (!S.liveSeen.has(key)) {
-      S.liveSeen.add(key);
-      S.liveScored.unshift(normalizeDecision(d));
-      if (S.liveScored.length > 400) S.liveScored.pop();
-    }
-  }
-}
-/**
- * El registro persistido usa un esquema COMPACTO (score plano, regime/session/mtf
- * como cadenas) que no guarda el desglose de confluencia ni la señal. El estado
- * en memoria de `/api/ghost/market/{symbol}` sí trae la forma completa. Se
- * normalizan ambos a una sola figura.
- */
-function normalizeDecision(d) {
-  const cf = d.confluence || null;
-  const score = cf ? cf.score : (typeof d.score === "number" ? d.score : null);
-  return {
-    raw: d, action: d.action, instrument: d.instrument, setup: d.setup,
-    timestamp: d.timestamp, score,
-    threshold: cf ? cf.threshold : null,
-    contributions: cf ? (cf.contributions || []) : [],
-    hasBreakdown: !!cf,
-    signal: d.signal || null,
-    reasons: d.no_trade_reasons || [],
-    detail: d.detail || "",
-    regime: d.market_state?.regime?.regime ?? d.regime ?? null,
-    session: d.market_state?.session ?? d.session ?? null,
-    marketState: d.market_state || null,
-  };
-}
-async function pollDecisions() {
-  try {
-    const raw = (await api("/api/ghost/decisions?limit=500")).decisions || [];
-    S.decisions = raw.map(normalizeDecision);
-  } catch { S.decisions = []; }
+  try { const d = await api(`/api/chart/${S.symbol}?limit=600`); if (d.symbol === S.symbol) S.chart = d; } catch {}
 }
 async function pollTrades() {
-  try { S.stats = await api("/api/ghost/stats"); } catch { S.stats = null; }
-  try { S.openTrades = (await api("/api/ghost/trades/active")).trades || []; }
-  catch { S.openTrades = []; }
-  try { S.closedTrades = (await api("/api/ghost/trades/history?limit=300")).trades || []; }
-  catch { S.closedTrades = []; }
+  try { S.open = (await api("/api/ghost/trades/active")).trades || []; } catch { S.open = []; }
+  try { S.closed = (await api("/api/ghost/trades/history?limit=500")).trades || []; } catch { S.closed = []; }
 }
-async function pollService() {
-  try { return await api("/api/service"); } catch { return null; }
+async function pollIdeas() { try { S.ideas = await api("/api/ideas"); } catch { S.ideas = { ideas: [] }; } }
+async function pollDecisions() {
+  try { S.decisions = (await api("/api/ghost/decisions?limit=200")).decisions || []; } catch { S.decisions = []; }
 }
 
-/* ═══════════════════════════ CABECERA ═══════════════════════════ */
-function renderSymTabs() {
-  $("symtabs").innerHTML = S.symbols.map(s =>
-    `<button class="symtab" type="button" data-s="${esc(s)}"
-      aria-pressed="${s === S.symbol}">${esc(s)}1</button>`).join("");
-  $("symtabs").querySelectorAll(".symtab").forEach(b => b.onclick = () => setSymbol(b.dataset.s));
+/* ───────────────────────── barra superior ───────────────────────── */
+function todayClosed() {
+  const day = fmtDate.format(new Date());
+  return S.closed.filter(t => nyDay(t.closed_at) === day && (!S.symbol || t.instrument === S.symbol));
 }
-
-const STATUS_TONE = { ONLINE: "good", PAUSED: "warning", ERROR: "critical", OFFLINE: "ink-3" };
-const FEED_TONE = { LIVE: "good", DELAYED: "series-1", STALE: "warning",
-                    DISCONNECTED: "critical", CONNECTING: "ink-3" };
-
-/** Hora de pared ET (segundos) leída del desfase que trae el propio ISO. */
-function wallET(iso) {
-  const m = /([+-])(\d\d):(\d\d)$/.exec(iso);
-  const off = m ? (m[1] === "-" ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) * 60 : 0;
-  return Math.floor(Date.parse(iso) / 1000) + off;
-}
-/** Cambio contra la apertura de la sesión Globex (18:00 ET), no contra la
- *  primera vela descargada, que no significa nada. */
-function sessionChange(cd) {
-  if (cd.length < 2) return null;
-  const last = cd[cd.length - 1];
-  const T = wallET(last.t), SIX_PM = 18 * 3600, DAY = 86400;
-  const start = Math.floor((T - SIX_PM) / DAY) * DAY + SIX_PM;
-  const first = cd.find(k => wallET(k.t) >= start);
-  if (!first || first === last) return null;
-  const d = last.c - first.o;
-  return { d, pct: (d / first.o) * 100, since: first.t };
-}
-
 function paintHeader() {
-  const st = S.status;
-  const state = st?.status || "OFFLINE";
-  const tone = css("--" + (STATUS_TONE[state] || "ink-3"));
-  $("status-t").textContent = state;
-  $("status-t").style.color = tone;
-  $("status-dot").style.background = tone;
-  $("status-dot").classList.toggle("live", state === "ONLINE");
-  $("b-start").disabled = state === "ONLINE";
-  $("b-pause").disabled = state !== "ONLINE";
-  $("b-stop").disabled  = state === "OFFLINE";
-  $("hb").textContent = st ? ago(st.last_heartbeat_at) : "—";
+  const st = S.status?.status || "OFFLINE";
+  const ST = { ONLINE: ["ok", "Bot activo"], PAUSED: ["warn", "En pausa"], OFFLINE: ["", "Apagado"], ERROR: ["bad", "Error"] };
+  const [dot, label] = ST[st] || ["", st];
+  $("status-dot").className = "dot " + dot; $("status-t").textContent = label;
+  $("b-start").disabled = st === "ONLINE"; $("b-pause").disabled = st !== "ONLINE"; $("b-stop").disabled = st === "OFFLINE";
 
   const c = S.chart;
-  let feed = c?.feed_status || st?.data_feed_status?.[S.symbol] || "CONNECTING";
-  if (c?.simulated) feed = "SIMULADO";
-  else if (feed === "CONNECTED" && c?.delayed) feed = "DELAYED";
-  const ft = css("--" + (c?.simulated ? "warning" : (FEED_TONE[feed] || "ink-3")));
-  $("feed-t").textContent = feed + (c?.source && !c.simulated ? " · " + c.source : "");
-  $("feed-t").style.color = ft;
-  $("feed-dot").style.background = ft;
+  const feed = S.status?.data_feed_status?.[S.symbol];
+  const fdot = feed === "LIVE" || feed === "DELAYED" ? "ok" : feed === "STALE" ? "warn" : feed ? "bad" : "";
+  $("feed-dot").className = "dot " + fdot;
+  $("feed-t").textContent = c?.simulated ? "Datos simulados" : feed === "DELAYED" || c?.delayed ? "Datos con retraso (Yahoo)"
+    : feed === "LIVE" ? "Datos en vivo" : feed === "STALE" ? "Datos detenidos" : feed ? "Sin datos" : "Datos —";
   $("sim-banner").hidden = !c?.simulated;
 
-  const sym = S.symbol || "—";
-  $("sec-tk").textContent = S.symbol ? `${sym}1 INDEX` : "—";
-  $("sec-nm").textContent = S.symbol
-    ? `${NAME[sym] || sym} · ${c?.timeframe || "5m"} · ${c?.session || S.ghost?.market_state?.session || "—"}`
-    : "sin instrumento";
-  $("chart-title").textContent = S.symbol ? `${sym}1 · ${c?.timeframe || "5m"} · velas` : "Gráfico";
+  $("px").textContent = c?.last_price != null ? num(c.last_price) : "—";
+  const candles = c?.candles || [];
+  const day = candles.length ? nyDay(candles[candles.length - 1].t) : null;
+  const first = candles.find(x => nyDay(x.t) === day && hm(x.t) >= "09:30");
+  if (first && c?.last_price != null) {
+    const d = c.last_price - first.o;
+    $("px-chg").innerHTML = `<span class="${cls(d)}">${sgn(d)} (${sgn(d / first.o * 100)}%)</span>`;
+  } else $("px-chg").textContent = "";
 
-  if (c?.last_price != null) {
-    $("px-v").textContent = num(c.last_price);
-    const ch = sessionChange(c.candles || []);
-    const el = $("px-d");
-    if (ch) {
-      el.textContent = `${ch.d > 0 ? "▲" : ch.d < 0 ? "▼" : "■"} ${sgn(ch.d)}  ${sgn(ch.pct)}%`;
-      el.style.color = css("--" + (ch.d > 0 ? "good" : ch.d < 0 ? "critical" : "ink-2"));
-      $("px-ref").textContent = "vs apertura " + hm(ch.since);
-    } else { el.textContent = ""; $("px-ref").textContent = ""; }
-  } else { $("px-v").textContent = "—"; $("px-d").textContent = ""; $("px-ref").textContent = ""; }
-  $("lastbar").textContent = c?.last_bar_time ? "ÚLT. VELA " + hm(c.last_bar_time) + " ET" : "—";
+  const pts = todayClosed().reduce((s, t) => s + (t.pnl_points || 0), 0)
+    + S.open.filter(t => t.instrument === S.symbol).reduce((s, t) => s + (t.pnl_points || 0), 0);
+  $("day-pnl").innerHTML = `<span class="${cls(pts)}">${sgn(pts)} pts</span>`;
+  $("day-pnl").title = usd(pts, S.symbol);
 }
 
-/* ═══════════════════════════ GRÁFICO ═══════════════════════════
-   Lightweight Charts se encarga de todo el movimiento: arrastre fluido con
-   inercia, zoom anclado al cursor, pellizco y arrastre horizontal en el
-   celular, y estirar el eje de precio. Los datos se ACTUALIZAN en su sitio
-   (update) en vez de reemplazarse, así el sondeo cada pocos segundos no
-   devuelve la vista al final mientras el usuario está mirando atrás. */
+/* ═══════════════════════════ GRÁFICO ═══════════════════════════ */
 const LW = window.LightweightCharts;
-const CH = { chart: null, candle: null, vol: null, lines: {}, markers: null, boxes: null,
-             priceLines: [], bars: [], lineLast: {}, symbol: null, extra: [] };
-const LAYERS = [
-  ["vwap", "VWAP", "--series-2"], ["ema9", "EMA9", "--series-1"], ["ema20", "EMA20", "--series-6"],
-  ["estructura", "ESTR", "--series-4"], ["señales", "SEÑ", "--amber"],
-];
+const CH = { chart: null, candle: null, vol: null, boxes: null, lines: [], markers: null, sym: null, extra: [] };
 const toTime = iso => Math.floor(Date.parse(iso) / 1000);
 
-/** Rectángulos FVG: primitive de serie dibujado debajo de las velas. */
+/** Zonas: rectángulos dibujados debajo de las velas desde que se formó la idea. */
 class Boxes {
-  constructor() {
-    this.items = []; this.p = null;
-    const self = this;
-    this.view = { zOrder: () => "bottom", renderer: () => ({ draw: t => self.draw(t) }) };
-  }
-  attached(p) { this.p = p; }
-  detached() { this.p = null; }
+  constructor() { this.items = []; this.p = null; const self = this;
+    this.view = { zOrder: () => "bottom", renderer: () => ({ draw: t => self.draw(t) }) }; }
+  attached(p) { this.p = p; } detached() { this.p = null; }
   paneViews() { return [this.view]; }
   set(items) { this.items = items; this.p?.requestUpdate(); }
   draw(target) {
-    const p = this.p;
-    if (!p || !this.items.length) return;
+    const p = this.p; if (!p || !this.items.length) return;
     const ts = p.chart.timeScale(), s = p.series;
-    target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hr,
-                                       verticalPixelRatio: vr, bitmapSize }) => {
+    target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hr, verticalPixelRatio: vr, bitmapSize }) => {
       for (const b of this.items) {
         const x = ts.timeToCoordinate(b.time) ?? 0;
         const y1 = s.priceToCoordinate(b.top), y2 = s.priceToCoordinate(b.bottom);
         if (y1 == null || y2 == null) continue;
-        const X = Math.round(Math.max(0, x) * hr);
-        const Y = Math.round(Math.min(y1, y2) * vr);
+        const X = Math.round(Math.max(0, x) * hr), Y = Math.round(Math.min(y1, y2) * vr);
         const H = Math.max(1, Math.round(Math.abs(y2 - y1) * vr));
         ctx.fillStyle = b.fill; ctx.fillRect(X, Y, bitmapSize.width - X, H);
         ctx.fillStyle = b.edge; ctx.fillRect(X, Y, bitmapSize.width - X, Math.max(1, Math.round(vr)));
+        ctx.fillRect(X, Y + H - Math.max(1, Math.round(vr)), bitmapSize.width - X, Math.max(1, Math.round(vr)));
       }
     });
   }
 }
 
 function initChart() {
-  if (!LW) { $("chartmsg").textContent = "No se pudo cargar el motor del gráfico."; return; }
-  const C = { bg: css("--bg"), ink2: css("--ink-2"), line: css("--line"), rule: css("--rule"),
-    amber: css("--amber"), up: css("--good"), down: css("--critical") };
-  CH.C = C;
+  if (!LW) { $("chartmsg").textContent = "No se pudo cargar el gráfico."; return; }
+  const bg = css("--panel"), line = css("--line"), ink = css("--ink-3");
   CH.chart = LW.createChart($("chart"), {
     autoSize: true,
-    layout: { background: { type: "solid", color: C.bg }, textColor: C.ink2,
-      fontFamily: css("--mono"), fontSize: 11, attributionLogo: true,
-      panes: { separatorColor: C.rule, separatorHoverColor: "rgba(255,159,28,.3)", enableResize: true } },
-    grid: { vertLines: { color: C.line }, horzLines: { color: C.line } },
-    crosshair: { mode: LW.CrosshairMode.Normal,
-      vertLine: { color: "rgba(255,159,28,.55)", style: LW.LineStyle.Dashed, labelBackgroundColor: C.amber },
-      horzLine: { color: "rgba(255,159,28,.55)", style: LW.LineStyle.Dashed, labelBackgroundColor: C.amber } },
-    rightPriceScale: { borderColor: C.rule, scaleMargins: { top: 0.08, bottom: 0.06 } },
-    timeScale: { borderColor: C.rule, timeVisible: true, secondsVisible: false, rightOffset: 8,
-      barSpacing: 8, minBarSpacing: 1.5, shiftVisibleRangeOnNewBar: true,
-      tickMarkFormatter: (t, type) => {
-        const d = new Date(t * 1000);
-        return type >= 3 ? fmtHM.format(d) : type === 2 ? fmtDay.format(d) : fmtMon.format(d);
-      } },
-    localization: { locale: "es-MX", timeFormatter: t => stamp(new Date(t * 1000)),
-      priceFormatter: p => p.toFixed(2) },
+    layout: { background: { type: "solid", color: bg }, textColor: ink, fontFamily: css("--mono"), fontSize: 11,
+      attributionLogo: true, panes: { separatorColor: line } },
+    grid: { vertLines: { color: line }, horzLines: { color: line } },
+    crosshair: { mode: LW.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: line, scaleMargins: { top: 0.08, bottom: 0.08 } },
+    timeScale: { borderColor: line, timeVisible: true, secondsVisible: false, rightOffset: 10, barSpacing: 7,
+      tickMarkFormatter: t => fmtHM.format(new Date(t * 1000)) },
+    localization: { locale: "es-MX", timeFormatter: t => dhm(new Date(t * 1000)), priceFormatter: p => p.toFixed(2) },
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
-    handleScale: { mouseWheel: true, pinch: true,
-      axisPressedMouseMove: { time: true, price: true }, axisDoubleClickReset: { time: true, price: true } },
-    kineticScroll: { touch: true, mouse: true },
+    handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: { time: true, price: true } },
   });
   CH.candle = CH.chart.addSeries(LW.CandlestickSeries, {
-    upColor: C.up, downColor: C.down, borderUpColor: C.up, borderDownColor: C.down,
-    wickUpColor: C.up, wickDownColor: C.down,
-    priceLineColor: C.amber, priceLineStyle: LW.LineStyle.Dotted,
-    // incluye entrada/stop/TP en la escala para que nunca queden fuera de vista
+    upColor: css("--good"), downColor: css("--critical"), borderVisible: false,
+    wickUpColor: css("--good"), wickDownColor: css("--critical"), priceLineColor: css("--ink-3"),
     autoscaleInfoProvider: orig => {
-      const r = orig();
-      if (!r || !CH.extra.length) return r;
-      return { ...r, priceRange: {
-        minValue: Math.min(r.priceRange.minValue, ...CH.extra),
-        maxValue: Math.max(r.priceRange.maxValue, ...CH.extra) } };
+      const r = orig(); if (!r || !CH.extra.length) return r;
+      return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, ...CH.extra),
+                                   maxValue: Math.max(r.priceRange.maxValue, ...CH.extra) } };
     },
   });
-  for (const [k, , tok] of LAYERS.slice(0, 3)) {
-    CH.lines[k] = CH.chart.addSeries(LW.LineSeries, { color: css(tok), lineWidth: k === "vwap" ? 2 : 1,
-      priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  }
-  CH.vol = CH.chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" },
-    priceLineVisible: false, lastValueVisible: false }, 1);
-  const panes = CH.chart.panes();
-  if (panes[1]) { panes[0].setStretchFactor(5); panes[1].setStretchFactor(1); }
+  CH.vol = CH.chart.addSeries(LW.HistogramSeries, { priceFormat: { type: "volume" }, priceLineVisible: false,
+    lastValueVisible: false }, 1);
+  const panes = CH.chart.panes(); if (panes[1]) { panes[0].setStretchFactor(6); panes[1].setStretchFactor(1); }
   CH.markers = LW.createSeriesMarkers(CH.candle, []);
   CH.boxes = new Boxes(); CH.candle.attachPrimitive(CH.boxes);
-  CH.chart.subscribeCrosshairMove(p => paintDataLine(p));
 }
-
-function renderLegend() {
-  $("legend").innerHTML = LAYERS.map(([k, lab, tok]) =>
-    `<button type="button" data-k="${k}" aria-pressed="${S.layers[k]}"
-      style="${S.layers[k] ? `background:${css(tok)}` : `color:${css(tok)}`}">${lab}</button>`).join("");
-  $("legend").querySelectorAll("button").forEach(b => b.onclick = () => {
-    S.layers[b.dataset.k] = !S.layers[b.dataset.k];
-    renderLegend(); applyLayers(); renderOverlays();
-  });
-}
-function applyLayers() {
-  for (const k of ["vwap", "ema9", "ema20"]) CH.lines[k]?.applyOptions({ visible: S.layers[k] });
-}
-
-function barsFrom(candles) {
-  return candles.map(k => ({ time: toTime(k.t), open: k.o, high: k.h, low: k.l, close: k.c, v: k.v }));
-}
-const volOf = b => ({ time: b.time, value: b.v,
-  color: b.close >= b.open ? "rgba(31,216,115,.38)" : "rgba(255,59,59,.38)" });
-const candleOf = b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close });
+$("b-live").onclick = () => CH.chart?.timeScale().scrollToRealTime();
 
 function renderChart() {
-  if (!CH.chart) return;
   const c = S.chart;
-  const cd = c?.symbol === S.symbol ? (c.candles || []) : [];
-  const msg = $("chartmsg");
-  if (!cd.length) {
-    if (CH.symbol !== S.symbol) {           // instrumento sin datos: limpia lo anterior
-      CH.candle.setData([]); CH.vol.setData([]);
-      Object.values(CH.lines).forEach(l => l.setData([]));
-      CH.bars = []; CH.symbol = S.symbol;
-    }
-    msg.hidden = !!CH.bars.length;
-    msg.textContent = c?.reason ? "Sin datos: " + c.reason : "Esperando datos de mercado…";
-    return;
-  }
-  msg.hidden = true;
-  const bars = barsFrom(cd);
-  const lastHeld = CH.bars.length ? CH.bars[CH.bars.length - 1].time : null;
-  const ind = c.indicators || {};
-  const fresh = CH.symbol !== S.symbol || lastHeld == null
-    || bars[bars.length - 1].time < lastHeld || bars[0].time > lastHeld;
-
-  if (fresh) {
-    CH.bars = bars;
-    CH.candle.setData(bars.map(candleOf));
-    CH.vol.setData(bars.map(volOf));
-    for (const k of ["vwap", "ema9", "ema20"]) {
-      const pts = (ind[k] || []).map(p => ({ time: toTime(p.t), value: p.v }));
-      CH.lines[k].setData(pts);
-      CH.lineLast[k] = pts.length ? pts[pts.length - 1].time : null;
-    }
-    CH.symbol = S.symbol;
-    showLast(120);
-  } else {
-    for (const b of bars) {
-      if (b.time < lastHeld) continue;
-      CH.candle.update(candleOf(b)); CH.vol.update(volOf(b));
-      const tail = CH.bars[CH.bars.length - 1];
-      if (b.time === tail.time) CH.bars[CH.bars.length - 1] = b; else CH.bars.push(b);
-    }
-    for (const k of ["vwap", "ema9", "ema20"]) {
-      const last = CH.lineLast[k];
-      for (const p of (ind[k] || [])) {
-        const t = toTime(p.t);
-        if (last != null && t < last) continue;
-        CH.lines[k].update({ time: t, value: p.v });
-        CH.lineLast[k] = t;
-      }
-    }
-  }
-  applyLayers();
-  renderOverlays();
-  paintDataLine(null);
-}
-
-/** Tiempo de la vela más reciente en o antes de `t` (los marcadores deben caer
- *  en una vela). null fuera de las velas cargadas: si no, todo lo posterior a la
- *  última vela —p. ej. señales de otra sesión en el registro— se apila en ella. */
-function snap(t) {
-  const a = CH.bars;
-  if (!a.length || t < a[0].time) return null;
-  const step = a.length > 1 ? a[a.length - 1].time - a[a.length - 2].time : 300;
-  if (t >= a[a.length - 1].time + step) return null;
-  let lo = 0, hi = a.length - 1;
-  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (a[m].time <= t) lo = m; else hi = m - 1; }
-  return a[lo].time;
-}
-
-function renderOverlays() {
   if (!CH.chart) return;
-  const c = S.chart, C = CH.C;
-  CH.priceLines.forEach(pl => CH.candle.removePriceLine(pl));
-  CH.priceLines = []; CH.extra = [];
-  const markers = [], boxes = [];
-  const str = c?.symbol === S.symbol ? (c.structure || {}) : {};
-  const last = CH.bars.length ? CH.bars[CH.bars.length - 1].close : null;
-
-  if (S.layers.estructura && CH.bars.length) {
-    for (const g of (str.fvg || [])) {
-      if (g.mitigated_at) continue;           // un hueco ya mitigado no es nivel operable
-      const bull = g.direction === "BULLISH";
-      boxes.push({ time: snap(toTime(g.t)) ?? CH.bars[0].time,
-        top: Math.max(g.top, g.bottom), bottom: Math.min(g.top, g.bottom),
-        fill: bull ? "rgba(31,216,115,.07)" : "rgba(255,59,59,.07)",
-        edge: bull ? "rgba(31,216,115,.35)" : "rgba(255,59,59,.35)" });
-    }
-    const liq = (str.liquidity || []).filter(l => !l.swept_at);
-    if (last != null) liq.sort((a, b) => Math.abs(a.price - last) - Math.abs(b.price - last));
-    for (const l of liq.slice(0, 8)) {
-      CH.priceLines.push(CH.candle.createPriceLine({ price: l.price, color: "rgba(167,139,250,.75)",
-        lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false,
-        title: l.side === "buy-side" ? "LIQ ▲" : "LIQ ▼" }));
-    }
-    for (const e of (str.events || [])) {
-      const t = snap(toTime(e.t)); if (t == null) continue;
-      const bull = e.direction === "BULLISH";
-      markers.push({ time: t, position: bull ? "belowBar" : "aboveBar", shape: "circle", size: 0.4,
-        color: bull ? C.up : C.down, text: e.type });
-    }
+  if (!c || !c.candles?.length) { $("chartmsg").textContent = c?.reason || "Esperando datos…"; return; }
+  $("chartmsg").textContent = "";
+  $("chart-title").textContent = `${c.symbol} · ${c.timeframe}`;
+  $("lastbar").textContent = c.last_bar_time ? `última vela ${hm(c.last_bar_time)} ET` : "";
+  const bars = c.candles.map(k => ({ time: toTime(k.t), open: k.o, high: k.h, low: k.l, close: k.c }));
+  const up = css("--good"), dn = css("--critical");
+  if (CH.sym !== c.symbol) {
+    CH.candle.setData(bars);
+    CH.vol.setData(c.candles.map(k => ({ time: toTime(k.t), value: k.v, color: (k.c >= k.o ? up : dn) + "55" })));
+    CH.sym = c.symbol; CH.chart.timeScale().scrollToRealTime();
+  } else {
+    const lastT = CH.candle.data().at(-1)?.time ?? 0;
+    for (const b of bars) if (b.time >= lastT) CH.candle.update(b);
+    for (const k of c.candles) if (toTime(k.t) >= lastT)
+      CH.vol.update({ time: toTime(k.t), value: k.v, color: (k.c >= k.o ? up : dn) + "55" });
   }
-
-  if (S.layers["señales"]) {
-    for (const t of S.openTrades.filter(x => x.instrument === S.symbol)) {
-      const add = (price, color, title, style = LW.LineStyle.Solid, w = 2) => {
-        if (price == null) return;
-        CH.extra.push(price);
-        CH.priceLines.push(CH.candle.createPriceLine({ price, color, lineWidth: w, lineStyle: style,
-          axisLabelVisible: true, title }));
-      };
-      add(t.entry, C.amber, "ENTRADA");
-      add(t.stop, C.down, t.stop === t.entry ? "STOP (BE)" : "STOP");
-      add(t.tp1, C.up, t.tp1_hit ? "TP1 ✓" : "TP1", LW.LineStyle.Dashed, 1);
-      add(t.tp2, C.up, "TP2", LW.LineStyle.Dashed, 1);
-    }
-    const ST = { WIN: [C.up, "TP"], LOSS: [C.down, "SL"], INVALIDATED: [css("--ink-3"), "INV"] };
-    for (const s of (c?.symbol === S.symbol ? (c.signals || []) : [])) {
-      const t = snap(toTime(s.timestamp)); if (t == null) continue;
-      const long = s.direction === "LONG";
-      const [color, text] = ST[s.status] || [C.amber, long ? "L" : "S"];
-      markers.push({ time: t, position: long ? "belowBar" : "aboveBar",
-        shape: long ? "arrowUp" : "arrowDown", color, text });
-    }
-  }
-  markers.sort((a, b) => a.time - b.time);
-  CH.markers.setMarkers(markers);
-  CH.boxes.set(boxes);
+  renderOverlays(bars);
 }
 
-/** Línea de datos fija arriba del gráfico (funciona igual con dedo que con ratón). */
-function paintDataLine(p) {
-  const el = $("dataline");
-  let i = CH.bars.length - 1;
-  if (p?.time != null && p.logical != null) i = Math.max(0, Math.min(CH.bars.length - 1, Math.round(p.logical)));
-  const b = CH.bars[i];
-  if (!b) { el.innerHTML = `<span class="t">—</span>`; return; }
-  const prev = CH.bars[i - 1];
-  const d = prev ? b.close - prev.close : null;
-  const val = k => {
-    if (p?.seriesData && CH.lines[k]) return p.seriesData.get(CH.lines[k])?.value;
-    const pts = S.chart?.indicators?.[k];
-    const hit = pts && pts.length ? pts[pts.length - 1] : null;
-    return hit && toTime(hit.t) === b.time ? hit.v : null;
+function renderOverlays(bars) {
+  for (const l of CH.lines) CH.candle.removePriceLine(l);
+  CH.lines = []; CH.extra = [];
+  const first = bars[0]?.time ?? 0;
+  const line = (price, color, title, style = LW.LineStyle.Solid) => {
+    CH.lines.push(CH.candle.createPriceLine({ price, color, lineWidth: 2, lineStyle: style, axisLabelVisible: true, title }));
+    CH.extra.push(price);
   };
-  const f = (lab, v, style = "") => `<span><i>${lab}</i><b${style}>${v}</b></span>`;
-  const ch = d == null ? "" : `<span style="color:${css(d > 0 ? "--good" : d < 0 ? "--critical" : "--ink-2")}">${
-    sgn(d)} (${sgn(prev ? d / prev.close * 100 : 0)}%)</span>`;
-  let html = `<span class="t">${esc(stamp(new Date(b.time * 1000)))}</span>`
-    + f("A", num(b.open)) + f("M", num(b.high)) + f("m", num(b.low)) + f("C", num(b.close)) + ch
-    + f("VOL", Math.round(b.v).toLocaleString("es-MX"));
-  for (const [k, lab, tok] of LAYERS.slice(0, 3)) {
-    if (!S.layers[k]) continue;
-    const v = val(k);
-    if (v != null) html += f(lab, num(v), ` style="color:${css(tok)}"`);
+  // zonas que el bot está vigilando ahora
+  const watching = (S.ideas.ideas || []).filter(i => i.status === "WATCHING" && i.symbol === S.symbol);
+  CH.boxes.set(watching.map(i => ({ time: Math.max(first, toTime(i.announced_at) - 15 * 60), top: i.top, bottom: i.bottom,
+    fill: "rgba(255,176,32,.14)", edge: "rgba(255,176,32,.6)" })));
+  for (const i of watching) line(i.mid, css("--amber"), `IDEA #${i.number} óptima`, LW.LineStyle.Dashed);
+  // posición abierta
+  const t = S.open.find(x => x.instrument === S.symbol);
+  if (t) {
+    line(t.entry, "#cbd2dc", "Entrada");
+    line(t.stop, css("--critical"), t.tp1_hit || isLocked(t) ? "Stop (protegido)" : "Stop");
+    if (t.tp1 != null && !t.tp1_hit) line(t.tp1, css("--good"), "TP1", LW.LineStyle.Dashed);
+    if (t.tp2 != null) line(t.tp2, css("--good"), "Objetivo");
   }
-  el.innerHTML = html;
+  // entradas y salidas de hoy
+  const mk = [];
+  for (const x of [...todayClosed(), ...(t ? [t] : [])]) {
+    const long = x.direction === "LONG";
+    mk.push({ time: toTime(x.opened_at), position: long ? "belowBar" : "aboveBar", shape: long ? "arrowUp" : "arrowDown",
+      color: long ? css("--good") : css("--critical"), text: x.context?.idea_number ? "#" + x.context.idea_number : "" });
+    if (x.closed_at) mk.push({ time: toTime(x.closed_at), position: long ? "aboveBar" : "belowBar", shape: "circle",
+      color: (x.pnl_points || 0) >= 0 ? css("--good") : css("--critical"), text: sgn(x.pnl_points, 1) });
+  }
+  const snap = new Set(bars.map(b => b.time));
+  const at = v => { let best = null; for (const b of bars) { if (b.time <= v) best = b.time; else break; } return best; };
+  CH.markers.setMarkers(mk.map(m => ({ ...m, time: snap.has(m.time) ? m.time : at(m.time) }))
+    .filter(m => m.time != null).sort((a, b) => a.time - b.time));
 }
+const isLocked = t => t.direction === "LONG" ? t.stop >= t.entry : t.stop <= t.entry;
 
-/* movimiento programático (botones y teclado) */
-function showLast(n) {
-  const ts = CH.chart.timeScale(), N = CH.bars.length;
-  if (!N) return;
-  ts.setVisibleLogicalRange({ from: Math.max(0, N - n) - 0.5, to: N - 1 + 8 });
-  CH.chart.priceScale("right").applyOptions({ autoScale: true });
-}
-function zoomBy(f) {
-  const ts = CH.chart.timeScale(), r = ts.getVisibleLogicalRange();
-  if (!r) return;
-  const right = r.to, span = Math.max(8, (r.to - r.from) * f);
-  ts.setVisibleLogicalRange({ from: right - span, to: right });
-}
-function panBy(frac) {
-  const ts = CH.chart.timeScale(), r = ts.getVisibleLogicalRange();
-  if (!r) return;
-  const dx = (r.to - r.from) * frac;
-  ts.setVisibleLogicalRange({ from: r.from + dx, to: r.to + dx });
-}
-function goLive() {
-  CH.chart.timeScale().scrollToRealTime();
-  CH.chart.priceScale("right").applyOptions({ autoScale: true });
-}
-document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => showLast(Number(b.dataset.range)));
-$("z-fit").onclick = () => { CH.chart.timeScale().fitContent();
-  CH.chart.priceScale("right").applyOptions({ autoScale: true }); };
-$("z-in").onclick = () => zoomBy(0.7);
-$("z-out").onclick = () => zoomBy(1 / 0.7);
-$("z-live").onclick = goLive;
-
-/* ═══════════════════════ TAPE: paneles laterales ═══════════════════════ */
-function renderRead() {
-  const lines = S.ghost?.market_read || [];
-  $("read-body").innerHTML = lines.length
-    ? `<ol>${lines.map(l => `<li>${esc(l)}</li>`).join("")}</ol>`
-    : `<div class="empty"><span class="ic">◇</span>GHOST aún no analiza una vela de ${esc(S.symbol || "este instrumento")}.
-       <br>Aparece cuando el bot está ONLINE.</div>`;
-}
-
-function renderMTF() {
-  const ms = S.ghost?.market_state;
-  if (!ms) { $("mtf").innerHTML = `<div class="mtfc" style="grid-column:1/-1;color:var(--ink-3)">Sin datos</div>`;
-    $("mtf-align").textContent = "—"; $("mtf-align").className = "tag flat"; return; }
-  const roles = [["context", "Contexto"], ["structure", "Estructura"], ["execution", "Ejecución"]];
-  $("mtf").innerHTML = roles.map(([k, role]) => {
-    const b = ms.mtf?.[k] || {};
-    const bias = b.bias || "NEUTRAL";
-    const tone = css("--" + (bias === "BULLISH" ? "good" : bias === "BEARISH" ? "critical" : "ink-2"));
-    const arrow = bias === "BULLISH" ? "▲" : bias === "BEARISH" ? "▼" : "●";
-    return `<div class="mtfc"><div class="tf">${esc(b.timeframe || "—")}</div>
-      <div class="role">${role}</div><div class="arrow" style="color:${tone}">${arrow}</div>
-      <div class="bias" style="color:${tone}">${BIAS_ES[bias] || bias}</div></div>`;
-  }).join("");
-  const al = ms.mtf?.alignment || "UNKNOWN";
-  const t = $("mtf-align");
-  t.textContent = ALIGN_ES[al] || al;
-  t.className = "tag " + (al === "ALIGNED" ? "up" : al === "CONFLICT" ? "down"
-    : al === "TRANSITION" ? "warn" : "flat");
-}
-
-function renderOpenTrade() {
-  const t = S.openTrades.find(x => x.instrument === S.symbol) || S.openTrades[0];
-  const tag = $("open-tag");
-  if (!t) {
-    tag.hidden = true;
-    $("open-body").innerHTML = `<div class="empty"><span class="ic">◇</span>Sin operación abierta.</div>`;
+/* ═══════════════════════════ AHORA / HOY / IDEAS ═══════════════════════════ */
+function renderNow() {
+  const t = S.open.find(x => x.instrument === S.symbol);
+  const sym = S.symbol || "";
+  if (t) {
+    const long = t.direction === "LONG", n = t.context?.idea_number;
+    const locked = isLocked(t);
+    const far = t.tp2 ?? t.tp1;
+    const sl0 = long ? t.entry - t.initial_risk : t.entry + t.initial_risk;
+    const pos = v => Math.max(0, Math.min(100, ((v - sl0) / (far - sl0)) * 100));
+    $("now").innerHTML = `
+      <div class="state" style="color:${long ? css("--good") : css("--critical")}">● ${long ? "Compra" : "Venta"} abierta${n ? " · idea #" + n : ""}</div>
+      <div class="big ${cls(t.pnl_points)}">${sgn(t.pnl_points)} pts</div>
+      <div class="usd">${usd(t.pnl_points || 0, sym)} · ${sgn(t.r_multiple)}R</div>
+      <div class="rail" aria-hidden="true">
+        <span class="tk" style="left:${pos(t.entry)}%"></span>
+        ${t.tp1 != null && far !== t.tp1 ? `<span class="tk" style="left:${pos(t.tp1)}%"></span>` : ""}
+        <span class="mk" style="left:calc(${pos(t.current_price)}% - 1px)"></span></div>
+      <div class="railx"><span>SL</span><span>entrada</span><span>objetivo</span></div>
+      <dl class="kv">
+        <dt>Entrada</dt><dd>${num(t.entry)}</dd>
+        <dt>Precio</dt><dd>${num(t.current_price)}</dd>
+        <dt>Stop</dt><dd>${num(t.stop)}${locked ? `<span class="badge good">${Math.abs(t.stop - t.entry) < 0.01 ? "BE" : "trailing"}</span>` : ""}</dd>
+        ${t.tp1 != null && far !== t.tp1 ? `<dt>TP1</dt><dd>${num(t.tp1)}${t.tp1_hit ? '<span class="badge good">✓ parcial</span>' : ""}</dd>` : ""}
+        <dt>Objetivo</dt><dd>${num(far)}</dd>
+        <dt>Abierta desde</dt><dd>${hm(t.opened_at)} ET</dd>
+      </dl>`;
     return;
   }
-  tag.hidden = false;
-  tag.textContent = t.direction === "LONG" ? "▲ LARGO" : "▼ CORTO";
-  tag.className = "tag " + (t.direction === "LONG" ? "up" : "down");
-  const lvl = (lab, px, r, dist, hit) => px == null ? "" : `
-    <div class="kv"><span class="k">${lab}${hit ? " ✓" : ""}${r != null
-      ? ` <span style="color:var(--ink-3)">${num(r, 1)}R</span>` : ""}</span>
-      <span class="v">${num(px)}${dist != null
-        ? ` <span style="color:var(--ink-3);font-weight:400">${sgn(dist, 1)}</span>` : ""}</span></div>`;
-  const thesis = t.context?.thesis;
-  $("open-body").innerHTML = `
-    <div class="kv"><span class="k">P&amp;L</span>
-      <span class="v ${cls(t.r_multiple)}" style="font-size:15px">${sgn(t.r_multiple)}R
-      <span style="font-size:12px">${sgn(t.pnl_points)} pts</span></span></div>
-    <div class="kv"><span class="k">Setup</span><span class="v">${esc(t.setup)}</span></div>
-    <div class="kv"><span class="k">Estado</span><span class="v">${esc(STATUS_ES[t.status] || t.status)}</span></div>
-    <div class="kv"><span class="k">Entrada</span><span class="v">${num(t.entry)}</span></div>
-    ${lvl(t.stop === t.entry ? "Stop (BE)" : "Stop", t.stop, null, -Math.abs(t.distance_to_stop ?? 0), false)}
-    ${lvl("TP1", t.tp1, t.tp1_r, t.distance_to_tp1, t.tp1_hit)}
-    ${lvl("TP2", t.tp2, t.tp2_r, t.distance_to_tp2, false)}
-    <div class="kv"><span class="k">MFE / MAE</span>
-      <span class="v"><span class="pos">${sgn(t.mfe_r)}R</span> / <span class="neg">${sgn(t.mae_r)}R</span></span></div>
-    <div class="kv"><span class="k">Barras</span><span class="v">${t.bars_held ?? 0}</span></div>
-    ${thesis?.por_eso ? `<p class="foot"><b>Por eso:</b> ${esc(thesis.por_eso)}</p>` : ""}
-    ${thesis?.en_contra ? `<p class="foot" style="margin-top:4px"><b style="color:var(--warning)">En contra:</b> ${esc(thesis.en_contra)}</p>` : ""}`;
-}
-
-const LEVEL_ES = { session_high: "Máx. sesión", session_low: "Mín. sesión",
-  prev_day_high: "Máx. día previo", prev_day_low: "Mín. día previo",
-  swing_high: "Swing alto", swing_low: "Swing bajo",
-  equal_highs: "Máximos iguales", equal_lows: "Mínimos iguales" };
-
-function renderLadder() {
-  const ms = S.ghost?.market_state;
-  const px = S.chart?.last_price ?? ms?.price;
-  const lv = (ms?.key_levels || []).slice();
-  $("lvl-n").textContent = lv.length;
-  if (!lv.length || px == null) {
-    $("ladder").innerHTML = `<div class="empty"><span class="ic">◇</span>Sin niveles.</div>`; return;
-  }
-  const seen = new Set(), uniq = [];
-  for (const l of lv.sort((a, b) => b.price - a.price)) {
-    const k = l.price.toFixed(2);
-    if (seen.has(k)) continue;
-    seen.add(k); uniq.push(l);
-  }
-  const above = uniq.filter(l => l.price > px).slice(-6);
-  const below = uniq.filter(l => l.price <= px).slice(0, 6);
-  const row = l => {
-    const tone = l.side === "buy-side" ? "--series-1" : "--series-2";
-    return `<div class="lrow"><span class="kind" style="border-left:2px solid ${css(tone)};padding-left:6px">
-      ${esc(LEVEL_ES[l.kind] || l.kind.replace(/_/g, " "))}${l.swept ? " · barrido" : ""}</span>
-      <span class="p">${num(l.price)}</span><span class="d">${sgn(l.price - px, 1)}</span></div>`;
-  };
-  $("ladder").innerHTML = above.map(row).join("")
-    + `<div class="lrow now"><span class="kind" style="color:var(--amber);font-weight:800;padding-left:8px">
-         ▸ PRECIO</span><span class="p">${num(px)}</span><span class="d">—</span></div>`
-    + below.map(row).join("");
-}
-
-function actionTag(a) {
-  return a === "LONG" ? `<span class="tag up">▲ Largo</span>`
-    : a === "SHORT" ? `<span class="tag down">▼ Corto</span>` : `<span class="tag flat">✕ No</span>`;
-}
-function renderTapeLog() {
-  const rows = S.decisions.filter(d => !S.symbol || d.instrument === S.symbol).slice(0, 40);
-  $("log-n").textContent = rows.length;
-  $("tape-log").innerHTML = rows.length ? `<table><thead><tr><th>Hora ET</th><th>Setup</th><th>Acción</th>
-      <th style="text-align:right">Score</th><th>Motivo</th></tr></thead><tbody>` +
-    rows.map(d => {
-      const thr = d.threshold ?? 35;
-      const why = d.reasons.map(tReason).join(" · ") || d.detail || "—";
-      return `<tr><td class="t">${esc(dhm(d.timestamp))}</td><td>${esc(d.setup || "—")}</td>
-        <td>${actionTag(d.action)}</td>
-        <td class="num" style="text-align:right;color:${d.score == null ? "var(--ink-3)"
-          : css(d.score >= thr ? "--good" : "--critical")}">${d.score != null ? num(d.score, 1) : "—"}</td>
-        <td style="max-width:520px;overflow:hidden;text-overflow:ellipsis">${esc(why)}</td></tr>`;
-    }).join("") + "</tbody></table>"
-    : `<div class="empty"><span class="ic">◇</span>Sin decisiones registradas todavía.</div>`;
-}
-
-function paintNews() {
-  const d = S.decisions.find(x => !S.symbol || x.instrument === S.symbol);
-  if (!d) { $("news").innerHTML = `<b>GHOST</b> ▸ sin decisiones todavía`; return; }
-  const act = d.action === "NO_TRADE" ? "NO OPERA" : d.action === "LONG" ? "LARGO" : "CORTO";
-  const why = d.reasons.length ? " — " + d.reasons.map(tReason).join(", ") : "";
-  $("news").innerHTML = `<b>GHOST ${esc(hm(d.timestamp))}</b> ▸ ${esc(d.instrument)} ${esc(d.setup || "")}
-    · ${act}${d.score != null ? " · score " + num(d.score, 1) : ""}${esc(why)}`;
-}
-
-/* ═══════════════════════ 2 · CEREBRO ═══════════════════════ */
-function tile(lab, fig, sub, tone) {
-  return `<div class="tile"><div class="lab">${lab}</div>
-    <div class="fig"${tone ? ` style="color:${css("--" + tone)}"` : ""}>${fig}</div>
-    <div class="sub">${sub}</div></div>`;
-}
-
-function renderBrainTiles() {
-  const ms = S.ghost?.market_state;
-  const dec = lastScored().d || S.ghost?.last_decision;
-  const reg = ms?.regime || {};
-  const regTone = reg.regime === "TREND_UP" ? "good" : reg.regime === "TREND_DOWN" ? "critical"
-    : reg.regime === "HIGH_VOLATILITY" ? "warning" : null;
-  const score = dec?.score ?? dec?.confluence?.score;
-  const thr = dec?.threshold ?? dec?.confluence?.threshold;
-  const act = dec?.action;
-  const vwapSide = ms?.vwap_side;
-  $("brain-tiles").innerHTML =
-    tile("Régimen", REGIME_ES[reg.regime] || "—", esc(reg.detail || "sin detalle"), regTone) +
-    tile("Último score", score != null ? num(score, 1) : "—",
-      thr != null ? `umbral ${num(thr, 0)} · ${act === "NO_TRADE" ? "rechazado" : "aprobado"}` : "—",
-      score == null ? null : score >= (thr ?? 35) ? "good" : "critical") +
-    tile("Volatilidad", reg.volatility ? esc(VOL_ES[reg.volatility] || reg.volatility) : "—",
-      reg.atr_percentile != null ? `percentil ATR ${(reg.atr_percentile * 100).toFixed(0)}` : "—",
-      reg.volatility === "HIGH" ? "warning" : null) +
-    tile("Lado del VWAP",
-      vwapSide === "ABOVE" ? "Por encima" : vwapSide === "BELOW" ? "Por debajo"
-        : vwapSide === "AT" ? "En el VWAP" : "—",
-      ms?.vwap != null ? "VWAP " + num(ms.vwap) : "—",
-      vwapSide === "ABOVE" ? "good" : vwapSide === "BELOW" ? "critical" : null);
-}
-
-/** La última decisión puede ser un NoTrade del motor base, que nunca llega al
- *  scoring; en ese caso se retrocede a la decisión puntuada más reciente. */
-function lastScored() {
-  const live = S.ghost?.last_decision;
-  if (live?.confluence) return { d: normalizeDecision(live), stale: false };
-  const d = S.decisions.find(x => x.hasBreakdown && (!S.symbol || x.instrument === S.symbol));
-  return d ? { d, stale: true } : { d: null, stale: false };
-}
-
-function waterfall(contribs) {
-  const sorted = contribs.slice().sort((a, b) => Math.abs(b.points) - Math.abs(a.points));
-  const maxAbs = Math.max(25, ...sorted.map(c => Math.abs(c.points)));
-  return `<div class="wf">` + sorted.map(c => {
-    const pos = c.points > 0;
-    const [name, hint] = tFactor(c.name);
-    const w = (Math.abs(c.points) / maxAbs) * 50;
-    const style = pos ? `left:50%;width:${w}%;background:${css("--plus")}`
-                      : `right:50%;width:${w}%;background:${css("--minus")}`;
-    return `<div class="wfrow"><span class="n">${esc(name)}<small>${esc(c.detail || hint)}</small></span>
-      <span class="wftrack"><span class="wfbar" style="${style}"></span></span>
-      <span class="p" style="color:${css(pos ? "--plus" : "--minus")}">${sgn(c.points, 0)}</span></div>`;
-  }).join("") + `</div>`;
-}
-
-function renderConfluence() {
-  const { d: dec, stale } = lastScored();
-  const verdict = $("cf-verdict");
-  if (!dec || dec.score == null) {
-    verdict.textContent = "—"; verdict.className = "tag flat";
-    $("cf-body").innerHTML = `<div class="empty"><span class="ic">◈</span>Aún no hay decisión puntuada.<br>
-      Los candidatos rechazados por el Signal Engine nunca llegan al scoring de GHOST.</div>`;
+  const watching = (S.ideas.ideas || []).filter(i => i.status === "WATCHING" && i.symbol === sym);
+  if (watching.length) {
+    const i = watching[watching.length - 1], long = i.direction === "LONG";
+    const px = S.chart?.last_price;
+    const dist = px == null ? null : long ? px - i.top : i.bottom - px;
+    $("now").innerHTML = `
+      <div class="state" style="color:var(--amber)">● Esperando · idea #${i.number}</div>
+      <div class="headline">Posible ${long ? "compra" : "venta"} en ${num(i.mid)}</div>
+      <div class="sub">Todavía no estoy seguro: entro solo si el precio llega a la zona y reacciona.</div>
+      <dl class="kv">
+        <dt>Zona</dt><dd>${num(i.bottom)} – ${num(i.top)}</dd>
+        <dt>Stop si entra</dt><dd>${num(i.stop)}</dd>
+        <dt>Riesgo</dt><dd>~${num(i.risk_points, 0)} pts · ${usd(-(i.risk_points || 0), sym).replace(/−/g, "")}</dd>
+        ${dist != null ? `<dt>Distancia</dt><dd>${num(Math.max(0, dist), 1)} pts</dd>` : ""}
+      </dl>`;
     return;
   }
-  const thr = dec.threshold ?? 35, passed = dec.score >= thr, act = dec.action;
-  verdict.textContent = act === "NO_TRADE" ? "✕ No operar" : act === "LONG" ? "▲ Largo" : "▼ Corto";
-  verdict.className = "tag " + (act === "NO_TRADE" ? "down" : act === "LONG" ? "up" : "down");
-  const span = Math.max(100, dec.score + 40);
-  const fillW = Math.max(0, Math.min(100, (dec.score / span) * 100));
-  const thrX = Math.max(0, Math.min(100, (thr / span) * 100));
-  $("cf-body").innerHTML = `
-    ${stale ? `<p class="foot" style="margin:0 0 8px">Último scoring disponible · <b>${esc(dhm(dec.timestamp))}</b>
-      · ${esc(dec.setup || "—")}. La decisión más reciente no llegó al scoring.</p>` : ""}
-    <div class="meter"><div class="top">
-        <span class="score" style="color:${css(passed ? "--good" : "--critical")}">${num(dec.score, 1)}</span>
-        <span class="of">de ${num(thr, 0)} necesarios · ${passed ? "supera el umbral" : "por debajo del umbral"}</span></div>
-      <div class="track"><div class="fill" style="width:${fillW}%;background:${css(passed ? "--good" : "--critical")}"></div>
-        <div class="thr" style="left:${thrX}%"></div><div class="thrlab" style="left:${thrX}%">umbral ${num(thr, 0)}</div></div>
-    </div>
-    ${dec.contributions.length ? waterfall(dec.contributions) + `<p class="foot">
-      <span style="color:${css("--plus")}">Azul a la derecha</span> suma ·
-      <span style="color:${css("--minus")}">naranja a la izquierda</span> resta.
-      La cifra de cada fila es su aportación exacta en puntos.</p>`
-      : `<div class="empty">Ningún factor aportó puntos.</div>`}
-    ${dec.reasons.length ? `<h3 class="sec" style="margin-top:12px">Motivos de rechazo</h3>
-      <div>${dec.reasons.map(r => `<span class="tag down" style="margin:0 4px 4px 0">${esc(tReason(r))}</span>`).join("")}</div>` : ""}`;
+  const st = S.status?.status;
+  const sess = S.chart?.session;
+  $("now").innerHTML = `
+    <div class="state" style="color:var(--ink-3)">● ${st === "ONLINE" ? "Buscando" : "Detenido"}</div>
+    <div class="headline">${st !== "ONLINE" ? "El bot no está activo" : sess && sess !== "RTH" ? "Mercado fuera de horario" : "Sin zonas cerca"}</div>
+    <div class="sub">${st !== "ONLINE" ? "Pulsa Iniciar para que vuelva a buscar." : sess && sess !== "RTH"
+      ? "Opera de 9:30 a 15:30 ET y cierra todo a las 16:55." : "Aviso con 🟡 cuando el precio se acerque a una zona."}</div>`;
 }
 
-function renderMarketState() {
-  const ms = S.ghost?.market_state;
-  $("ms-sym").textContent = S.symbol || "—";
-  if (!ms) { $("ms-body").innerHTML = `<div class="empty"><span class="ic">◈</span>Sin estado de mercado.</div>`; return; }
-  const st = ms.structure || {}, lq = ms.liquidity || {}, reg = ms.regime || {};
-  const biasTag = b => {
-    const tone = b === "BULLISH" ? "up" : b === "BEARISH" ? "down" : "flat";
-    const ar = b === "BULLISH" ? "▲" : b === "BEARISH" ? "▼" : "●";
-    return `<span class="tag ${tone}">${ar} ${BIAS_ES[b] || b || "—"}</span>`;
-  };
-  const row = (k, v) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
-  $("ms-body").innerHTML =
-    row("Barra de decisión", esc(dhm(ms.decision_time))) + row("Sesión", esc(ms.session || "—")) +
-    row("Precio", num(ms.price)) + row("Régimen", esc(REGIME_ES[reg.regime] || "—")) +
-    row("Fuerza de tendencia", num(reg.trend_strength, 2)) + row("Sesgo de estructura", biasTag(st.bias)) +
-    row("Último evento", `${esc(st.last_event_type || "—")}${st.last_event_direction
-      ? " · " + (BIAS_ES[st.last_event_direction] || "") : ""}`) +
-    row("CHoCH reciente", st.changed_recently ? "Sí" : "No") +
-    row("Secuencia de swings", esc(st.swing_summary || "—")) +
-    row("Último barrido", esc(lq.detail || "ninguno")) +
-    row("Liquidez arriba", lq.next_target_up != null ? num(lq.next_target_up) : "—") +
-    row("Liquidez abajo", lq.next_target_down != null ? num(lq.next_target_down) : "—");
+function renderToday() {
+  const cl = todayClosed(), sym = S.symbol;
+  const wins = cl.filter(t => t.pnl_points > 0).length, losses = cl.filter(t => t.pnl_points < 0).length;
+  const pts = cl.reduce((s, t) => s + (t.pnl_points || 0), 0);
+  const ideas = S.ideas.day === fmtDate.format(new Date())
+    ? (S.ideas.ideas || []).filter(i => i.symbol === sym) : [];
+  $("today-date").textContent = fmtDay.format(new Date());
+  $("today").innerHTML = `
+    <div class="stat"><div class="k">Resultado cerrado</div><div class="v ${cls(pts)}">${sgn(pts)} pts</div><div class="s">${cl.length ? usd(pts, sym) : "—"}</div></div>
+    <div class="stat"><div class="k">Trades</div><div class="v">${cl.length}</div><div class="s">${wins} ganados · ${losses} perdidos</div></div>
+    <div class="stat"><div class="k">Ideas avisadas</div><div class="v">${ideas.filter(i => !i.direct).length}</div><div class="s">${ideas.filter(i => i.status === "CANCELLED").length} canceladas</div></div>
+    <div class="stat"><div class="k">Señales directas</div><div class="v">${ideas.filter(i => i.direct).length}</div><div class="s">sin aviso previo</div></div>`;
 }
 
-/** Frecuencia real de cada factor: los que disparan siempre no discriminan nada. */
-function renderFactorBars() {
-  const scored = S.decisions.filter(d => d.hasBreakdown).concat(S.liveScored);
-  if (!scored.length) {
-    const anyScore = S.decisions.some(d => d.score != null);
-    $("factor-bars").innerHTML = `<div class="empty"><span class="ic">◈</span>${anyScore
-      ? `El registro guarda el score pero <b>no el desglose por factor</b>.<br>
-         Se irá llenando con las decisiones que ocurran mientras esta pantalla siga abierta.`
-      : "Sin decisiones puntuadas aún."}</div>`;
-    $("factor-foot").textContent = ""; return;
-  }
-  const agg = new Map();
-  for (const d of scored) for (const c of d.contributions) {
-    const a = agg.get(c.name) || { n: 0, sum: 0 };
-    a.n++; a.sum += c.points; agg.set(c.name, a);
-  }
-  const rows = [...agg.entries()].map(([k, a]) => ({ k, n: a.n, pct: a.n / scored.length, avg: a.sum / a.n }))
-    .sort((a, b) => b.n - a.n);
-  const maxN = Math.max(...rows.map(r => r.n));
-  $("factor-bars").innerHTML = rows.map(r => {
-    const pos = r.avg > 0, constant = r.pct >= 0.98;
-    return `<div class="rbar"><div class="lab">${esc(tFactor(r.k)[0])}
-        <span style="color:var(--ink-3)">· ${(r.pct * 100).toFixed(0)}% de las veces</span>
-        ${constant ? `<span class="tag warn" style="margin-left:5px">constante</span>` : ""}
-        <div class="tr"><div class="fl" style="width:${(r.n / maxN) * 100}%;background:${css(pos ? "--plus" : "--minus")}"></div></div></div>
-      <div class="ct" style="color:${css(pos ? "--plus" : "--minus")}">${sgn(r.avg, 1)}</div></div>`;
+function renderIdeas() {
+  const list = (S.ideas.ideas || []).filter(i => i.symbol === S.symbol).slice().reverse();
+  $("ideas-n").textContent = S.ideas.day && S.ideas.day !== fmtDate.format(new Date()) ? "último día: " + S.ideas.day : list.length ? list.length : "";
+  if (!list.length) { $("ideas").innerHTML = `<li class="empty" style="display:block">Todavía no hay ideas hoy.</li>`; return; }
+  $("ideas").innerHTML = list.map(i => {
+    const t = i.trade, long = i.direction === "LONG";
+    const ic = i.status === "WATCHING" ? "🟡" : i.status === "CANCELLED" ? "⚪" : i.direct ? "⚡" : "🟢";
+    let res = `<span class="zero">${i.status === "WATCHING" ? "esperando" : i.status === "CANCELLED" ? "cancelada" : ""}</span>`;
+    if (t) res = t.is_open ? `<span class="${cls(t.pnl_points)}">${sgn(t.pnl_points, 1)} <small>abierta</small></span>`
+      : `<span class="${cls(t.pnl_points)}">${sgn(t.pnl_points, 1)} pts</span>`;
+    return `<li><span class="ic">${ic}</span><div><b>#${i.number} ${long ? "Compra" : "Venta"}</b> en ${num(i.mid)}
+      <div class="t">${hm(i.announced_at)} · zona ${num(i.bottom)}–${num(i.top)}</div></div><span class="res">${res}</span></li>`;
   }).join("");
-  const consts = rows.filter(r => r.pct >= 0.98);
-  const fixed = consts.reduce((s, r) => s + r.avg, 0);
-  const thr = lastScored().d?.threshold ?? 35;
-  $("factor-foot").innerHTML = consts.length
-    ? `Los factores <span class="tag warn">constante</span> disparan en casi todas las decisiones, así que no
-       discriminan: aportan un offset fijo de <b>${sgn(fixed, 1)} pts</b>. El umbral efectivo es
-       <b>${num(thr - fixed, 1)}</b>, no ${num(thr, 0)}.`
-    : `Sobre ${scored.length} decisiones puntuadas. Ningún factor es constante.`;
 }
 
-function histogram(values, { lo, hi, bins, cut, fmt, unit, aria }) {
-  const W = 100, H = 170, P = { t: 8, r: 4, b: 22, l: 26 };
-  const step = (hi - lo) / bins;
-  const B = Array.from({ length: bins }, (_, i) => ({ a: lo + i * step, b: lo + (i + 1) * step, n: 0 }));
-  for (const v of values) B[Math.min(bins - 1, Math.max(0, Math.floor((v - lo) / step)))].n++;
-  const maxN = Math.max(...B.map(b => b.n)) || 1;
-  const x = v => P.l + ((v - lo) / (hi - lo)) * (W - P.l - P.r);
-  const y = n => H - P.b - (n / maxN) * (H - P.t - P.b);
-  const bars = B.map(b => {
-    const full = x(b.b) - x(b.a), bw = Math.max(0.4, full * 0.72), bx = x(b.a) + (full - bw) / 2;
-    return `<rect x="${bx.toFixed(2)}" y="${y(b.n).toFixed(2)}" width="${bw.toFixed(2)}"
-      height="${Math.max(0, H - P.b - y(b.n)).toFixed(2)}" fill="${css(b.a >= cut ? "--good" : "--critical")}"
-      opacity="${b.n ? .85 : 0}"><title>${fmt(b.a)}–${fmt(b.b)} · ${b.n} ${unit}</title></rect>`;
-  }).join("");
-  return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${aria}">
-    ${[0, maxN / 2, maxN].map(t => `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${y(t).toFixed(2)}"
-      y2="${y(t).toFixed(2)}" vector-effect="non-scaling-stroke"/>`).join("")}
-    ${bars}
-    <line x1="${x(cut).toFixed(2)}" x2="${x(cut).toFixed(2)}" y1="${P.t}" y2="${H - P.b}"
-      stroke="${css("--warning")}" stroke-width="2" vector-effect="non-scaling-stroke"/>
-    <line class="axis" x1="${P.l}" x2="${W - P.r}" y1="${H - P.b}" y2="${H - P.b}" vector-effect="non-scaling-stroke"/>
-  </svg>`;
-}
-
-function renderScoreHist() {
-  const scores = S.decisions.filter(d => d.score != null).map(d => d.score);
-  const thr = S.decisions.find(d => d.threshold != null)?.threshold ?? lastScored().d?.threshold ?? 35;
-  $("thr-v").textContent = num(thr, 0);
-  if (scores.length < 2) { $("score-hist").innerHTML = `<div class="empty">Datos insuficientes.</div>`; return; }
-  const lo = Math.min(...scores, 0), hi = Math.max(...scores, thr + 10);
-  const pass = scores.filter(s => s >= thr).length;
-  $("score-hist").innerHTML = histogram(scores, { lo, hi, bins: 22, cut: thr, fmt: v => num(v, 0),
-      unit: "decisiones", aria: "Histograma del score de confluencia con el umbral marcado" }) +
-    `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:4px 4px 0 26px">
-      <span>${num(lo, 0)} pts</span><span style="color:var(--warning)">umbral ${num(thr, 0)}</span><span>${num(hi, 0)} pts</span></div>
-    <p class="foot"><span style="color:${css("--good")}">■</span> supera el umbral ·
-      <span style="color:${css("--critical")}">■</span> por debajo. ${pass} de ${scores.length}
-      (${((pass / scores.length) * 100).toFixed(0)}%) pasan.</p>`;
-}
-
-/* ═══════════════════════ 3 · EMBUDO ═══════════════════════ */
-function funnelData() {
-  const d = S.decisions;
-  return {
-    evaluated: d.length,
-    reachedSignal: d.filter(x => x.signal || x.score != null).length,
-    passedGuards: d.filter(x => x.score != null && x.reasons.every(r => r === "insufficient_confluence")).length,
-    approved: d.filter(x => x.action === "LONG" || x.action === "SHORT").length,
-  };
-}
-
-function renderFunnel() {
-  const f = funnelData();
-  $("fn-n").textContent = f.evaluated;
-  if (!f.evaluated) {
-    $("funnel").innerHTML = `<div class="empty"><span class="ic">◇</span>Sin decisiones registradas todavía.</div>`;
-    $("funnel-tiles").innerHTML = ""; return;
-  }
-  const stages = [
-    ["Decisiones evaluadas", "todo lo que llegó a GHOST", f.evaluated, "--ord-1"],
-    ["Señal base válida", "superó los validadores del Signal Engine", f.reachedSignal, "--ord-2"],
-    ["Superó las guardas", "sin bloqueo duro de GHOST", f.passedGuards, "--ord-3"],
-    ["Aprobada", "operación en papel abierta", f.approved, "--ord-4"],
-  ];
-  const max = f.evaluated || 1;
-  let html = "";
-  stages.forEach(([name, hint, n, tok], i) => {
-    const pct = (n / max) * 100;
-    html += `<div class="fstage"><span class="n">${name}<small>${hint}</small></span>
-      <span class="fbar" style="width:${Math.max(0.4, pct)}%;background:${css(tok)}"></span>
-      <span class="c"><b>${n}</b><small>${pct.toFixed(1)}%</small></span></div>`;
-    const next = stages[i + 1];
-    if (next && n - next[2] > 0) html += `<div class="fdrop"><span></span>
-      <span>−${n - next[2]} perdidas aquí (${(((n - next[2]) / (n || 1)) * 100).toFixed(0)}% de esta etapa)</span><span></span></div>`;
-  });
-  $("funnel").innerHTML = html;
-
-  const conv = (f.approved / f.evaluated) * 100;
-  const scoredArr = S.decisions.filter(d => d.score != null).map(d => d.score).sort((a, b) => a - b);
-  const med = scoredArr.length ? scoredArr[Math.floor(scoredArr.length / 2)] : null;
-  const drops = [["Signal Engine", f.evaluated - f.reachedSignal],
-    ["Guardas duras", f.reachedSignal - f.passedGuards], ["Confluencia", f.passedGuards - f.approved]]
-    .sort((a, b) => b[1] - a[1]);
-  $("funnel-tiles").innerHTML =
-    tile("Conversión", conv.toFixed(1) + "%", `${f.approved} aprobadas de ${f.evaluated}`,
-      conv >= 10 ? "good" : conv >= 3 ? "warning" : "critical") +
-    tile("Mayor pérdida", drops[0][1] > 0 ? drops[0][0] : "—", `−${drops[0][1]} candidatos`, "warning") +
-    tile("Score mediano", med != null ? num(med, 1) : "—", `sobre ${scoredArr.length} decisiones puntuadas`,
-      med == null ? null : med >= 35 ? "good" : "critical") +
-    tile("Operaciones abiertas", String(S.openTrades.length),
-      S.status?.ghost?.enabled ? "GHOST activo" : "GHOST desactivado", null);
-}
-
-function renderRejectBars() {
-  const counts = new Map();
-  for (const d of S.decisions) for (const r of d.reasons) counts.set(r, (counts.get(r) || 0) + 1);
-  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  if (!rows.length) { $("reject-bars").innerHTML = `<div class="empty">Ningún rechazo registrado.</div>`; return; }
-  const max = rows[0][1];
-  $("reject-bars").innerHTML = rows.map(([r, n]) => `<div class="rbar"><div class="lab">${esc(tReason(r))}
-      <div class="tr"><div class="fl" style="width:${(n / max) * 100}%;background:${css("--minus")}"></div></div></div>
-      <div class="ct">${n}</div></div>`).join("");
-}
-
-function renderSetupConversion() {
-  const by = new Map();
-  for (const d of S.decisions) {
-    const k = d.setup || "—";
-    const a = by.get(k) || { total: 0, ok: 0, scoreSum: 0, scored: 0 };
-    a.total++;
-    if (d.action === "LONG" || d.action === "SHORT") a.ok++;
-    if (d.score != null) { a.scoreSum += d.score; a.scored++; }
-    by.set(k, a);
-  }
-  const rows = [...by.entries()].sort((a, b) => b[1].total - a[1].total);
-  if (!rows.length) { $("setup-conv").innerHTML = `<div class="empty">Sin datos por setup.</div>`; return; }
-  $("setup-conv").innerHTML = `<table><thead><tr><th>Setup</th><th style="text-align:right">Evaluadas</th>
-      <th style="text-align:right">Aprobadas</th><th style="text-align:right">Conversión</th>
-      <th style="text-align:right">Score medio</th></tr></thead><tbody>` +
-    rows.map(([k, a]) => {
-      const c = a.total ? (a.ok / a.total) * 100 : 0;
-      return `<tr><td style="color:var(--ink-1)">${esc(k)}</td><td class="num" style="text-align:right">${a.total}</td>
-        <td class="num" style="text-align:right">${a.ok}</td>
-        <td class="num" style="text-align:right;color:${css(c >= 10 ? "--good" : c > 0 ? "--warning" : "--critical")}">${c.toFixed(1)}%</td>
-        <td class="num" style="text-align:right">${a.scored ? num(a.scoreSum / a.scored, 1) : "—"}</td></tr>`;
-    }).join("") + "</tbody></table>";
-}
-
-/* ═══════════════════════ 4 · TRADES ═══════════════════════ */
-function equitySeries() {
-  let cum = 0;
-  return S.closedTrades.slice().filter(t => t.closed_at)
-    .sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)))
-    .map(t => ({ t: t.closed_at, r: t.r_multiple || 0, cum: (cum += t.r_multiple || 0) }));
-}
-
-function sparkline(vals) {
-  if (vals.length < 2) return "";
-  const W = 100, H = 26, lo = Math.min(...vals, 0), hi = Math.max(...vals, 0), rng = (hi - lo) || 1;
-  const pts = vals.map((v, i) => `${((i / (vals.length - 1)) * W).toFixed(2)},${(H - ((v - lo) / rng) * H).toFixed(2)}`);
-  const last = vals[vals.length - 1];
-  const col = css(last > 0 ? "--good" : last < 0 ? "--critical" : "--ink-2");
-  const zeroY = (H - ((0 - lo) / rng) * H).toFixed(2);
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
-    <line x1="0" x2="${W}" y1="${zeroY}" y2="${zeroY}" stroke="${css("--rule")}" stroke-width="1" vector-effect="non-scaling-stroke"/>
-    <polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
-}
-
-function renderPerfTiles() {
-  const st = S.stats || {};
-  const eq = equitySeries();
-  const totalR = eq.length ? eq[eq.length - 1].cum : 0;
-  let peak = 0, dd = 0;
-  for (const p of eq) { peak = Math.max(peak, p.cum); dd = Math.min(dd, p.cum - peak); }
-  const grossW = S.closedTrades.filter(t => t.r_multiple > 0).reduce((s, t) => s + t.r_multiple, 0);
-  const grossL = Math.abs(S.closedTrades.filter(t => t.r_multiple < 0).reduce((s, t) => s + t.r_multiple, 0));
-  const pf = grossL > 0 ? grossW / grossL : (grossW > 0 ? Infinity : null);
-  $("eq-total").textContent = sgn(totalR) + "R";
+/* ═══════════════════════════ 2 · HISTORIAL ═══════════════════════════ */
+function renderHistory() {
+  const tr = S.closed.slice().filter(t => t.closed_at && (!S.symbol || t.instrument === S.symbol))
+    .sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
+  let cum = 0, peak = 0, dd = 0;
+  const eq = tr.map(t => { cum += t.r_multiple || 0; peak = Math.max(peak, cum); dd = Math.min(dd, cum - peak); return { t: t.closed_at, cum }; });
+  const pts = tr.reduce((s, t) => s + (t.pnl_points || 0), 0);
+  const w = tr.filter(t => t.r_multiple > 0), l = tr.filter(t => t.r_multiple < 0);
+  const gw = w.reduce((s, t) => s + t.r_multiple, 0), gl = -l.reduce((s, t) => s + t.r_multiple, 0);
+  const pf = gl > 0 ? gw / gl : (gw > 0 ? Infinity : null);
   $("perf-tiles").innerHTML =
-    `<div class="tile"><div class="lab">R acumulada</div><div class="fig ${cls(totalR)}">${sgn(totalR)}R</div>
-       <div class="sub">${st.total_trades || 0} operaciones cerradas</div>${eq.length > 1 ? sparkline(eq.map(p => p.cum)) : ""}</div>` +
-    tile("Tasa de acierto", st.total_trades ? ((st.win_rate || 0) * 100).toFixed(0) + "%" : "—",
-      `${st.wins || 0} ganadas · ${st.losses || 0} perdidas`,
-      st.total_trades ? ((st.win_rate || 0) >= .5 ? "good" : "critical") : null) +
-    tile("Factor de beneficio", pf == null ? "—" : (pf === Infinity ? "∞" : pf.toFixed(2)),
-      "R ganada ÷ R perdida", pf == null ? null : (pf >= 1 ? "good" : "critical")) +
-    tile("Máxima caída", (dd ? dd.toFixed(2) : "0.00") + "R",
-      `esperanza ${sgn(st.expectancy_r || 0)}R por operación`, dd < 0 ? "critical" : null);
-}
-
-function renderEquity() {
-  const eq = equitySeries();
-  if (eq.length < 2) { $("equity").innerHTML = `<div class="empty"><span class="ic">◇</span>
-    La curva aparece cuando cierran al menos dos operaciones.</div>`; return; }
-  const W = 100, H = 170, P = { t: 10, r: 4, b: 20, l: 30 };
-  const vals = [0, ...eq.map(p => p.cum)];
-  const lo = Math.min(...vals), hi = Math.max(...vals), rng = (hi - lo) || 1;
-  const x = i => P.l + (i / (vals.length - 1)) * (W - P.l - P.r);
-  const y = v => P.t + (1 - (v - lo) / rng) * (H - P.t - P.b);
-  const pts = vals.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`);
-  const base = y(Math.max(lo, 0)).toFixed(2);
-  const last = vals[vals.length - 1];
-  const col = css(last > 0 ? "--good" : last < 0 ? "--critical" : "--amber");
-  $("equity").innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
-      role="img" aria-label="Curva de capital acumulada en múltiplos de R">
-    <defs><linearGradient id="eqg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${col}" stop-opacity=".25"/>
-      <stop offset="100%" stop-color="${col}" stop-opacity="0"/></linearGradient></defs>
-    ${[hi, (hi + lo) / 2, lo].map(t => `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${y(t).toFixed(2)}"
-      y2="${y(t).toFixed(2)}" vector-effect="non-scaling-stroke"/>`).join("")}
-    <polygon points="${P.l},${base} ${pts.join(" ")} ${x(vals.length - 1).toFixed(2)},${base}" fill="url(#eqg)"/>
-    <line x1="${P.l}" x2="${W - P.r}" y1="${y(0).toFixed(2)}" y2="${y(0).toFixed(2)}" stroke="${css("--rule")}"
-      stroke-width="1" vector-effect="non-scaling-stroke"/>
-    <polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
-    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:5px 4px 0 30px">
-      <span>${dhm(eq[0].t)}</span><span>${dhm(eq[eq.length - 1].t)}</span></div>
-    <p class="foot">R acumulada tras cada cierre, de ${num(lo, 2)}R a ${num(hi, 2)}R.</p>`;
-}
-
-function renderRDist() {
-  const rs = S.closedTrades.map(t => t.r_multiple || 0);
-  if (rs.length < 2) { $("rdist").innerHTML = `<div class="empty"><span class="ic">◇</span>
-    Sin operaciones cerradas suficientes.</div>`; return; }
-  const lo = Math.min(-1.2, ...rs), hi = Math.max(2.2, ...rs);
-  $("rdist").innerHTML = histogram(rs, { lo, hi, bins: 20, cut: 0, fmt: v => num(v, 1) + "R",
-      unit: "operaciones", aria: "Distribución de resultados en múltiplos de R" }) +
-    `<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:5px 4px 0 26px">
-      <span>${num(lo, 1)}R</span><span>0R</span><span>${num(hi, 1)}R</span></div>
-    <p class="foot"><span style="color:${css("--good")}">■</span> ganadoras · <span style="color:${css("--critical")}">■</span>
-      perdedoras. Media ${sgn(rs.reduce((s, r) => s + r, 0) / rs.length)}R sobre ${rs.length} operaciones.</p>`;
-}
-
-function renderTradeTables() {
-  $("open-n").textContent = S.openTrades.length;
-  $("closed-n").textContent = S.closedTrades.length;
-  const dirTag = d => `<span class="tag ${d === "LONG" ? "up" : "down"}">${d === "LONG" ? "▲ Largo" : "▼ Corto"}</span>`;
-  const R = `style="text-align:right"`;
-  $("open-table").innerHTML = S.openTrades.length ? `<table><thead><tr>
-      <th>Instr.</th><th>Dir.</th><th>Setup</th><th ${R}>Entrada</th><th ${R}>Actual</th><th ${R}>Stop</th>
-      <th ${R}>TP1</th><th ${R}>R</th><th ${R}>MFE</th><th>Estado</th></tr></thead><tbody>` +
-    S.openTrades.map(t => `<tr><td style="color:var(--ink-1)">${esc(t.instrument)}</td><td>${dirTag(t.direction)}</td>
-      <td>${esc(t.setup)}</td><td class="num" ${R}>${num(t.entry)}</td>
-      <td class="num" style="text-align:right;color:var(--ink-1)">${num(t.current_price)}</td>
-      <td class="num" ${R}>${num(t.stop)}</td><td class="num" ${R}>${num(t.tp1)}</td>
-      <td class="num ${cls(t.r_multiple)}" ${R}>${sgn(t.r_multiple)}R</td>
-      <td class="num pos" ${R}>${sgn(t.mfe_r)}R</td><td>${esc(STATUS_ES[t.status] || t.status)}</td></tr>`).join("") + "</tbody></table>"
-    : `<div class="empty"><span class="ic">◇</span>Sin operaciones abiertas.</div>`;
-  $("closed-table").innerHTML = S.closedTrades.length ? `<table><thead><tr>
-      <th>Cierre ET</th><th>Instr.</th><th>Dir.</th><th>Setup</th><th ${R}>Entrada</th><th ${R}>Salida</th>
-      <th ${R}>Puntos</th><th ${R}>R</th><th ${R}>MFE/MAE</th><th>Motivo</th></tr></thead><tbody>` +
-    S.closedTrades.map(t => `<tr><td class="t">${esc(dhm(t.closed_at))}</td>
-      <td style="color:var(--ink-1)">${esc(t.instrument)}</td><td>${dirTag(t.direction)}</td><td>${esc(t.setup)}</td>
+    tile("Resultado total", `${sgn(pts, 1)} pts`, tr.length ? usd(pts, S.symbol) : "—", pts >= 0 ? "good" : "critical") +
+    tile("Acierto", tr.length ? Math.round(w.length / tr.length * 100) + "%" : "—", `${w.length} ganados · ${l.length} perdidos · ${tr.length - w.length - l.length} en cero`) +
+    tile("Factor de beneficio", pf == null ? "—" : pf === Infinity ? "∞" : num(pf), "ganado ÷ perdido", pf == null ? "" : pf >= 1 ? "good" : "critical") +
+    tile("Peor racha", num(dd, 1) + "R", "caída máxima, en múltiplos del stop", dd < 0 ? "critical" : "");
+  $("eq-total").textContent = tr.length ? sgn(cum) + "R" : "";
+  $("equity").innerHTML = btEquitySvg(eq, "");
+  $("closed-n").textContent = tr.length || "";
+  const R = 'style="text-align:right"';
+  $("closed-table").innerHTML = tr.length ? `<table><thead><tr><th>Cierre ET</th><th>Idea</th><th>Dir.</th>
+      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>R</th></tr></thead><tbody>` +
+    tr.slice().reverse().map(t => `<tr><td class="t">${esc(dhm(t.closed_at))}</td>
+      <td>${t.context?.idea_number ? (t.context.idea_direct ? "⚡" : "🟢") + " #" + t.context.idea_number : esc(t.setup)}</td>
+      <td><span class="tag ${t.direction === "LONG" ? "up" : "down"}">${t.direction === "LONG" ? "Compra" : "Venta"}</span></td>
       <td class="num" ${R}>${num(t.entry)}</td><td class="num" ${R}>${num(t.exit_price)}</td>
+      <td>${esc(EXIT_ES[t.exit_reason] || t.exit_reason || "—")}${t.context?.correction ? ' <span class="badge warn">corregido</span>' : ""}</td>
       <td class="num ${cls(t.pnl_points)}" ${R}>${sgn(t.pnl_points)}</td>
-      <td class="num ${cls(t.r_multiple)}" style="text-align:right;font-weight:800">${sgn(t.r_multiple)}R</td>
-      <td class="num" ${R}><span class="pos">${sgn(t.mfe_r)}</span>/<span class="neg">${sgn(t.mae_r)}</span></td>
-      <td>${esc(EXIT_ES[t.exit_reason] || t.exit_reason || "—")}</td></tr>`).join("") + "</tbody></table>"
-    : `<div class="empty"><span class="ic">◇</span>Ninguna operación ha cerrado todavía.</div>`;
+      <td class="num ${cls(t.r_multiple)}" style="text-align:right;font-weight:700">${sgn(t.r_multiple)}R</td></tr>`).join("") + "</tbody></table>"
+    : `<div class="empty">Ninguna operación ha cerrado todavía.</div>`;
 }
 
-/* ═══════════════════════ 5 · AUDITORÍA ═══════════════════════ */
-$("audit-filters").querySelectorAll("button").forEach(b => b.onclick = () => {
-  S.auditFilter = b.dataset.f; S.auditSel = null;
-  $("audit-filters").querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
-  renderAudit();
-});
-
-function auditRows() {
-  return S.decisions.filter(d => S.auditFilter === "all" ? true
-    : S.auditFilter === "trade" ? (d.action === "LONG" || d.action === "SHORT") : d.action === "NO_TRADE");
+/* ═══════════════════════════ 4 · SISTEMA ═══════════════════════════ */
+const COMP_ES = { data: "Datos", analysis: "Análisis", setup: "Estrategia", signal: "Señales", risk: "Riesgo",
+  ghost: "Filtro GHOST", discord: "Discord" };
+function renderSystem() {
+  const comps = S.status?.components || {};
+  $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
+    const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";
+    return `<div><span class="dot ${d}"></span>${esc(COMP_ES[k] || k)}<small title="${esc(v.detail)}">${esc(v.detail || v.status)}</small></div>`;
+  }).join("") || `<div class="empty">Sin datos.</div>`;
+  $("errbox").hidden = !S.status?.last_error; $("errbox").textContent = S.status?.last_error ? "Último error: " + S.status.last_error : "";
+  const rows = S.decisions.slice(-120).reverse();
+  $("decisions").innerHTML = rows.length ? `<table><thead><tr><th>Hora ET</th><th>Setup</th><th>Decisión</th><th>Motivo</th></tr></thead><tbody>` +
+    rows.map(d => `<tr><td class="t">${esc(dhm(d.timestamp))}</td><td>${esc(d.setup || "—")}</td>
+      <td>${d.action === "NO_TRADE" ? '<span class="zero">Descartada</span>' : `<span class="tag ${d.action === "LONG" ? "up" : "down"}">${d.action === "LONG" ? "Compra" : "Venta"}</span>`}</td>
+      <td>${esc((d.no_trade_reasons || []).map(r => REASON_ES[r] || r.replace(/_/g, " ")).join(" · ") || "—")}</td></tr>`).join("") + "</tbody></table>"
+    : `<div class="empty">Sin decisiones todavía.</div>`;
 }
 
-function renderAudit() {
-  const rows = auditRows();
-  if (!rows.length) {
-    $("audit-table").innerHTML = `<div class="empty"><span class="ic">◇</span>Sin decisiones para este filtro.</div>`;
-    renderAuditDetail(); return;
-  }
-  $("audit-table").innerHTML = `<table><thead><tr><th>Hora ET</th><th>Instr.</th><th>Setup</th><th>Acción</th>
-      <th style="text-align:right">Score</th><th>Motivo / detalle</th></tr></thead><tbody>` +
-    rows.map((d, i) => {
-      const thr = d.threshold ?? 35;
-      const why = d.reasons.map(tReason).join(" · ") || d.detail || "—";
-      return `<tr class="click" data-i="${i}" aria-selected="${S.auditSel === i}">
-        <td class="t">${esc(dhm(d.timestamp))}</td><td style="color:var(--ink-1)">${esc(d.instrument)}</td>
-        <td>${esc(d.setup || "—")}</td><td>${actionTag(d.action)}</td>
-        <td class="num" style="text-align:right;color:${d.score == null ? "var(--ink-3)"
-          : css(d.score >= thr ? "--good" : "--critical")}">${d.score != null ? num(d.score, 1) : "—"}</td>
-        <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis">${esc(why)}</td></tr>`;
-    }).join("") + "</tbody></table>";
-  $("audit-table").querySelectorAll("tr.click").forEach(tr => tr.onclick = () => {
-    S.auditSel = Number(tr.dataset.i); renderAudit();
-  });
-  renderAuditDetail();
-}
-
-function renderAuditDetail() {
-  const d = auditRows()[S.auditSel];
-  if (!d) { $("audit-detail").innerHTML = `<div class="empty"><span class="ic">◈</span>
-    Selecciona una fila para ver el desglose.</div>`; return; }
-  const s = d.signal;
-  const row = (k, v) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
-  let html = row("Marca temporal", esc(dhm(d.timestamp))) + row("Instrumento", esc(d.instrument))
-    + row("Setup", esc(d.setup || "—")) + row("Acción", esc(d.action))
-    + row("Régimen", esc(REGIME_ES[d.regime] || d.regime || "—")) + row("Sesión", esc(d.session || "—"))
-    + row("Score", d.score != null ? num(d.score, 1) : "—");
-  if (s) html += row("Entrada", num(s.entry)) + row("Stop", num(s.stop))
-    + row("Objetivos", (s.take_profits || []).map(v => num(v)).join(" · ") || "—")
-    + row("R:R", (s.risk_reward || []).map(v => num(v, 2)).join(" · ") || "—")
-    + row("ID de señal", `<span style="font-size:10px">${esc(s.signal_id || "—")}</span>`);
-  if (d.hasBreakdown && d.contributions.length) {
-    html += `<h3 class="sec" style="margin:12px 0 6px">Desglose · ${num(d.score, 1)} / ${num(d.threshold ?? 35, 0)}</h3>`
-      + waterfall(d.contributions);
-  } else if (d.score != null) {
-    html += `<p class="foot">El registro persistido no guarda el desglose por factor, así que esta
-      decisión no puede explicarse retroactivamente.</p>`;
-  }
-  if (d.reasons.length) html += `<h3 class="sec" style="margin:12px 0 6px">Motivos de rechazo</h3><div>` +
-    d.reasons.map(r => `<span class="tag down" style="margin:0 4px 4px 0">${esc(tReason(r))}</span>`).join("") + "</div>";
-  if (d.detail) html += `<p class="foot"><code>${esc(d.detail)}</code></p>`;
-  $("audit-detail").innerHTML = html;
-}
-
-const COMP_ES = { data: "Datos", analysis: "Análisis", setup: "Setups", signal: "Señales",
-  risk: "Riesgo", ghost: "GHOST", output: "Salida", discord: "Discord" };
-const COMP_TONE = { OK: "good", DEGRADED: "warning", DOWN: "critical", DISABLED: "ink-3", UNKNOWN: "ink-3" };
-
-async function renderEngine() {
-  const st = S.status;
-  const comps = st?.components || {};
-  $("components").innerHTML = Object.keys(comps).length
-    ? Object.entries(comps).map(([k, v]) => {
-      const tone = css("--" + (COMP_TONE[v.status] || "ink-3"));
-      return `<div class="compc"><div class="cn">${esc(COMP_ES[k] || k)}</div>
-        <div class="cs" style="color:${tone}"><span class="dot" style="background:${tone}"></span>${esc(v.status)}</div>
-        ${v.detail ? `<div class="cd">${esc(v.detail)}</div>` : ""}</div>`;
-    }).join("") : `<div class="empty">Sin componentes reportados.</div>`;
-  const svc = await pollService();
-  $("svc-cycles").textContent = svc?.cycles_run ?? svc?.tick_count ?? "—";
-  const row = (k, v) => `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;
-  $("engine-kv").innerHTML = row("Estado", esc(st?.status || "—")) + row("Conexión", esc(st?.connection || "—"))
-    + row("Arrancado", esc(st?.started_at ? dhm(st.started_at) : "—"))
-    + row("Último ciclo", esc(st?.last_run_at ? dhm(st.last_run_at) : "—"))
-    + row("Operaciones hoy", st?.trades_today ?? 0)
-    + row("P&amp;L realizado hoy", `<span class="${cls(st?.daily_realized_pnl)}">${sgn(st?.daily_realized_pnl ?? 0)}</span>`)
-    + row("GHOST", st?.ghost?.enabled ? "Activo" : "Desactivado")
-    + row("Decisiones en registro", S.decisions.length);
-  const eb = $("errbox");
-  if (st?.last_error) { eb.hidden = false; eb.textContent = st.last_error; } else eb.hidden = true;
-}
-
-/* ═══════════════════════ orquestación ═══════════════════════ */
 /* ═══════════════════════ 6 · BACKTEST ═══════════════════════ */
 const BT = { opts: null, runs: [], sel: null, data: null, status: null, init: false };
 const btKey = d => `${d.symbol}|${d.data}`;
@@ -1888,7 +776,7 @@ function btTable(rows) {
     <th ${R}>PF</th><th ${R}>Neto</th><th ${R}>Caída</th><th ${R}>$ (1 ${esc(BT.data?.meta?.symbol || "")})</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function btEquitySvg(eq) {
+function btEquitySvg(eq, note = "costos incluidos") {
   if (eq.length < 2) return `<div class="empty"><span class="ic">◇</span>Pocas operaciones para una curva.</div>`;
   const W = 100, H = 170, P = { t: 10, r: 4, b: 20, l: 30 };
   const vals = [0, ...eq.map(p => p.cum)];
@@ -1906,7 +794,7 @@ function btEquitySvg(eq) {
     <polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:5px 4px 0 30px">
       <span>${esc(String(eq[0].t).slice(0, 10))}</span><span>${esc(String(eq[eq.length - 1].t).slice(0, 10))}</span></div>
-    <p class="foot">De ${num(lo, 1)}R a ${num(hi, 1)}R · ${eq.length} operaciones, costos incluidos.</p>`;
+    <p class="foot">De ${num(lo, 1)}R a ${num(hi, 1)}R · ${eq.length} operaciones${note ? ", " + note : ""}.</p>`;
 }
 
 function renderBacktest() {
@@ -1975,42 +863,32 @@ function renderBacktest() {
     : `<div class="empty"><span class="ic">◇</span>Sin operaciones en este periodo.</div>`;
 }
 
-function renderAll() {
-  paintHeader(); paintNews();
-  switch (S.view) {
-    case "tape":   renderChart(); renderRead(); renderMTF(); renderOpenTrade(); renderLadder(); renderTapeLog(); break;
-    case "brain":  renderBrainTiles(); renderConfluence(); renderMarketState(); renderFactorBars(); renderScoreHist(); break;
-    case "funnel": renderFunnel(); renderRejectBars(); renderSetupConversion(); break;
-    case "trades": renderPerfTiles(); renderEquity(); renderRDist(); renderTradeTables(); break;
-    case "audit":  renderAudit(); renderEngine(); break;
-    case "backtest": renderBacktest(); break;
-  }
-}
 
-let ticking = false;
-async function refresh() {
-  if (ticking) return;
-  ticking = true;
+/* ═══════════════════════════ ciclo ═══════════════════════════ */
+function renderAll() {
+  paintHeader();
+  if (S.view === "panel") { renderChart(); renderNow(); renderToday(); renderIdeas(); }
+  else if (S.view === "history") renderHistory();
+  else if (S.view === "backtest") renderBacktest();
+  else if (S.view === "system") renderSystem();
+}
+let busy = false;
+async function refresh(force = false) {
+  if (busy) return; busy = true;
   try {
-    // Las velas son de 5 minutos: basta con pedir el gráfico cada ~15 s. Así el
-    // celular por Tailscale no descarga 600 velas cada 5 s.
-    const jobs = [pollStatus(), pollGhost(), pollDecisions(), pollTrades()];
+    const jobs = [pollStatus(), pollTrades(), pollIdeas()];
+    if (force || S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
+    if (S.view === "system") jobs.push(pollDecisions());
     if (S.view === "backtest") jobs.push(btPoll());
-    if (S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     await Promise.all(jobs);
     renderAll();
   } catch (e) { console.error(e); }
-  finally { ticking = false; }
+  finally { busy = false; }
 }
-
-function clock() { $("clock").textContent = fmtClock.format(new Date()); }
-
 (async function boot() {
   initChart();
-  renderLegend();
-  clock(); setInterval(clock, 1000);
   await pollSymbols();
-  await refresh();
+  await refresh(true);
   setInterval(refresh, 5000);
 })();
 </script>
