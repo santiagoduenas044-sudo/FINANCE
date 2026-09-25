@@ -227,3 +227,55 @@ def test_dollars_are_for_five_micros():
     from signal_engine.runtime.engine import position_usd_per_point
     g = EngineConfig.load(strategy="zones").ghost
     assert position_usd_per_point(ContractRegistry.load(), g, "NQ") == {"5 MNQ": 10.0}
+
+
+def test_missed_idea_chart_and_plan_are_kept(tmp_path):
+    """A cancelled idea keeps the announced targets and gets its own chart."""
+    pytest.importorskip("matplotlib")
+    from signal_engine.output.trade_chart import render_missed_png
+    board = IdeaBoard(tmp_path / "ideas.json")
+    board.review("NQ", [ZoneState(ZONE, ARMED, None, 15.0)], T0,
+                 window_open=True, can_announce=True)
+    board.set_plan("z1", 125.0, 150.0)
+    (gone,) = IdeaBoard(tmp_path / "ideas.json").review(
+        "NQ", [ZoneState(ZONE, CANCELLED, T0)], T0 + pd.Timedelta(minutes=5),
+        window_open=True, can_announce=False)
+    assert gone["event"] == "cancelled" and (gone["tp1"], gone["final"]) == (125.0, 150.0)
+
+    # naive bars against a tz-aware heads-up time, as the engine produces
+    bars = pd.DataFrame({"open": [100.0] * 40, "high": [101.0] * 40, "low": [96.0] * 40,
+                         "close": [97.0] * 40},
+                        index=pd.date_range("2026-09-24 10:00", periods=40, freq="1min"))
+    png = render_missed_png(bars, direction="LONG", zone_bottom=100, zone_top=110, entry=105,
+                            stop=85, tp1=125, final=150,
+                            announced_at="2026-09-24T10:20:00-04:00",
+                            reason=gone["reason"], title="IDEA #1 · NQ 1m · no se cumplió")
+    assert png[:4] == b"\x89PNG"
+    assert render_missed_png(bars, direction="SHORT", zone_bottom=100, zone_top=110, entry=105,
+                             stop=125, tp1=None, final=None)[:4] == b"\x89PNG"
+
+
+def test_cancelled_idea_goes_out_with_what_happened():
+    pytest.importorskip("matplotlib")
+    from types import SimpleNamespace
+    from signal_engine.config.schema import DiscordOutputConfig
+    from signal_engine.output.discord import DiscordOutputAdapter
+    from signal_engine.runtime.engine import BotRuntime
+    ev = {"event": "cancelled", "number": 2, "symbol": "NQ", "direction": "SHORT", "mid": 105.0,
+          "top": 110.0, "bottom": 100.0, "stop": 125.0, "tp1": 85.0, "final": 65.0,
+          "risk_points": 20.0, "zone_id": "z", "reason": "el precio tocó la zona pero no reaccionó",
+          "announced_at": T0.isoformat()}
+    bars = _bars([(100, 104, 99, 103)] * 30, start=T0 - pd.Timedelta(minutes=10))
+    rt = SimpleNamespace(data_engine=SimpleNamespace(cfg=EngineConfig.load(strategy="zones")))
+    png = BotRuntime._missed_chart(rt, bars, ev, "NQ")
+    assert png[:4] == b"\x89PNG"
+
+    sent = []
+    adapter = DiscordOutputAdapter(
+        DiscordOutputConfig(enabled=True), webhook_url="https://discord.invalid/x",
+        transport=lambda *a: pytest.fail("a chart must go as a file upload"),
+        file_transport=lambda url, payload, data, name, timeout: sent.append((payload, name)) or 200)
+    assert adapter.emit(OutputEvent.from_trade_idea(ev, image_png=png))
+    payload, name = sent[0]
+    assert "CANCELADA" in payload["embeds"][0]["title"]
+    assert payload["embeds"][0]["image"] == {"url": f"attachment://{name}"}

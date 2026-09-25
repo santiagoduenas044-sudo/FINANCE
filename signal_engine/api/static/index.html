@@ -216,6 +216,7 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .prbadge { position: absolute; left: 50%; transform: translateX(-50%); top: 6px; z-index: 2; white-space: nowrap; pointer-events: none; font: 700 11px var(--mono);
   color: var(--ink-2); background: rgba(11, 14, 19, .8); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 8px; }
 .prbadge b { color: var(--amber); letter-spacing: .08em; }
+#pr-chart:hover .prbadge { opacity: 0; }   /* al pasar el mouse manda la leyenda de la vela */
 .prbadge:empty { display: none; }
 .prtoasts { position: absolute; top: 34px; right: 140px; z-index: 4; display: flex; flex-direction: column; gap: 6px;
   pointer-events: none; align-items: flex-end; }
@@ -231,11 +232,10 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .prmenu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 0; }
 .ticket { display: grid; gap: 10px; }
 .ticket > .seg { display: grid; grid-template-columns: 1fr 1fr; }
-.tk-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.tk-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ticket label { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--ink-3); min-width: 0; }
 .ticket input, .ticket select { width: 100%; min-width: 0; }
-.tk-sum { display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; background: var(--panel-2);
-  border-radius: 7px; padding: 7px 10px; font: 12px var(--mono); color: var(--ink-3); }
+.tk-sum { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; font: 12px var(--mono); color: var(--ink-3); }
 .tk-sum b { font-weight: 700; }
 .bs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .bs button { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px; border-radius: 8px; }
@@ -253,10 +253,20 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .posact { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px; }
 .posact .pbtn { padding: 7px 2px; }
 .hint { color: var(--ink-3); font-size: 12px; margin: 10px 0 0; line-height: 1.5; }
-.acct { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+.acct { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-bottom: 4px; }
+.prlog { max-height: 280px; overflow-y: auto; }
+.card > h3 select.mini { font: 600 11px var(--mono); padding: 2px 4px; background: var(--bg); color: var(--ink-2);
+  border: 1px solid var(--rule); border-radius: 5px; text-transform: none; letter-spacing: 0; color-scheme: dark; }
+.linkbtn { color: var(--ink-3); font-size: 12px; text-decoration: underline dotted; text-underline-offset: 3px; }
+.linkbtn:hover { color: var(--ink-1); }
+.pop { position: relative; }
+.popbox { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; background: #1b2130; border: 1px solid var(--rule);
+  border-radius: 8px; padding: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); width: max-content; max-width: 300px; }
+#pr-ind.popbox { width: 250px; }
 .acct div { background: var(--panel-2); border-radius: 7px; padding: 7px 10px; display: flex; flex-direction: column; min-width: 0; }
 .acct .k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
-.acct .v { font: 700 15px var(--mono); }
+.acct .v { font: 700 15px var(--mono); white-space: nowrap; }
+.acct .v small { font-weight: 500; font-size: 11px; color: var(--ink-3); }
 .keys-help { color: var(--ink-3); font-size: 12px; line-height: 1.8; }
 .keys-help kbd { font: 11px var(--mono); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 4px;
   padding: 0 5px; color: var(--ink-1); }
@@ -407,21 +417,23 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <input type="date" id="pr-date" aria-label="Día">
         <input type="time" id="pr-time" value="09:30" step="60" aria-label="Hora de inicio (NY)">
         <button class="pbtn" id="pr-go" type="button">Ir</button>
-        <button class="pbtn" id="pr-random" type="button" title="Tecla R">🎲 Día al azar</button>
+        <button class="pbtn" id="pr-random" type="button" title="Día al azar (R)" aria-label="Día al azar">🎲</button>
         <span class="pxsep"></span>
         <button class="pbtn" id="pr-play" type="button" title="Espacio">▶ Play</button>
-        <button class="pbtn" id="pr-step" type="button" title="Flecha →">▶| Vela</button>
+        <button class="pbtn" id="pr-step" type="button" title="Siguiente vela (→)" aria-label="Siguiente vela">▶|</button>
         <select id="pr-speed" aria-label="Velocidad">
-          <option value="1">1 vela/s</option><option value="2">2 velas/s</option><option value="5" selected>5 velas/s</option>
-          <option value="10">10 velas/s</option><option value="20">20 velas/s</option></select>
+          <option value="1">1×</option><option value="2">2×</option><option value="5" selected>5×</option>
+          <option value="10">10×</option><option value="20">20×</option></select>
         <span class="fill"></span>
         <div class="seg" id="pr-tf" role="group" aria-label="Temporalidad"></div>
-      </div>
-      <div class="pxbar">
-        <span class="pxlab">Indicadores</span>
-        <div class="chips" id="pr-ind"></div>
-        <span class="fill"></span>
-        <span class="mono" id="pr-clock" style="color:var(--ink-2);font-size:12px"></span>
+        <div class="pop"><button class="pbtn" id="pr-ind-btn" type="button" aria-expanded="false">Indicadores ▾</button>
+          <div class="popbox chips" id="pr-ind" hidden></div></div>
+        <div class="pop"><button class="pbtn" id="pr-help-btn" type="button" title="Atajos" aria-label="Atajos" aria-expanded="false">?</button>
+          <div class="popbox keys-help" id="pr-help" hidden>
+            <kbd>Espacio</kbd> play/pausa · <kbd>→</kbd> siguiente vela<br><kbd>B</kbd> comprar · <kbd>S</kbd> vender ·
+            <kbd>C</kbd> cerrar<br><kbd>R</kbd> día al azar · <kbd>Esc</kbd> cancelar dibujo<br><kbd>Supr</kbd> borrar el dibujo
+            seleccionado<br><b>Clic derecho</b> en la gráfica: orden límite/stop a ese precio<br>Arrastra las líneas
+            <b>TP</b>/<b>SL</b> para moverlas · rueda = zoom</div></div>
       </div>
     </div>
     <div class="board">
@@ -432,31 +444,28 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
           <div id="pr-msg">Cargando…</div></div>
       </div></div>
       <aside class="side">
-        <div class="card"><h3>Orden <span class="r mono" id="pr-px"></span></h3><div class="body ticket">
-          <div class="seg" id="pr-otype" role="group" aria-label="Tipo de orden">
-            <button type="button" data-t="mkt" aria-pressed="true">Mercado</button>
-            <button type="button" data-t="lmt" aria-pressed="false">Límite / Stop</button></div>
-          <label id="pr-lpx-wrap" hidden>Precio de la orden<input type="number" id="pr-lpx" step="0.25"></label>
-          <div class="tk-row">
-            <label>Contratos<input type="number" id="pr-qty" value="5" min="1" step="1"></label>
-            <label>Tipo<select id="pr-inst"></select></label>
-            <label>Stop (pts)<input type="number" id="pr-sl" value="20" min="0.25" step="0.25"></label>
-            <label>Objetivo (pts)<input type="number" id="pr-tp" value="40" min="0.25" step="0.25"></label>
+        <div class="card"><h3><span id="pr-op-t">Operar</span> <select id="pr-inst" class="mini" aria-label="Contrato"></select>
+          <span class="r mono" id="pr-px"></span></h3>
+          <div class="body ticket" id="pr-ticket">
+            <div class="seg" id="pr-otype" role="group" aria-label="Tipo de orden">
+              <button type="button" data-t="mkt" aria-pressed="true">Mercado</button>
+              <button type="button" data-t="lmt" aria-pressed="false">Límite / Stop</button></div>
+            <label id="pr-lpx-wrap" hidden>Precio de la orden<input type="number" id="pr-lpx" step="0.25"></label>
+            <div class="tk-row">
+              <label>Contratos<input type="number" id="pr-qty" value="5" min="1" step="1"></label>
+              <label>Stop pts<input type="number" id="pr-sl" value="20" min="0.25" step="0.25"></label>
+              <label>Objetivo pts<input type="number" id="pr-tp" value="40" min="0.25" step="0.25"></label>
+            </div>
+            <div class="bs">
+              <button class="sell" id="pr-sell" type="button"><small>Vender</small><b id="pr-bid">—</b></button>
+              <button class="buy" id="pr-buy" type="button"><small>Comprar</small><b id="pr-ask">—</b></button>
+            </div>
+            <div class="tk-sum" id="pr-sum"></div>
           </div>
-          <div class="tk-sum" id="pr-sum"></div>
-          <div class="bs">
-            <button class="sell" id="pr-sell" type="button"><small>Vender · S</small><b id="pr-bid">—</b></button>
-            <button class="buy" id="pr-buy" type="button"><small>Comprar · B</small><b id="pr-ask">—</b></button>
-          </div>
-        </div></div>
-        <div class="card"><h3>Posición</h3><div class="body" id="pr-pos"></div></div>
-        <div class="card"><h3>Cuenta de práctica <span class="r"><button class="pbtn" id="pr-reset" type="button">Reiniciar</button></span></h3>
-          <div class="body"><div class="acct" id="pr-acct"></div><ul class="ideas" id="pr-log"></ul></div></div>
-        <div class="card"><h3>Atajos</h3><div class="body keys-help">
-          <kbd>Espacio</kbd> play/pausa · <kbd>→</kbd> siguiente vela · <kbd>B</kbd> comprar · <kbd>S</kbd> vender ·
-          <kbd>C</kbd> cerrar · <kbd>R</kbd> día al azar · <kbd>Esc</kbd> cancelar dibujo · <kbd>Supr</kbd> borrar dibujo
-          seleccionado · <b>clic derecho</b> en la gráfica: orden límite/stop a ese precio · arrastra las líneas
-          <b>TP</b>/<b>SL</b> para moverlas · rueda = zoom</div></div>
+          <div class="body" id="pr-pos" hidden></div>
+        </div>
+        <div class="card"><h3>Cuenta <span class="r"><button class="linkbtn" id="pr-reset" type="button">Reiniciar</button></span></h3>
+          <div class="body"><div class="acct" id="pr-acct"></div><ul class="ideas prlog" id="pr-log"></ul></div></div>
       </aside>
     </div>
     <div class="prmenu" id="pr-menu" hidden></div>
@@ -1095,8 +1104,7 @@ const ICON = {
   hide: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>' };
 const TOOLS = [["cursor", "Cursor (Esc)"], "|", ["segment", "Línea de tendencia"], ["rayLine", "Rayo"],
-  ["horizontalStraightLine", "Línea horizontal"], ["horizontalRayLine", "Rayo horizontal"],
-  ["verticalStraightLine", "Línea vertical"], ["parallelStraightLine", "Canal paralelo"],
+  ["horizontalStraightLine", "Línea horizontal"], ["parallelStraightLine", "Canal paralelo"],
   ["fibonacciLine", "Retroceso de Fibonacci"], ["prRect", "Rectángulo / zona"], ["simpleAnnotation", "Nota de texto"], "|",
   ["planL", "Posición larga (planear)"], ["planS", "Posición corta (planear)"], "|",
   ["magnet", "Imán: pega el dibujo al OHLC"], ["hide", "Ocultar / mostrar dibujos"], ["trash", "Borrar todos los dibujos"]];
@@ -1205,9 +1213,10 @@ function prStyles() {
         noChangeBorderColor: ink3, upWickColor: GOOD, downWickColor: BAD, noChangeWickColor: ink3 },
       priceMark: { high: { color: ink3 }, low: { color: ink3 },
         last: { upColor: GOOD, downColor: BAD, noChangeColor: ink3, line: { style: "dashed", dashedValue: [2, 2] }, text: { family: mono } } },
-      tooltip: { title: { color: "#eef1f5", family: mono, size: 12 }, legend: { color: ink2, family: mono, size: 11 } } },
+      // los datos de la vela solo al pasar el mouse: la gráfica limpia
+      tooltip: { showRule: "follow_cross", title: { color: "#eef1f5", family: mono, size: 12 }, legend: { color: ink2, family: mono, size: 11 } } },
     indicator: { bars: [bar], lastValueMark: { show: false },
-      tooltip: { title: { color: ink3, family: mono, size: 11 }, legend: { color: ink2, family: mono, size: 11 } } },
+      tooltip: { showRule: "follow_cross", title: { color: ink3, family: mono, size: 11 }, legend: { color: ink2, family: mono, size: 11 } } },
     xAxis: axis, yAxis: axis, separator: { color: rule },
     crosshair: { horizontal: cross, vertical: cross },
     overlay: { point: { color: "#ffb020", borderColor: "rgba(255,176,32,.35)", activeColor: "#ffb020", activeBorderColor: "rgba(255,176,32,.35)" },
@@ -1218,10 +1227,10 @@ function prStyles() {
 async function prInit() {
   if (PR.init) { prPaint(); return; }
   PR.init = true;
-  PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, ema50: false, ema200: false, vwap: true, vol: true });
+  PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, vol: true });
   PR.log = lsGet("pr.log", []);
   try { PR.ds = (await api("/api/backtest/options")).datasets || []; } catch { PR.ds = []; }
-  $("pr-data").innerHTML = PR.ds.length ? PR.ds.map((d, i) => `<option value="${i}">${esc(d.symbol)} · ${esc(d.data)} (${esc(d.first)} → ${esc(d.last)})</option>`).join("")
+  $("pr-data").innerHTML = PR.ds.length ? PR.ds.map((d, i) => `<option value="${i}" title="${esc(d.first)} → ${esc(d.last)}">${esc(d.symbol)} · ${esc(d.data)}</option>`).join("")
     : `<option>sin datos descargados</option>`;
   const best = PR.ds.findIndex(d => d.data === "DATABENTO");
   if (best >= 0) $("pr-data").value = best;
@@ -1261,7 +1270,7 @@ function prAfterLoad() {
 
 function prInstOptions() {
   const [[mk, mv], [bk, bv]] = PV[PR.sym] || PV.NQ;
-  $("pr-inst").innerHTML = `<option value="${mv}" data-k="${mk}" selected>${mk} ($${mv}/pt)</option><option value="${bv}" data-k="${bk}">${bk} ($${bv}/pt)</option>`;
+  $("pr-inst").innerHTML = `<option value="${mv}" data-k="${mk}" selected>${mk} · $${mv}/pt</option><option value="${bv}" data-k="${bk}">${bk} · $${bv}/pt</option>`;
 }
 
 function prIndButtons() {
@@ -1470,11 +1479,17 @@ $("pr-pos").onclick = e => {
   } else if (a === "rev" && p && b) { const q = p.qty, dir = isLong(p.dir) ? "SHORT" : "LONG"; prExit(null, "Invertir"); prFill(dir, b.c, b.t, { ...prTicket(), qty: q }, "Invertida"); }
   else if (a === "cancel") prCancelOrder();
 };
+for (const [btn, box] of [["pr-ind-btn", "pr-ind"], ["pr-help-btn", "pr-help"]]) {
+  $(btn).onclick = e => { e.stopPropagation(); const open = $(box).hidden;
+    ["pr-ind", "pr-help"].forEach(x => $(x).hidden = true); $(box).hidden = !open; $(btn).setAttribute("aria-expanded", open); };
+  $(box).addEventListener("click", e => e.stopPropagation());
+}
+document.addEventListener("click", () => { $("pr-ind").hidden = $("pr-help").hidden = true; });
 $("pr-reset").onclick = () => { if (confirm("¿Reiniciar la cuenta de práctica y borrar el historial?")) { PR.log = []; lsSet("pr.log", []); prDrawHist(); prLog(); prPaint(); } };
 
 function prKey(e) {
   const k = e.key.toLowerCase();
-  if (e.key === "Escape") { prCancelTool(); prMenuHide(); return; }
+  if (e.key === "Escape") { prCancelTool(); prMenuHide(); $("pr-ind").hidden = $("pr-help").hidden = true; return; }
   if ((e.key === "Delete" || e.key === "Backspace") && PR.sel && PR.kl) { e.preventDefault(); PR.kl.removeOverlay({ id: PR.sel }); PR.sel = null; return; }
   if (e.shiftKey) return;                      // Shift+flechas / Shift± = mover y zoom de la gráfica
   if (k === " ") { e.preventDefault(); prPlay(); }
@@ -1670,62 +1685,60 @@ function prDrawHist() {
 function prToast(msg, tone = "") {
   const box = $("pr-toasts"), el = document.createElement("div");
   el.className = "prtoast " + tone; el.textContent = msg; box.prepend(el);
-  while (box.children.length > 4) box.lastChild.remove();
+  while (box.children.length > 2) box.lastChild.remove();
   setTimeout(() => el.classList.add("out"), 3200); setTimeout(() => el.remove(), 3700);
 }
 function prPaint() {
   const b = prBar(), p = PR.pos, o = PR.order;
-  $("pr-clock").textContent = b ? `${dhm(new Date(b.t * 1000))} ET · ${PR.tf}` : "";
   $("pr-badge").innerHTML = b ? `<b>REPLAY</b> · ${esc(PR.sym)} · ${esc(PR.tf)} · ${esc(fmtDay.format(new Date(b.t * 1000)))} ${esc(fmtHM.format(new Date((b.t + TF_SEC[PR.tf]) * 1000)))} ET` : "";
   const px = b ? num(b.c) : "—";
-  $("pr-bid").textContent = px; $("pr-ask").textContent = px; $("pr-px").textContent = b ? px : "";
+  $("pr-px").textContent = b ? px : "";
+  // un solo panel: el ticket cuando estás fuera, la posición (u orden) cuando estás dentro
+  $("pr-ticket").hidden = !!(p || o); $("pr-pos").hidden = !(p || o);
+  $("pr-op-t").textContent = p ? "Posición" : o ? "Orden pendiente" : "Operar";
+  $("pr-inst").disabled = !!(p || o);
   $("pr-buy").disabled = $("pr-sell").disabled = !b || !!p || !!o;
-  const tk = prTicket(), k = tk.qty * tk.ppt;
-  $("pr-sum").innerHTML = `<span>Riesgo <b class="neg">${money(-tk.slPts * k)}</b></span><span>Objetivo <b class="pos">${money(tk.tpPts * k)}</b></span>` +
-    `<span>R:R <b>${num(tk.tpPts / tk.slPts, 1)}</b></span>`;
+  let buyLab = "Comprar", sellLab = "Vender", shown = px;
   if (PR.otype === "lmt" && b) {
     const lp = tick(+$("pr-lpx").value || b.c);
-    $("pr-buy").querySelector("small").textContent = `Comprar ${prKind("LONG", lp) === "lmt" ? "límite" : "stop"} · B`;
-    $("pr-sell").querySelector("small").textContent = `Vender ${prKind("SHORT", lp) === "lmt" ? "límite" : "stop"} · S`;
-    $("pr-bid").textContent = $("pr-ask").textContent = num(lp);
-  } else { $("pr-buy").querySelector("small").textContent = "Comprar · B"; $("pr-sell").querySelector("small").textContent = "Vender · S"; }
+    buyLab += prKind("LONG", lp) === "lmt" ? " límite" : " stop";
+    sellLab += prKind("SHORT", lp) === "lmt" ? " límite" : " stop";
+    shown = num(lp);
+  }
+  $("pr-buy").querySelector("small").textContent = buyLab; $("pr-sell").querySelector("small").textContent = sellLab;
+  $("pr-bid").textContent = $("pr-ask").textContent = shown;
+  const tk = prTicket(), k = tk.qty * tk.ppt;
+  $("pr-sum").innerHTML = `<span>riesgo <b class="neg">${money(-tk.slPts * k)}</b></span><span>objetivo <b class="pos">${money(tk.tpPts * k)}</b></span>` +
+    `<span>1:${num(tk.tpPts / tk.slPts, 1)}</span>`;
 
   if (p && b) {
     const long = isLong(p.dir), pts = long ? b.c - p.entry : p.entry - b.c, usd = pts * p.qty * p.ppt, kk = p.qty * p.ppt;
+    const slUsd = (long ? p.sl - p.entry : p.entry - p.sl) * kk, tpUsd = (long ? p.tp - p.entry : p.entry - p.tp) * kk;
     $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag ${long ? "l" : "s"}">${long ? "LARGO" : "CORTO"}</span>
         ${p.qty} ${esc(p.inst)} @ ${num(p.entry)}</div>
       <div class="posbig ${cls(usd)}">${money(usd)}</div>
-      <div class="possub">${sgn(pts)} pts · ${p.risk ? sgn(pts / p.risk) + "R" : ""}</div>
-      <dl class="kv"><dt>Stop</dt><dd>${num(p.sl)} <span class="${cls((long ? p.sl - p.entry : p.entry - p.sl))}">(${money((long ? p.sl - p.entry : p.entry - p.sl) * kk)})</span></dd>
-        <dt>Objetivo</dt><dd>${num(p.tp)} <span class="pos">(${money((long ? p.tp - p.entry : p.entry - p.tp) * kk)})</span></dd>
-        <dt>Entrada</dt><dd>${esc(dhm(new Date(p.t * 1000)))}</dd></dl>
+      <div class="possub">${sgn(pts)} pts${p.risk ? ` · ${sgn(pts / p.risk)}R` : ""}</div>
+      <dl class="kv"><dt>SL</dt><dd>${num(p.sl)} <span class="${cls(slUsd)}">${money(slUsd)}</span></dd>
+        <dt>TP</dt><dd>${num(p.tp)} <span class="pos">${money(tpUsd)}</span></dd></dl>
       <div class="posact"><button class="pbtn" data-a="close" type="button">Cerrar</button>
-        <button class="pbtn" data-a="half" type="button" ${p.qty > 1 ? "" : "disabled"}>Cerrar ½</button>
-        <button class="pbtn" data-a="be" type="button">SL a BE</button><button class="pbtn" data-a="rev" type="button">Invertir</button></div>
-      <p class="hint">Arrastra las líneas <b>TP</b> y <b>SL</b> en la gráfica para moverlas.</p>`;
+        <button class="pbtn" data-a="half" type="button" title="Cerrar la mitad" ${p.qty > 1 ? "" : "disabled"}>½</button>
+        <button class="pbtn" data-a="be" type="button" title="Stop a breakeven">BE</button><button class="pbtn" data-a="rev" type="button">Invertir</button></div>`;
   } else if (o) {
-    $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag o">PENDIENTE</span>
-        ${isLong(o.dir) ? "Compra" : "Venta"} ${o.kind === "lmt" ? "límite" : "stop"} ${o.qty} ${esc(o.inst)}</div>
+    $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag o">${o.kind === "lmt" ? "LÍMITE" : "STOP"}</span>
+        ${isLong(o.dir) ? "Compra" : "Venta"} ${o.qty} ${esc(o.inst)}</div>
       <div class="posbig">${num(o.px)}</div>
-      <div class="possub">al ejecutarse: stop ${num(o.slPts)} pts · objetivo ${num(o.tpPts)} pts</div>
-      <div class="posact"><button class="pbtn" data-a="cancel" type="button" style="grid-column:span 4">Cancelar orden (C)</button></div>
-      <p class="hint">Arrastra la línea azul en la gráfica para mover el precio.</p>`;
-  } else {
-    $("pr-pos").innerHTML = `<p class="hint" style="margin:0">Sin posición. <b>B</b> / <b>S</b> compra o vende al precio actual;
-      <b>clic derecho</b> en la gráfica pone una orden límite o stop en ese precio.</p>`;
+      <div class="possub">SL ${num(o.slPts)} · TP ${num(o.tpPts)} pts al ejecutarse · arrastra la línea azul</div>
+      <div class="posact"><button class="pbtn" data-a="cancel" type="button" style="grid-column:span 4">Cancelar orden</button></div>`;
   }
   prAcct();
 }
 function prAcct() {
   const L = PR.log, n = L.length, b = prBar(), p = PR.pos;
   const real = L.reduce((s, x) => s + x.usd, 0);
-  const gw = L.filter(x => x.usd > 0).reduce((s, x) => s + x.usd, 0), gl = -L.filter(x => x.usd < 0).reduce((s, x) => s + x.usd, 0);
   const open = p && b ? (isLong(p.dir) ? b.c - p.entry : p.entry - b.c) * p.qty * p.ppt : 0;
-  const rs = L.filter(x => x.r != null && isFinite(x.r)), w = L.filter(x => x.pts > 0).length;
-  $("pr-acct").innerHTML = [["Balance", "$" + num(ACCOUNT0 + real + open, 0), ""], ["P&L abierto", money(open), cls(open)],
-    ["P&L realizado", money(real), cls(real)], ["Aciertos", n ? `${Math.round(w / n * 100)}% de ${n}` : "—", ""],
-    ["Profit factor", gl ? num(gw / gl) : gw ? "∞" : "—", ""],
-    ["Promedio", rs.length ? sgn(rs.reduce((s, x) => s + x.r, 0) / rs.length) + "R" : "—", ""]]
+  const w = L.filter(x => x.pts > 0).length;
+  $("pr-acct").innerHTML = [["Balance", "$" + num(ACCOUNT0 + real + open, 0), ""], ["Realizado", money(real), cls(real)],
+    ["Aciertos", n ? `${Math.round(w / n * 100)}%<small> · ${n}</small>` : "—", ""]]
     .map(([k, v, c]) => `<div><span class="k">${k}</span><span class="v ${c}">${v}</span></div>`).join("");
 }
 function prLog() {
@@ -1734,7 +1747,7 @@ function prLog() {
       <div><b>${x.dir === "LONG" ? "Compra" : "Venta"}</b> ${num(x.entry)} → ${num(x.exit)}
       <div class="t">${esc(dhm(new Date(x.t_in * 1000)))} · ${esc(x.why)} · ${esc(x.label)}</div></div>
       <span class="res ${cls(x.usd)}">${money(x.usd)}<br><small>${sgn(x.pts, 1)} pts</small></span></li>`).join("")
-    : `<li class="empty" style="display:block">Todavía no has practicado. Dale Play y entra con B o S.</li>`;
+    : `<li class="empty" style="display:block">Sin trades todavía. Dale Play y entra con B o S.</li>`;
 }
 
 /* ═══════════════════════════ ciclo ═══════════════════════════ */

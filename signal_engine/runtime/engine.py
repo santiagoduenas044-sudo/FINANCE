@@ -717,11 +717,15 @@ class BotRuntime:
                                   "distance": st.distance,
                                   "partial": gcfg.partial_at_tp1,
                                   "last_entry_time": gcfg.last_entry_time}
+                    self.idea_board.set_plan(ev["zone_id"], ev["plan"].get("tp1"),
+                                             ev["plan"].get("final"))
                 except Exception as exc:  # noqa: BLE001 - a plan is not worth a cycle
                     log.warning("idea plan failed (%s)", type(exc).__name__)
             try:
                 png = None
-                if ev.get("event") == "idea" and ev.get("plan"):
+                if ev.get("event") == "cancelled":
+                    png = self._missed_chart(ctx.execution.bars, ev, symbol)
+                elif ev.get("event") == "idea" and ev.get("plan"):
                     plan = ev["plan"]
                     png = self._plan_chart(
                         ctx.execution.bars, direction=ev["direction"],
@@ -743,6 +747,22 @@ class BotRuntime:
         try:
             from ..output.trade_chart import render_plan_png
             return render_plan_png(bars, **kw)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("chart render failed (%s)", type(exc).__name__)
+            return None
+
+    def _missed_chart(self, bars, ev: dict, symbol: str) -> bytes | None:
+        """Chart for an idea that did not happen: the zone and the plan that
+        was announced, and what price did instead. None when charts are off."""
+        if not self.data_engine.cfg.output.notifications.charts or bars is None or bars.empty:
+            return None
+        try:
+            from ..output.trade_chart import render_missed_png
+            return render_missed_png(
+                bars, direction=ev["direction"], zone_bottom=ev["bottom"], zone_top=ev["top"],
+                entry=ev["mid"], stop=ev["stop"], tp1=ev.get("tp1"), final=ev.get("final"),
+                announced_at=ev.get("announced_at"), reason=ev.get("reason", ""),
+                title=f"IDEA #{ev.get('number', '?')} · {symbol} 1m · no se cumplió")
         except Exception as exc:  # noqa: BLE001
             log.warning("chart render failed (%s)", type(exc).__name__)
             return None

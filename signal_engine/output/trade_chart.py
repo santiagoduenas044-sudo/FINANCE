@@ -198,3 +198,102 @@ def render_plan_png(bars: pd.DataFrame, *, direction: str, zone_bottom: float,
     fig.savefig(buf, format="png", facecolor=_BG)
     plt.close(fig)
     return buf.getvalue()
+
+
+def _bar_pos(index: pd.DatetimeIndex, when) -> int | None:
+    """Position of the bar at/just before `when` (ISO string or Timestamp),
+    tolerating a tz-aware stamp against a naive index and vice versa."""
+    if when is None or len(index) == 0:
+        return None
+    try:
+        t = pd.Timestamp(when)
+        if index.tz is not None:
+            t = t.tz_localize(index.tz) if t.tzinfo is None else t.tz_convert(index.tz)
+        elif t.tzinfo is not None:
+            t = t.tz_convert("America/New_York").tz_localize(None)
+        return max(0, int(index.searchsorted(t, side="right")) - 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def render_missed_png(bars: pd.DataFrame, *, direction: str, zone_bottom: float,
+                      zone_top: float, entry: float, stop: float, tp1: float | None,
+                      final: float | None, announced_at=None, reason: str = "",
+                      title: str = "") -> bytes:
+    """An idea that did NOT happen: the candles since the heads-up, the zone,
+    the plan that was announced (faded), and where the bot called it off."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Rectangle
+
+    at = _bar_pos(bars.index, announced_at)
+    start = max(0, (at if at is not None else len(bars) - 90) - 25)
+    window = bars.iloc[start:]
+    bars = window.tail(150)
+    n = len(bars)
+    if at is not None:
+        at = at - start - (len(window) - n)
+        at = min(at, n - 1) if at >= 0 else None      # heads-up older than the window
+    x_from = at if at is not None else 0
+    far = final if final is not None else tp1
+
+    fig, ax = plt.subplots(figsize=(9, 4.8), dpi=110)
+    fig.patch.set_facecolor(_BG)
+    ax.set_facecolor(_BG)
+    ax.add_patch(Rectangle((x_from - 0.5, zone_bottom), n - x_from + 3, zone_top - zone_bottom,
+                           facecolor="#f1c40f", alpha=0.14, edgecolor="none", zorder=0))
+    ax.text(x_from, zone_top if direction == "LONG" else zone_bottom, " ZONA",
+            color="#f1c40f", fontsize=7.5, va="bottom" if direction == "LONG" else "top")
+
+    # the plan that was announced, faded: it never started
+    right = n + 2
+    for y, color, label in ((entry, "#b2b5be", f"entrada {entry:,.2f}"),
+                            (stop, _RISK, f"SL {stop:,.2f}"),
+                            (far, _REWARD, f"TP {far:,.2f}" if far is not None else "")):
+        if y is None:
+            continue
+        ax.hlines(y, x_from, right, color=color, linewidth=0.9, linestyles="--", alpha=0.6, zorder=1)
+        ax.text(right, y, f" {label}", color=color, fontsize=7.5, va="center", alpha=0.85)
+
+    for x, (_, b) in enumerate(bars.iterrows()):
+        c = _UP if b["close"] >= b["open"] else _DOWN
+        ax.vlines(x, b["low"], b["high"], color=c, linewidth=0.8, zorder=2)
+        o, cl = sorted((b["open"], b["close"]))
+        ax.add_patch(Rectangle((x - 0.35, o), 0.7, max(cl - o, 0.25), color=c,
+                               linewidth=0, zorder=2))
+
+    if at is not None:
+        ax.axvline(at, color="#f1c40f", linewidth=0.8, linestyle=":", zorder=1)
+        ax.text(at, 0.02, f" aviso {bars.index[at]:%H:%M}", transform=ax.get_xaxis_transform(),
+                color="#f1c40f", fontsize=7.5)
+    last = bars.iloc[-1]
+    ax.plot([n - 1], [last["close"]], marker="X", markersize=9, color="#e0e0e0",
+            markeredgecolor=_BG, zorder=5)
+    ax.text(n - 1, last["close"], f"  cancelada {bars.index[-1]:%H:%M}", color="#e0e0e0",
+            fontsize=7.5, va="center", ha="right" if n > 20 else "left", zorder=5,
+            bbox={"boxstyle": "round,pad=0.2", "facecolor": _BG, "edgecolor": "none", "alpha": 0.8})
+
+    levels = [v for v in (stop, zone_bottom, zone_top, entry, far) if v is not None]
+    lo, hi = min(bars["low"].min(), *levels), max(bars["high"].max(), *levels)
+    pad = (hi - lo) * 0.06 or 1.0
+    ax.set_ylim(lo - pad, hi + pad)
+    ax.set_xlim(-1, n + 12)
+    step = max(1, n // 6)
+    ax.set_xticks(list(range(n))[::step])
+    ax.set_xticklabels([t.strftime("%H:%M") for t in bars.index[::step]], color=_FG, fontsize=8)
+    ax.tick_params(colors=_FG, labelsize=8)
+    ax.yaxis.tick_right()
+    ax.grid(color=_GRID, linewidth=0.6, zorder=0)
+    for s in ax.spines.values():
+        s.set_color(_GRID)
+    if title:
+        ax.set_title(title, color=_FG, fontsize=10, loc="left")
+    ax.text(0.01, 0.97, f"NO SE CUMPLIÓ — {reason}" if reason else "NO SE CUMPLIÓ",
+            transform=ax.transAxes, color="#000", fontsize=9, fontweight="bold", va="top", zorder=7,
+            bbox={"boxstyle": "round,pad=0.35", "facecolor": "#b2b5be", "edgecolor": "none"})
+    buf = io.BytesIO()
+    fig.tight_layout()
+    fig.savefig(buf, format="png", facecolor=_BG)
+    plt.close(fig)
+    return buf.getvalue()

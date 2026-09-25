@@ -42,6 +42,8 @@ class Idea:
     announced_at: str
     status: str = WATCHING
     direct: bool = False          # confirmed without a prior heads-up
+    tp1: float | None = None      # the announced plan, for the "no se cumplió" chart
+    final: float | None = None
 
     @property
     def mid(self) -> float:
@@ -129,6 +131,16 @@ class IdeaBoard:
         if events:
             self._save()
         return events
+
+    def set_plan(self, zone_id: str, tp1: float | None, final: float | None) -> None:
+        """Remember the targets announced with the heads-up, so a later
+        cancellation can show the plan that did not happen."""
+        idea = self.ideas.get(zone_id)
+        if idea is None:
+            return
+        idea.tp1 = round(tp1, 2) if tp1 is not None else None
+        idea.final = round(final, 2) if final is not None else None
+        self._save()
 
     def claim_for_trade(self, symbol: str, st: ZoneState | None, zone_id: str,
                         now: pd.Timestamp) -> Idea | None:
