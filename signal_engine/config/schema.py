@@ -422,6 +422,12 @@ class GhostConfig(BaseModel):
     # intraday move — it is closed by the clock, not by the market. None
     # disables the guard.
     last_entry_time: Optional[str] = "15:30"
+    # Daily limits on the operator's position (ghost.contracts), counted per
+    # trading day (18:00 ET -> 17:00 ET, like Apex). None disables each one.
+    # They live here, not in the RiskEngine: that engine stops at the
+    # unverified-contract warning and never reaches its own daily checks.
+    max_trades_per_day: Optional[int] = None
+    daily_loss_limit_usd: Optional[float] = None
     # Cooldown after a losing/invalidating close (in exec-timeframe bars).
     # 0 disables cooldown. Applied per symbol; TP closes do NOT trigger cooldown.
     cooldown_bars: int = 3

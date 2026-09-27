@@ -119,6 +119,10 @@ class OutputDispatcher:
         """Breakeven / trailing moved the stop into profit."""
         self._emit(OutputEvent.from_stop_moved(paper_trade_dict, old_stop))
 
+    def publish_day_done(self, payload: dict) -> None:
+        """A daily limit was reached; the bot stops trading until tomorrow."""
+        self._emit(OutputEvent.from_day_done(payload))
+
     def publish_status_digest(self, payload: dict, timestamp) -> None:
         """Periodic 'where we stand' summary for remote monitoring."""
         self._emit(OutputEvent.from_status_digest(payload, timestamp))

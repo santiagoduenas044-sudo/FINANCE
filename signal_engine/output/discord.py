@@ -136,6 +136,8 @@ def build_discord_payload(event: OutputEvent) -> dict:
         return _build_trade_tp1_payload(event)
     if event.kind == "stop_moved":
         return _build_stop_moved_payload(event)
+    if event.kind == "day_done":
+        return _build_day_done_payload(event)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
@@ -445,9 +447,35 @@ def _build_trade_tp1_payload(event: OutputEvent) -> dict:
     head = f"🎯 {name} — TP1" + (f" +{gained:.2f} pts" if gained is not None else "")
     return _embed(
         head + f" · {p.get('instrument', '?')}",
-        (f"{frac:.0%} cerrado · " if frac else "")
+        _closed_part(frac, p.get("position_label"))
         + f"stop a BE {_px(entry)} · resto a {_px(p.get('tp2'))}",
         _WIN_COLOR, event.disclaimer)
+
+
+def _closed_part(frac: float, label: str | None) -> str:
+    """'Cerré 3 MNQ · quedan 2 · ' for a '5 MNQ' position, else '60% cerrado · '."""
+    if not frac:
+        return ""
+    try:
+        n, contract = label.split(" ", 1)
+        n = int(n)
+        k = round(frac * n)
+        if 0 < k < n:
+            return f"Cerré {k} {contract} · quedan {n - k} · "
+    except (AttributeError, ValueError):
+        pass
+    return f"{frac:.0%} cerrado · "
+
+
+def _build_day_done_payload(event: OutputEvent) -> dict:
+    p = event.status_payload or {}
+    usd = p.get("pnl_usd")
+    day = (f"Hoy: {p.get('trades', 0)} trades" +
+           (f" · {'+' if usd >= 0 else '−'}${abs(usd):,.0f}" if usd is not None else ""))
+    return _embed("🛑 Fin del día — no más trades",
+                  f"{p.get('reason', 'límite diario').capitalize()}.\n{day}\n"
+                  + ("El trade abierto sigue con su plan. " if p.get("open_trade") else "")
+                  + "Vuelvo en la próxima sesión.", _FLAT_COLOR, event.disclaimer)
 
 
 def _build_stop_moved_payload(event: OutputEvent) -> dict:

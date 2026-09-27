@@ -47,4 +47,5 @@ def test_backtest_runs_from_the_dashboard(tmp_path):
     assert runs[0]["meta"]["symbol"] == "ES" and runs[0]["total"]["n"] >= 1
     full = client.get(f"/api/backtest/runs/{runs[0]['id']}").json()
     assert {"equity", "policies", "trades", "by_hour"} <= set(full)
+    assert "3 en TP1 · 1 al final · 1 runner" in full["targets"]      # the runner split
     assert client.get("/api/backtest/runs/..%2Fetc").status_code == 404

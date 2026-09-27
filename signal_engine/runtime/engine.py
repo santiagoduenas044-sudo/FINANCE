@@ -93,6 +93,9 @@ class BotRuntime:
     events: deque = field(default_factory=lambda: deque(maxlen=_DEFAULT_MAX_EVENTS), init=False)
     trades_today: int = field(default=0, init=False)
     daily_realized_pnl: float = field(default=0.0, init=False)
+    # daily limits (ghost.max_trades_per_day / daily_loss_limit_usd)
+    _day_cache: tuple | None = field(default=None, init=False, repr=False)
+    _day_done_sent: str | None = field(default=None, init=False, repr=False)
     data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
     feed_last_update_at: dict[str, datetime] = field(default_factory=dict, init=False)
     # Phase 14: latest GHOST market-state + decision per symbol (JSON-safe), for
@@ -349,7 +352,9 @@ class BotRuntime:
                     if (t.is_open and t.instrument == symbol and t.tp1_hit
                             and t.signal_id in before_r
                             and t.signal_id not in before_tp1):
-                        self.output_dispatcher.publish_trade_tp1(t.to_dict())
+                        pv = self._point_values(symbol)
+                        self.output_dispatcher.publish_trade_tp1(
+                            {**t.to_dict(), "position_label": next(iter(pv)) if pv else None})
             if ncfg.stop_moves and before_stop:
                 for t in self.paper_tracker.open_trades:
                     old = before_stop.get(t.signal_id)
@@ -554,6 +559,19 @@ class BotRuntime:
                     self.paper_tracker.mark_processed(d.signal.signal_id)
                     _zone_rejected(d, ["active_trade"])
                     continue
+                if self._day_block(d.timestamp):
+                    rejected += 1
+                    nt = NoTrade(
+                        instrument=d.instrument, timestamp=d.timestamp,
+                        reasons=["daily_limit"], setup=d.setup,
+                        timeframe=d.signal.timeframe,
+                        candidate_direction=d.signal.direction,
+                    )
+                    self.recent_signals.append(nt)
+                    self._persist_record(nt)
+                    self.paper_tracker.mark_processed(d.signal.signal_id)
+                    _zone_rejected(d, ["daily_limit"])
+                    continue
                 # Fix 1: Risk gate BEFORE opening the paper trade.
                 # UNVERIFIED_CONTRACT_SPEC -> soft WARN, paper trade still opens.
                 # Any other rejection reason -> hard block, no paper trade.
@@ -696,9 +714,10 @@ class BotRuntime:
                        and not (gcfg.last_entry_time and hhmm >= gcfg.last_entry_time))
         busy = (self.paper_tracker is not None and self.paper_tracker.has_open(symbol))
         cooling = bool(cooldown_check and cooldown_check(symbol)[0])
+        day_done = self._day_block(ctx.decision_time) is not None
         events = self.idea_board.review(
             symbol, states, ctx.decision_time, window_open=window_open,
-            can_announce=not (busy or cooling or data_stale), rejections=rejections)
+            can_announce=not (busy or cooling or data_stale or day_done), rejections=rejections)
         ncfg = self.data_engine.cfg.output.notifications
         if not events or self.output_dispatcher is None or not ncfg.trade_ideas:
             return
@@ -750,6 +769,64 @@ class BotRuntime:
         except Exception as exc:  # noqa: BLE001
             log.warning("chart render failed (%s)", type(exc).__name__)
             return None
+
+    def _day_status(self, now) -> dict:
+        """Trades opened and P&L realized in the trading day of `now`, read
+        from the paper record itself so a restart keeps counting. Cached until
+        a trade opens or closes or the day changes (cheap in long backtests)."""
+        tr = self.paper_tracker
+        day = trading_day(now)
+        if tr is None:
+            return {"day": day, "trades": 0, "pnl_points": 0.0, "pnl_usd": 0.0}
+        key = (day, len(tr.open_trades), len(tr.closed_trades))
+        if self._day_cache is not None and self._day_cache[0] == key:
+            return self._day_cache[1]
+        trades, pts, usd, known = 0, 0.0, 0.0, True
+        for t in list(tr.open_trades) + list(tr.closed_trades):
+            if t.opened_at is not None and trading_day(t.opened_at) == day:
+                trades += 1
+        # closed trades are appended in order: walk back until an older day
+        for t in reversed(tr.closed_trades):
+            if t.closed_at is None:
+                continue
+            d = trading_day(t.closed_at)
+            if d < day:
+                break
+            if d == day:
+                pts += t.pnl_points or 0.0
+                pv = self._point_values(t.instrument)
+                if pv:
+                    usd += (t.pnl_points or 0.0) * next(iter(pv.values()))
+                else:
+                    known = False
+        out = {"day": day, "trades": trades, "pnl_points": round(pts, 2),
+               "pnl_usd": round(usd, 2) if known else None}
+        self._day_cache = (key, out)
+        return out
+
+    def _day_block(self, now) -> str | None:
+        """Why no new trade may open today (a daily limit was reached), or None."""
+        g = self.data_engine.cfg.ghost
+        if not (g.max_trades_per_day or g.daily_loss_limit_usd):
+            return None
+        st = self._day_status(now)
+        reason = None
+        if g.max_trades_per_day and st["trades"] >= g.max_trades_per_day:
+            reason = f"ya se hicieron {st['trades']} trades hoy (límite {g.max_trades_per_day})"
+        elif (g.daily_loss_limit_usd and st["pnl_usd"] is not None
+              and st["pnl_usd"] <= -g.daily_loss_limit_usd):
+            reason = f"se alcanzó la pérdida máxima del día (${g.daily_loss_limit_usd:,.0f})"
+        if reason and self._day_done_sent != st["day"] and self.output_dispatcher is not None:
+            # say it once per day, and only when it can still matter
+            has_open = self.paper_tracker is not None and bool(
+                [t for t in self.paper_tracker.open_trades if t.is_open])
+            self._day_done_sent = st["day"]
+            try:
+                self.output_dispatcher.publish_day_done(
+                    {**st, "reason": reason, "open_trade": has_open})
+            except Exception as exc:  # noqa: BLE001
+                log.warning("day-done notification failed (%s)", type(exc).__name__)
+        return reason
 
     def _missed_chart(self, bars, ev: dict, symbol: str) -> bytes | None:
         """Chart for an idea that did not happen: the zone and the plan that
@@ -1047,6 +1124,7 @@ _IDEA_REJECT_ES = {
     "invalid_session": "fuera del horario de la sesión",
     "excessive_volatility": "volatilidad excesiva en ese momento",
     "stale_data": "los datos llegaron atrasados",
+    "daily_limit": "ya se alcanzó el límite del día",
 }
 
 
@@ -1055,6 +1133,15 @@ def _idea_reject_reason(reasons: list[str]) -> str:
         if r in _IDEA_REJECT_ES:
             return "reaccionó, pero " + _IDEA_REJECT_ES[r]
     return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
+
+
+def trading_day(ts, tz: str = "America/New_York") -> str:
+    """CME trading day of a timestamp (naive = ET): the session that opens at
+    18:00 ET belongs to the next date — Sunday evening counts as Monday, the
+    same daily reset Apex uses."""
+    t = pd.Timestamp(ts)
+    t = t.tz_localize(tz) if t.tzinfo is None else t.tz_convert(tz)
+    return (t + pd.Timedelta(hours=6)).date().isoformat()
 
 
 def position_usd_per_point(registry, gcfg, symbol: str) -> dict | None:

@@ -68,6 +68,10 @@ ghost:
   min_stop_atr_mult: 0.0
   max_stop_atr_mult: 0.0
   cooldown_bars: 15                 # 15 minutes after a stop-out
+  # Stop for the day after 3 trades or once the day is down $500 on the
+  # 5-MNQ position (two full 25-pt stops). Change the numbers here.
+  max_trades_per_day: 3
+  daily_loss_limit_usd: 500
 
 output:
   notifications:

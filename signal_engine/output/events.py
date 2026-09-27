@@ -179,6 +179,17 @@ class OutputEvent:
         )
 
     @classmethod
+    def from_day_done(cls, payload: dict) -> "OutputEvent":
+        """A daily limit was reached: no more trades this trading day."""
+        return cls(
+            kind="day_done",
+            dedup_key=f"day_done:{payload.get('day', '')}",
+            title="FIN DEL DÍA",
+            disclaimer="Simulated paper trading — not financial advice.",
+            status_payload=dict(payload),
+        )
+
+    @classmethod
     def from_stop_moved(cls, paper_trade_dict: dict, old_stop: float) -> "OutputEvent":
         stop = paper_trade_dict.get("stop") or 0.0
         return cls(

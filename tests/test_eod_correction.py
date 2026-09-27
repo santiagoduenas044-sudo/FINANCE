@@ -52,7 +52,8 @@ def test_replay_turns_the_4pm_flat_into_the_real_result():
     cfg = EngineConfig.load(strategy="zones")
     new = correct.replay(old, bars, cfg)
     assert new.exit_reason.value == "EOD" and new.closed_at == _t("16:55")
-    assert new.pnl_points == pytest.approx(0.5 * 33.38 + 0.5 * (30755.5 - 30736))
+    # 5 MNQ: 3 banked at TP1, 2 closed by the flat (whole contracts, not 2.5)
+    assert new.pnl_points == pytest.approx(0.6 * 33.38 + 0.4 * (30755.5 - 30736))
 
     legacy = cfg.model_copy(update={"ghost": cfg.ghost.model_copy(
         update={"eod_close_time": None})})

@@ -19,11 +19,23 @@ This is a deliberate, documented assumption, not fabricated data.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pandas as pd
 
 from .models import ExitReason, PaperTrade, TradeStatus
+
+
+def whole_contract_partial(fraction: float, contracts: int) -> float:
+    """The TP1 partial as whole contracts, since half of 5 MNQ cannot be
+    closed: 50% of 5 -> 3 closed, 2 left (half rounds up; always at least
+    one closed and one left). One contract keeps the plain fraction."""
+    n = int(contracts or 1)
+    if n <= 1 or fraction <= 0 or fraction >= 1:
+        return fraction
+    k = min(n - 1, max(1, math.floor(n * fraction + 0.5)))
+    return k / n
 
 
 class PaperTradeTracker:
@@ -66,7 +78,8 @@ class PaperTradeTracker:
     def from_config(cls, gcfg, store_dir: str | Path | None = None) -> "PaperTradeTracker":
         """The tracker exactly as the live bot runs it for a GhostConfig."""
         return cls(store_dir=store_dir, breakeven_after_tp1=gcfg.breakeven_after_tp1,
-                   partial_at_tp1=gcfg.partial_at_tp1, be_trigger_r=gcfg.be_trigger_r,
+                   partial_at_tp1=whole_contract_partial(gcfg.partial_at_tp1, gcfg.contracts),
+                   be_trigger_r=gcfg.be_trigger_r,
                    be_offset_points=gcfg.be_offset_points, trail_start_r=gcfg.trail_start_r,
                    trail_distance_r=gcfg.trail_distance_r)
 

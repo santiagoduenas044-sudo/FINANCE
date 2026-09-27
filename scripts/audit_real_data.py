@@ -48,7 +48,7 @@ from signal_engine.data.engine import DataEngine  # noqa: E402
 from signal_engine.data.models import SESSION  # noqa: E402
 from signal_engine.data.providers.csv_provider import CsvProvider  # noqa: E402
 from signal_engine.ghost.brain import GhostBrain  # noqa: E402
-from signal_engine.paper.tracker import PaperTradeTracker  # noqa: E402
+from signal_engine.paper.tracker import PaperTradeTracker, whole_contract_partial  # noqa: E402
 from signal_engine.runtime.engine import BotRuntime, eod_due, position_usd_per_point  # noqa: E402
 from signal_engine.runtime.ideas import IdeaBoard  # noqa: E402
 from signal_engine.setups.engine import SetupEngine  # noqa: E402
@@ -220,6 +220,39 @@ TARGET_VARIANTS = {
 }
 
 
+# The position split in three (the operator's idea for 5 MNQ): 3 bank TP1,
+# 1 goes to the plan's final target, 1 runs with no target. Its own row in
+# the targets table, next to the plan as configured.
+RUNNER = "3 en TP1 · 1 al final · 1 runner"
+RUNNER_LEGS = (
+    (0.6, "tp1", {}),
+    (0.2, "final", {"be_trigger_r": 1.0}),
+    # no target: BE at 1R, trailing 1R once 2R ahead, else the 16:55 flat
+    (0.2, "far", {"be_trigger_r": 1.0, "trail_start_r": 2.0, "trail_distance_r": 1.0}),
+)
+
+
+def _runner(s, cfg, arr) -> float | None:
+    """Points of the 3/1/1 split per unit of position: each leg simulated on
+    its own on the same signal (one target each) and weighted."""
+    if not s.take_profits:
+        return None
+    ctx = s.market_context or {}
+    mid = ctx.get("zone_mid", s.entry)
+    r = abs(mid - s.stop)
+    far = mid + 20 * r if s.direction.value == "LONG" else mid - 20 * r
+    tps = {"tp1": s.take_profits[0], "final": s.take_profits[-1], "far": far}
+    flat = dict(partial_at_tp1=0.0, breakeven_after_tp1=False, be_trigger_r=None,
+                trail_start_r=None)
+    total = 0.0
+    for w, which, pol in RUNNER_LEGS:
+        t = _simulate(replace(s, take_profits=[tps[which]]), cfg, arr, {**flat, **pol})
+        if t is None:
+            return None
+        total += w * t.pnl_points
+    return total
+
+
 def _pick(k, swing_rs: list[float]) -> float:
     if not isinstance(k, tuple):
         return k
@@ -243,7 +276,8 @@ def _with_targets(s, rs: list):
 
 def _tracker(cfg, policy: dict) -> PaperTradeTracker:
     g = cfg.ghost
-    base = dict(breakeven_after_tp1=g.breakeven_after_tp1, partial_at_tp1=g.partial_at_tp1,
+    base = dict(breakeven_after_tp1=g.breakeven_after_tp1,
+                partial_at_tp1=whole_contract_partial(g.partial_at_tp1, g.contracts),
                 be_trigger_r=g.be_trigger_r, be_offset_points=g.be_offset_points,
                 trail_start_r=g.trail_start_r, trail_distance_r=g.trail_distance_r)
     return PaperTradeTracker(**{**base, **policy})
@@ -308,6 +342,9 @@ def shadow(cfg, de, exec_bars, decisions):
                 v = None if s2 is None else (t if rs is None else _simulate(s2, cfg, arr, {}))
                 if v is not None:
                     row["target_pnl"][name] = v.pnl_points
+            v = _runner(s, cfg, arr)
+            if v is not None:
+                row["target_pnl"][RUNNER] = v
         out.append(row)
     return out
 
@@ -411,7 +448,7 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
         if rows:
             print(line(f"rechazo {reason}", stats(rows, cost)))
     print("\n-- Objetivos (R:R): mismas señales aprobadas --")
-    for name in TARGET_VARIANTS:
+    for name in [*TARGET_VARIANTS, RUNNER]:
         rows = [{"pnl_pts": x["target_pnl"][name], "risk_pts": x["risk_pts"]}
                 for x in shadow_rows if name in x.get("target_pnl", {})]
         print(line(name, stats(rows, cost), pv))
@@ -489,7 +526,7 @@ def summary(symbol, cfg, strategy, contract, steps, tracker, candidates, decisio
                      for name in STOP_POLICIES},
         "targets": {name: stats([{"pnl_pts": x["target_pnl"][name], "risk_pts": x["risk_pts"]}
                                  for x in approved if name in x.get("target_pnl", {})], cost)
-                    for name in TARGET_VARIANTS},
+                    for name in [*TARGET_VARIANTS, RUNNER]},
         "equity": equity,
         "trades": trades[-500:],
     }
