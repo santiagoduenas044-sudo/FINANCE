@@ -109,3 +109,9 @@ Formato del CSV (ver `splits_ejemplo.csv`): `game_id,season,week,source,home_bet
 python3 -m pip install pytest
 python3 -m pytest sports_lab/tests
 ```
+
+## Diseño
+
+La web usa tres fuentes: Big Shoulders Display (títulos), Barlow (texto) e IBM Plex Mono (números).
+Las tres tienen licencia SIL Open Font License y vienen incluidas en `static/fonts/`, así que funcionan sin internet.
+El botón de arriba a la derecha cambia entre tema automático, día (papel) y noche.

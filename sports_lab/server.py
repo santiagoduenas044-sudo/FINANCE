@@ -61,6 +61,12 @@ class Handler(BaseHTTPRequestHandler):
         path = url.path
         if path == "/favicon.ico":
             return self._send(204, b"", "image/x-icon")
+        if path.startswith("/fonts/"):
+            name = path.rsplit("/", 1)[-1]
+            font = STATIC / "fonts" / name
+            if name.endswith(".woff2") and "/" not in name and font.is_file():
+                return self._send(200, font.read_bytes(), "font/woff2")
+            return self._send(404, {"error": "no encontrado"})
         if path in ("/", "/index.html"):
             return self._send(200, (STATIC / "index.html").read_bytes(), "text/html")
         if path == "/api/meta":
