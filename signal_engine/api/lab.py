@@ -14,6 +14,7 @@ from pathlib import Path
 
 POSITIONS = ("5mnq", "1nq", "riesgo")
 SESSIONS = ("rth", "all")
+STUDIES = ("todo", "apertura")
 
 
 class LabError(ValueError):
@@ -31,10 +32,11 @@ class LabManager:
     def running(self) -> bool:
         return self.proc is not None and self.proc.poll() is None
 
-    def start(self, *, position: str = "5mnq", sessions: str = "rth") -> dict:
+    def start(self, *, position: str = "5mnq", sessions: str = "rth",
+              estudio: str = "todo") -> dict:
         if self.running():
             raise LabError("El laboratorio ya está corriendo; espera a que termine.")
-        if position not in POSITIONS or sessions not in SESSIONS:
+        if position not in POSITIONS or sessions not in SESSIONS or estudio not in STUDIES:
             raise LabError("Opciones no válidas.")
         self.dir.mkdir(parents=True, exist_ok=True)
         run_id = time.strftime("%Y%m%d-%H%M%S")
@@ -43,10 +45,11 @@ class LabManager:
         with open(out, "w") as fh:
             self.proc = subprocess.Popen(
                 [self.python, "scripts/strategy_lab.py", "--position", position,
-                 "--sessions", sessions],
+                 "--sessions", sessions, "--estudio", estudio],
                 cwd=self.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
                 preexec_fn=(lambda: os.nice(10)) if hasattr(os, "nice") else None)
         self.current = {"id": run_id, "position": position, "sessions": sessions,
+                        "estudio": estudio,
                         "started": time.time()}
         return self.status()
 

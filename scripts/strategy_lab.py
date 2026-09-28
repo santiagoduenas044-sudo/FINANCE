@@ -121,6 +121,7 @@ class Signal:
     stop: float
     k: float | None = None        # target = k x risk from the entry...
     target: float | None = None   # ...or a fixed price
+    until: str | None = None      # "HH:MM": flat at that time of the entry day (else 16:55)
 
 
 def _minutes(ts) -> int:
@@ -147,6 +148,9 @@ def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
         if i0 < busy or i0 >= len(mk.t) or not entry_open(mk.t[i0], sessions):
             continue
         end = int(mk.eod[i0])
+        if s.until:
+            cut = pd.Timestamp(mk.t[i0]).normalize() + pd.Timedelta(s.until + ":00")
+            end = min(end, int(np.searchsorted(mk.t, cut.to_datetime64())))
         if end <= i0:
             continue
         entry = mk.o[i0]
@@ -271,13 +275,21 @@ def zones(mk: Market, tf: str, k: float, stop: str = "origen", buffer: float = 3
     return out
 
 
-def orb(mk: Market, minutes: int, k: float, stop_at: str) -> list[Signal]:
+def orb(mk: Market, minutes: int, k: float, stop_at: str, max_stop: float | None = None,
+        cap: str = "saltar", side: str | None = None, until: str | None = None,
+        last: str = "15:30") -> list[Signal]:
     """Opening-range breakout: the high/low of the first `minutes` after
-    09:30; the first 5-minute close outside it, in that direction. Stop at
-    the other side of the range (or its middle). One trade a day."""
+    09:30; the first 5-minute close outside it (before `last`), in that
+    direction. Stop at the other side of the range (or its middle). One
+    trade a day.
+
+    max_stop: a stop farther than that from the breakout close either skips
+    the day (cap="saltar") or is pulled in to that distance (cap="recortar").
+    side: only "compra" or only "venta". until: flat at that time."""
     m1, b5 = mk.m1, mk.bars("5min")
     out = []
     rth = m1.between_time("09:30", "15:59")
+    h, mnt = map(int, last.split(":"))
     for day, g in rth.groupby(rth.index.date):
         cut = pd.Timestamp(day) + pd.Timedelta(hours=9, minutes=30 + minutes)
         rng = g[g.index < cut]
@@ -286,12 +298,17 @@ def orb(mk: Market, minutes: int, k: float, stop_at: str) -> list[Signal]:
         hi, lo = rng["high"].max(), rng["low"].min()
         if hi - lo > 150:
             continue
-        after = b5[(b5.index >= cut) & (b5.index < pd.Timestamp(day) + pd.Timedelta(hours=15, minutes=30))]
+        after = b5[(b5.index >= cut) & (b5.index < pd.Timestamp(day) + pd.Timedelta(hours=h, minutes=mnt))]
         for t, row in after.iterrows():
             if row["close"] > hi or row["close"] < lo:
                 up = row["close"] > hi
                 stop = (lo if up else hi) if stop_at == "opuesto" else (hi + lo) / 2
-                out.append(Signal(row["end"].to_datetime64(), up, stop, k=k))
+                if max_stop is not None and abs(row["close"] - stop) > max_stop:
+                    if cap == "saltar":
+                        break
+                    stop = row["close"] - max_stop if up else row["close"] + max_stop
+                if side is None or (side == "compra") == up:
+                    out.append(Signal(row["end"].to_datetime64(), up, stop, k=k, until=until))
                 break
     return out
 
@@ -542,6 +559,66 @@ def variants(mk: Market, big: pd.DataFrame | None = None):
             yield f"{name} · solo si las grandes van a favor", only_with(sig, grandes), be
 
 
+def variants_orb(mk: Market):
+    """A closer look at the opening-range breakout: are its neighbours good
+    too (range length, target), and can it fit an Apex account (smaller
+    stop, earlier exit, one side only)?"""
+    for minutes in (5, 10, 15, 20, 30):
+        for k in (1.0, 1.5, 2.0, 3.0):
+            yield f"Apertura {minutes} min · TP {k:g}×", orb(mk, minutes, k, "opuesto"), None
+    for k in (1.5, 2.0):
+        for cap_pts in (60, 80):
+            yield (f"Apertura 15 min · TP {k:g}× · sin días de stop > {cap_pts} pts",
+                   orb(mk, 15, k, "opuesto", max_stop=cap_pts), None)
+        yield (f"Apertura 15 min · TP {k:g}× · stop recortado a 50 pts",
+               orb(mk, 15, k, "opuesto", max_stop=50, cap="recortar"), None)
+        for until in ("12:00", "14:00"):
+            yield f"Apertura 15 min · TP {k:g}× · cierra a las {until}", \
+                orb(mk, 15, k, "opuesto", until=until), None
+        yield f"Apertura 15 min · TP {k:g}× · entrada solo antes de 11:00", \
+            orb(mk, 15, k, "opuesto", last="11:00"), None
+        yield f"Apertura 15 min · TP {k:g}× · BE+2 al 70%", orb(mk, 15, k, "opuesto"), 0.7
+    for side in ("compra", "venta"):
+        yield f"Apertura 15 min · TP 1.5× · solo {side}", orb(mk, 15, 1.5, "opuesto", side=side), None
+
+
+def streak(p: list[float]) -> tuple[int, float]:
+    """Longest run of losing trades in a row, and what it cost."""
+    best, cur, cost, run_cost = 0, 0, 0.0, 0.0
+    for x in p:
+        if x < 0:
+            cur, run_cost = cur + 1, run_cost + x
+            if cur > best:
+                best, cost = cur, run_cost
+        else:
+            cur, run_cost = 0, 0.0
+    return best, cost
+
+
+def apex_table(rows, raws: dict, apex_dd: float) -> None:
+    """With 1 and 2 MNQ: net, per year, worst drop and worst losing streak,
+    against the account's allowed drawdown."""
+    print(f"\n== ¿Cabe en la cuenta? (peor caída contra el límite de ${apex_dd:,.0f}) ==")
+    print(f"  {'':<56} {'MNQ':>3} {'neto':>11} {'por año':>9} {'peor caída':>11} "
+          f"{'racha mala':>16}")
+    good = [r for r in rows if r["ok"]] or sorted(
+        (r for r in rows if r["test"]["n"]), key=lambda r: -r["test"]["conf"])[:5]
+    for r in sorted(good, key=lambda r: -r["test"]["conf"])[:10]:
+        days = raws[r["name"]]
+        pts = [p for _, p, *_ in days]
+        span = (pd.Timestamp(days[-1][0]) - pd.Timestamp(days[0][0])).days / 365.25 if days else 1
+        for n in (1, 2):
+            usd_ = [p * 2.0 * n for p in pts]
+            st = stats(usd_)
+            ln, lc = streak(usd_)
+            fits = "✔" if st["dd"] <= apex_dd and st["net"] > 0 else "✘"
+            print(f"  {fits} {r['name'][:54]:<54} {n:>3} {usd(st['net'], 1):>11} "
+                  f"{usd(st['net'] / max(span, 0.5), 1):>9} {usd(-st['dd'], 1):>11} "
+                  f"{ln:>3} seguidas {usd(lc, 1):>7}")
+    print("  (✔ = gana y su peor caída cabe en el límite; la cuenta real mide también lo"
+          " no realizado, así que deja margen)")
+
+
 # --------------------------------------------------------------------------- #
 # report
 # --------------------------------------------------------------------------- #
@@ -599,6 +676,10 @@ def main() -> int:
     ap.add_argument("--slip-ticks", type=float, default=1.0, help="deslizamiento por lado")
     ap.add_argument("--sessions", choices=("rth", "all"), default="rth")
     ap.add_argument("--min-n", type=int, default=60, help="trades mínimos en TRAIN y en TEST")
+    ap.add_argument("--estudio", choices=("todo", "apertura"), default="todo",
+                    help="apertura: solo la ruptura de apertura, a fondo")
+    ap.add_argument("--apex-dd", type=float, default=2500.0,
+                    help="caída máxima que permite la cuenta (Apex 50K ≈ $2,500)")
     ap.add_argument("--json-out")
     a = ap.parse_args()
 
@@ -609,23 +690,25 @@ def main() -> int:
         label = f"riesgo fijo ${a.risk_usd:,.0f} por trade (1 a {MAX_MICROS} MNQ)"
     t0 = time.time()
     mk = Market(load_1m(a.symbol, a.data, a.start, a.end))
-    big = load_megacaps(a.start, a.end)
+    big = load_megacaps(a.start, a.end) if a.estudio == "todo" else None
     print(f"== Laboratorio · {a.symbol} {a.start} → {a.end} · {label} · costo "
           f"{cost:.2f} pts/trade ({'por MNQ ' if riesgo else ''}${cost * pv:,.2f}) · entradas "
           f"{'09:30-15:30' if a.sessions == 'rth' else 'día y noche'} · TRAIN < {a.split} ≤ TEST")
     print("   prom = dólares por trade después de costos · conf = qué tan lejos del azar"
           " (≥ 2 ≈ poco probable por suerte)")
-    if big is None:
+    if big is None and a.estudio == "todo":
         print("   (sin datos de las grandes —NVDA, MSFT, AAPL...—: se salta ese filtro. Para "
               "bajarlos: scripts/fetch_databento.py --stocks grandes)")
     print()
     # the same entries sized the other way, to compare fixed contracts with fixed $ risk
     alt = "5mnq" if riesgo else "riesgo"
     alt_pv, alt_label = POSITIONS[alt][1], ("5 MNQ fijos" if riesgo else f"riesgo fijo ${a.risk_usd:,.0f}")
-    rows = []
-    for name, sig, be in variants(mk, big):
+    rows, raws = [], {}
+    grid = variants_orb(mk) if a.estudio == "apertura" else variants(mk, big)
+    for name, sig, be in grid:
         raw = run(mk, sig, cost, a.sessions, be_at=be,
                   max_risk=a.risk_usd / pv if riesgo else None)
+        raws[name] = raw
         trades = sized_usd(raw, a.position, pv, a.risk_usd)
         tr = stats([t[1] for t in trades if t[0] < a.split])
         te = stats([t[1] for t in trades if t[0] >= a.split])
@@ -682,6 +765,7 @@ def main() -> int:
                           else f"{'—':>10} {'—':>11}")
         print(f"  {r['name']:<62} {cell(s)}   {cell(o)}")
     print(f"  (izquierda: {label} · derecha: {alt_label})")
+    apex_table(rows, raws, a.apex_dd)
     print(f"\n({time.time() - t0:.0f} s)")
     if a.json_out:
         Path(a.json_out).write_text(json.dumps({"meta": {**vars(a), "cost_pts": cost, "pv": pv,

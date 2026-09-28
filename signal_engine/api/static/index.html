@@ -379,6 +379,7 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <div class="ph"><span class="mn">LAB</span><h2>Laboratorio de estrategias</h2><div class="gap"></div>
           <span class="pill"><span class="v" id="lab-state">—</span></span></div>
         <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="lab-est" aria-label="Estudio"><option value="todo">Todas las ideas</option><option value="apertura">Ruptura de apertura a fondo</option></select>
           <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ fijos</option><option value="1nq">1 NQ fijo</option><option value="riesgo">Riesgo fijo $300</option></select>
           <select id="lab-ses" aria-label="Horario"><option value="rth">09:30–15:30</option><option value="all">día y noche</option></select>
           <button class="pbtn on" id="lab-go" type="button">Correr laboratorio (~3–5 min)</button></div>
@@ -1033,7 +1034,7 @@ async function labPoll() {
 }
 $("lab-go").onclick = async () => {
   try {
-    await api(`/api/lab/run?position=${$("lab-pos").value}&sessions=${$("lab-ses").value}`, { method: "POST" });
+    await api(`/api/lab/run?position=${$("lab-pos").value}&sessions=${$("lab-ses").value}&estudio=${$("lab-est").value}`, { method: "POST" });
     $("lab-wrap").hidden = false; $("lab-out").textContent = "Corriendo… la primera vez prepara los datos (1–2 min).";
     labPoll();
   } catch (e) { $("lab-state").textContent = "⚠ " + e.message; }

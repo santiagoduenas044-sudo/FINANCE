@@ -170,3 +170,31 @@ def test_megacap_download_splits_by_ticker():
     df = pd.DataFrame({"symbol": ["NVDA", "AAPL", "NVDA"], "close": [1.0, 2.0, 3.0]})
     parts = fd.split_by_symbol(df, ("NVDA", "AAPL", "TSLA"))
     assert sorted(parts) == ["AAPL", "NVDA"] and len(parts["NVDA"]) == 2
+
+
+def test_exit_at_a_set_time():
+    rows = [(100, 100, 100, 100)] + [(100, 101, 99, 100.5)] * 200      # 10:00 → 13:20
+    mk = _market(rows)
+    trades = lab.run(mk, [lab.Signal(mk.t[0], True, 90.0, k=3.0, until="12:00")], 0.0, "rth")
+    assert trades == [("2025-03-03", 0.5, 10.0, 10)]                      # closed before 12:00
+
+
+def _orb_day(range_pts, breakout_close):
+    """09:30-09:45 range of `range_pts`, then a 5-minute close at `breakout_close`."""
+    rows = [(100, 100 + range_pts, 100, 100)] * 15
+    rows += [(100, max(100, breakout_close), min(100, breakout_close), breakout_close)] * 5
+    rows += [(breakout_close, breakout_close + 1, breakout_close - 1, breakout_close)] * 30
+    return _market(rows, start="2025-03-03 09:30")
+
+
+def test_opening_range_stop_limits_and_one_side():
+    mk = _orb_day(70, 180)                               # range 100-170, closes at 180: stop 80 pts
+    assert lab.orb(mk, 15, 1.5, "opuesto")[0].stop == 100
+    assert lab.orb(mk, 15, 1.5, "opuesto", max_stop=60) == []                 # day skipped
+    assert lab.orb(mk, 15, 1.5, "opuesto", max_stop=50, cap="recortar")[0].stop == 130
+    assert lab.orb(mk, 15, 1.5, "opuesto", side="venta") == []
+    assert lab.orb(mk, 15, 1.5, "opuesto", side="compra")[0].long
+
+
+def test_losing_streak():
+    assert lab.streak([10, -1, -2, 5, -1, -1, -1, 3]) == (3, -3.0)
