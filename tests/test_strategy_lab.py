@@ -55,7 +55,7 @@ def test_flat_at_1655():
     mk = _market(rows, start="2025-03-03 15:20")
     trades = lab.run(mk, [lab.Signal(mk.t[0], True, 90.0, k=3.0)], 0.0, "rth")
     # entry 15:21, nothing hit: closed on the 16:54 minute, the last before 16:55
-    assert trades == [("2025-03-03", 0.5, 10.0)]           # (date, points, stop points)
+    assert trades == [("2025-03-03", 0.5, 10.0, 15)]       # (date, points, stop pts, hour)
 
 
 def test_zone_signals_wait_for_the_bar_to_close():
@@ -73,8 +73,16 @@ def test_zone_signals_wait_for_the_bar_to_close():
 def test_fixed_dollar_risk_sizes_in_micros():
     trades = [("d", 50.0, 25.0), ("d", -25.0, 25.0), ("d", 10.0, 3.0), ("d", -1.0, 200.0)]
     # $300 / (25 pts x $2) = 6 MNQ; a 3-pt stop is capped at 15 MNQ; a 200-pt stop does not fit
-    assert lab.sized_usd(trades, "riesgo", 2.0, 300.0) == [("d", 600.0), ("d", -300.0), ("d", 300.0)]
-    assert lab.sized_usd(trades[:1], "5mnq", 10.0, 300.0) == [("d", 500.0)]
+    assert [x[:2] for x in lab.sized_usd(trades, "riesgo", 2.0, 300.0)] == [
+        ("d", 600.0), ("d", -300.0), ("d", 300.0)]
+    assert lab.sized_usd(trades[:1], "5mnq", 10.0, 300.0) == [("d", 500.0, 25.0)]
+
+
+def test_results_by_entry_hour():
+    trades = [("d", 100.0, 20.0, 9), ("d", -50.0, 30.0, 9), ("d", 30.0, 10.0, 13)]
+    h = lab.by_hour(trades)
+    assert list(h) == [9, 13]
+    assert h[9]["n"] == 2 and h[9]["net"] == 50.0 and h[9]["stop"] == 25.0
 
 
 def test_run_skips_stops_wider_than_the_sizing_allows():

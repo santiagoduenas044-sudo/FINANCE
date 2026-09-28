@@ -137,8 +137,9 @@ def entry_open(ts, sessions: str) -> bool:
 
 def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
         be_at: float | None = None, be_plus: float = 2.0,
-        max_risk: float | None = None) -> list[tuple[str, float, float]]:
-    """One position at a time. Returns [(entry date, net points, stop points)].
+        max_risk: float | None = None) -> list[tuple[str, float, float, int]]:
+    """One position at a time. Returns [(entry date, net points, stop points,
+    entry hour ET)].
     `max_risk`: skip entries whose stop is farther than that (sizing limit)."""
     out, busy = [], 0
     for s in sorted(signals, key=lambda x: x.ready):
@@ -158,7 +159,8 @@ def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
             continue
         j, px = _exit(mk, i0, end, s.long, s.stop, tgt, entry, be_at, be_plus)
         pts = (px - entry) if s.long else (entry - px)
-        out.append((str(pd.Timestamp(mk.t[i0]).date()), pts - cost_pts, float(risk)))
+        when = pd.Timestamp(mk.t[i0])
+        out.append((str(when.date()), pts - cost_pts, float(risk), when.hour))
         busy = j + 1
     return out
 
@@ -477,6 +479,9 @@ def only_with(signals: list[Signal], side_fn) -> list[Signal]:
     return [s for s in signals if side_fn(s.ready) == (1.0 if s.long else -1.0)]
 
 
+BOT_LIKE = "Zonas 1 min · TP 3× stop · BE+2 al 70%"     # the closest row to the live bot
+
+
 def variants(mk: Market, big: pd.DataFrame | None = None):
     """(name, signals, BE rule) — a small grid per idea, so a ✔ is not just
     the one lucky setting out of hundreds."""
@@ -556,18 +561,29 @@ def usd(pts: float, pv: float) -> str:
     return f"{'+' if pts >= 0 else '−'}${abs(pts * pv):,.0f}"
 
 
-def sized_usd(trades, position: str, pv: float, risk_usd: float) -> list[tuple[str, float]]:
-    """[(date, net $)]. A fixed position: points x its $/pt. "riesgo": as
-    many MNQ as fit the stop in risk_usd (at most MAX_MICROS); the costs in
-    points are the same per micro, so every micro adds the same result."""
+def sized_usd(trades, position: str, pv: float, risk_usd: float) -> list[tuple]:
+    """[(date, net $, stop pts, *rest)] from run()'s (date, points, stop, *rest).
+    A fixed position: points x its $/pt. "riesgo": as many MNQ as fit the
+    stop in risk_usd (at most MAX_MICROS); the costs in points are the same
+    per micro, so every micro adds the same result."""
     if position != "riesgo":
-        return [(d, p * pv) for d, p, _ in trades]
+        return [(d, p * pv, risk, *rest) for d, p, risk, *rest in trades]
     out = []
-    for d, p, risk in trades:
+    for d, p, risk, *rest in trades:
         n = min(MAX_MICROS, int(risk_usd // (risk * pv)))
         if n >= 1:
-            out.append((d, n * p * pv))
+            out.append((d, n * p * pv, risk, *rest))
     return out
+
+
+def by_hour(trades) -> dict[int, dict]:
+    """Per entry hour: trades, win rate, net $, average stop (pts). `trades`
+    are run()'s tuples already sized: (date, $, stop pts, hour)."""
+    hours: dict[int, list] = {}
+    for d, usd_, risk, hour in trades:
+        hours.setdefault(hour, []).append((usd_, risk))
+    return {h: {**stats([u for u, _ in v]), "stop": float(np.mean([r for _, r in v]))}
+            for h, v in sorted(hours.items())}
 
 
 def main() -> int:
@@ -603,22 +619,28 @@ def main() -> int:
         print("   (sin datos de las grandes —NVDA, MSFT, AAPL...—: se salta ese filtro. Para "
               "bajarlos: scripts/fetch_databento.py --stocks grandes)")
     print()
+    # the same entries sized the other way, to compare fixed contracts with fixed $ risk
+    alt = "5mnq" if riesgo else "riesgo"
+    alt_pv, alt_label = POSITIONS[alt][1], ("5 MNQ fijos" if riesgo else f"riesgo fijo ${a.risk_usd:,.0f}")
     rows = []
     for name, sig, be in variants(mk, big):
-        trades = run(mk, sig, cost, a.sessions, be_at=be,
-                     max_risk=a.risk_usd / pv if riesgo else None)
-        trades = sized_usd(trades, a.position, pv, a.risk_usd)
-        tr = stats([p for d, p in trades if d < a.split])
-        te = stats([p for d, p in trades if d >= a.split])
+        raw = run(mk, sig, cost, a.sessions, be_at=be,
+                  max_risk=a.risk_usd / pv if riesgo else None)
+        trades = sized_usd(raw, a.position, pv, a.risk_usd)
+        tr = stats([t[1] for t in trades if t[0] < a.split])
+        te = stats([t[1] for t in trades if t[0] >= a.split])
         # a ✔ must earn money in BOTH periods and not by a hair (conf ≥ 1 in each)
         ok = (tr["n"] >= a.min_n and te["n"] >= a.min_n and tr["avg"] > 0 and te["avg"] > 0
               and tr["conf"] >= 1.0 and te["conf"] >= 1.0)
         years: dict[str, list[float]] = {}
-        for d, p in trades:
-            years.setdefault(d[:4], []).append(p)
+        for t in trades:
+            years.setdefault(t[0][:4], []).append(t[1])
+        hours = by_hour(trades)
         rows.append({"name": name, "ok": ok, "train": tr, "test": te,
-                     "all": stats([p for _, p in trades]),
-                     "years": {y: stats(v) for y, v in sorted(years.items())}})
+                     "all": stats([t[1] for t in trades]),
+                     "alt": stats([t[1] for t in sized_usd(raw, alt, alt_pv, a.risk_usd)]),
+                     "years": {y: stats(v) for y, v in sorted(years.items())},
+                     "hours": hours})
         f = lambda s: (f"{s['n']:>5} gana {s['wr']:>4.0%} prom {usd(s['avg'], 1):>6}"   # noqa: E731
                        f" neto {usd(s['net'], 1):>9} conf {s['conf']:+.1f}") if s["n"] else "    0"
         print(f"{'✔' if ok else '✘'} {name:<62} TRAIN {f(tr)}   TEST {f(te)}", flush=True)
@@ -632,6 +654,34 @@ def main() -> int:
               f"{usd(-s['dd'], 1)}")
         for y, ys in r["years"].items():
             print(f"    {y}: {ys['n']:>4} trades  neto {usd(ys['net'], 1):>9}  gana {ys['wr']:.0%}")
+
+    # by hour: the bot's own idea, the ✔ ones (or the best in TEST if none)
+    bot = [r for r in rows if r["name"] == BOT_LIKE]
+    picks = bot + (sorted(good, key=lambda r: -r["test"]["conf"])[:5] or
+                   sorted((r for r in rows if r["test"]["n"]), key=lambda r: -r["test"]["conf"])[:3])
+    print("\n== Por hora de entrada (todo el periodo): cuánto deja cada hora y qué tan grande es el stop ==")
+    seen = set()
+    for r in picks:
+        if r["name"] in seen or not r["hours"]:
+            continue
+        seen.add(r["name"])
+        print(f"\n  {r['name']}{'  (lo más parecido al bot)' if r['name'] == BOT_LIKE else ''}")
+        for h, hs in r["hours"].items():
+            print(f"    {h:02d}h  {hs['n']:>5} trades  gana {hs['wr']:>4.0%}  neto {usd(hs['net'], 1):>9}"
+                  f"  prom {usd(hs['avg'], 1):>6}  stop prom {hs['stop']:5.1f} pts")
+
+    # fixed contracts vs fixed $ risk, same entries
+    print(f"\n== {label} vs {alt_label} (mismas entradas, todo el periodo) ==")
+    print(f"  {'':<62} {'neto':>10} {'peor caída':>11}   {'neto':>10} {'peor caída':>11}")
+    top = sorted(rows, key=lambda r: -max(r["all"].get("net", -1e18), r["alt"].get("net", -1e18)))[:15]
+    for r in bot + [r for r in top if r not in bot]:
+        s, o = r["all"], r["alt"]
+        if not s["n"] and not o["n"]:
+            continue
+        cell = lambda x: (f"{usd(x['net'], 1):>10} {usd(-x['dd'], 1):>11}" if x["n"]   # noqa: E731
+                          else f"{'—':>10} {'—':>11}")
+        print(f"  {r['name']:<62} {cell(s)}   {cell(o)}")
+    print(f"  (izquierda: {label} · derecha: {alt_label})")
     print(f"\n({time.time() - t0:.0f} s)")
     if a.json_out:
         Path(a.json_out).write_text(json.dumps({"meta": {**vars(a), "cost_pts": cost, "pv": pv,
