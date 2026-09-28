@@ -327,7 +327,8 @@ class BotRuntime:
     def _notify_trade_updates(self, symbol: str, just_closed: list,
                               before_r: dict[str, float],
                               before_tp1: set[str] | None = None,
-                              before_stop: dict[str, float] | None = None) -> None:
+                              before_stop: dict[str, float] | None = None,
+                              bars=None) -> None:
         """Tell the operator how a trade is going without them opening the
         dashboard: a close with realised P&L, and an R milestone crossed by a
         still-open trade. Never raises — a notification is not worth a cycle."""
@@ -337,7 +338,8 @@ class BotRuntime:
         try:
             if ncfg.trade_closed:
                 for t in just_closed:
-                    self.output_dispatcher.publish_trade_closed(t.to_dict())
+                    self.output_dispatcher.publish_trade_closed(
+                        t.to_dict(), self._close_chart(bars, t, symbol))
             if ncfg.trade_progress:
                 for t in self.paper_tracker.open_trades:
                     if not t.is_open or t.instrument != symbol:
@@ -487,7 +489,7 @@ class BotRuntime:
             except Exception:  # noqa: BLE001 - memory update never breaks the cycle
                 pass
             self._notify_trade_updates(symbol, just_closed, before_r, before_tp1,
-                                       before_stop)
+                                       before_stop, bars=bars)
 
         # 2) build market state + GHOST decisions (same analysis the setups saw).
         analysis = LazyAnalysis(self.setup_engine.analyzer, ctx)
@@ -830,6 +832,39 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 log.warning("day-done notification failed (%s)", type(exc).__name__)
         return reason
+
+    def _close_chart(self, bars, trade, symbol: str) -> bytes | None:
+        """Chart of a closed trade — boxes with the ORIGINAL stop and target,
+        where the stop was moved (BE+ / trailing) and where it exited — or
+        None when charts are off or the bars do not cover the trade."""
+        if not self.data_engine.cfg.output.notifications.charts or bars is None or bars.empty:
+            return None
+        try:
+            from ..output.trade_chart import render_trade_png
+            d = trade.to_dict()
+            long = d.get("direction") == "LONG"
+            risk = d.get("initial_risk") or 0.0
+            d["stop_initial"] = d["entry"] - risk if long else d["entry"] + risk
+            opened = pd.Timestamp(d["opened_at"]) if d.get("opened_at") else bars.index[-1]
+            if bars.index.tz is not None and opened.tzinfo is None:
+                opened = opened.tz_localize(bars.index.tz)
+            elif bars.index.tz is None and opened.tzinfo is not None:
+                opened = opened.tz_convert("America/New_York").tz_localize(None)
+            i0 = max(0, int(bars.index.searchsorted(opened)) - 30)
+            window = bars.iloc[i0:].tail(240)
+            reason = (d.get("exit_reason") or "").upper()
+            pts = d.get("pnl_points") or 0.0
+            label = {"TP1": "objetivo", "TP2": "objetivo", "EOD": "cierre 16:55",
+                     "INVALIDATION": "invalidado"}.get(reason, "stop")
+            if reason == "STOP" and pts >= 0:
+                label = "BE+" if pts > 0.01 else "breakeven"
+            num = (d.get("context") or {}).get("idea_number")
+            title = (f"IDEA #{num} · " if num is not None else "") + \
+                f"{symbol} 1m · cerró en {label} · {pts:+.2f} pts"
+            return render_trade_png(window, d, title=title)
+        except Exception as exc:  # noqa: BLE001 - a chart is never worth a cycle
+            log.warning("close chart failed (%s)", type(exc).__name__)
+            return None
 
     def _missed_chart(self, bars, ev: dict, symbol: str) -> bytes | None:
         """Chart for an idea that did not happen: the zone and the plan that

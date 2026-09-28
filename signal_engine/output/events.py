@@ -105,7 +105,8 @@ class OutputEvent:
         )
 
     @classmethod
-    def from_trade_closed(cls, paper_trade_dict: dict) -> "OutputEvent":
+    def from_trade_closed(cls, paper_trade_dict: dict,
+                          image_png: bytes | None = None) -> "OutputEvent":
         """A paper trade reached TP/stop/invalidation. Carries realised P&L so
         the operator sees the outcome without opening the dashboard.
         dedup_key is signal_id + ":closed" — distinct from the open event, so a
@@ -121,6 +122,7 @@ class OutputEvent:
             title=f"{mark} {reason} — {instrument}",
             disclaimer="Simulated paper trade — no real money, no broker connection.",
             status_payload=paper_trade_dict,
+            image_png=image_png,
         )
 
     @classmethod

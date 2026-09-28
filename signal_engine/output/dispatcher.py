@@ -98,9 +98,11 @@ class OutputDispatcher:
         Uses the trade's signal_id as dedup_key — one notification per trade."""
         self._emit(OutputEvent.from_trade_opened(paper_trade_dict, image_png))
 
-    def publish_trade_closed(self, paper_trade_dict: dict) -> None:
-        """Realised outcome of a paper trade (TP/stop/invalidation)."""
-        self._emit(OutputEvent.from_trade_closed(paper_trade_dict))
+    def publish_trade_closed(self, paper_trade_dict: dict,
+                             image_png: bytes | None = None) -> None:
+        """Realised outcome of a paper trade (TP/stop/invalidation), with a
+        chart of how it closed when one could be drawn."""
+        self._emit(OutputEvent.from_trade_closed(paper_trade_dict, image_png))
 
     def publish_trade_progress(self, paper_trade_dict: dict,
                                milestone_r: float) -> None:

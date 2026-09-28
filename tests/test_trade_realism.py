@@ -388,8 +388,9 @@ class _Recorder:
     def publish_status_digest(self, payload, timestamp):
         self.digests.append((payload, timestamp))
 
-    def publish_trade_closed(self, d):
+    def publish_trade_closed(self, d, image_png=None):
         self.closed.append(d)
+        self.closed_images = getattr(self, "closed_images", []) + [image_png]
 
     def publish_trade_progress(self, d, m):
         self.progress.append((d, m))
@@ -451,6 +452,20 @@ def test_runtime_publishes_a_close_with_realised_pnl(engine, registry):
     assert len(rec.closed) == 1
     assert rec.closed[0]["r_multiple"] == pytest.approx(2.0)
     assert rec.closed[0]["exit_reason"] == "TP1"
+
+
+def test_close_goes_out_with_a_chart_of_how_it_closed(engine, registry):
+    pytest.importorskip("matplotlib")
+    rec = _Recorder()
+    rt = _mk_runtime(engine, registry, rec)
+    t = _open_trade(rt)
+    t.status = t.status.__class__.ACTIVE
+    idx = pd.date_range("2026-06-15 09:30", "2026-06-15 10:05", freq="1min", tz="America/New_York")
+    bars = pd.DataFrame({"open": 5000.0, "high": 5002.0, "low": 4998.0, "close": 5001.0}, index=idx)
+    bar = pd.Series({"open": 5000.0, "high": 5021.0, "low": 4999.0, "close": 5020.0})
+    closed = rt.paper_tracker.update_symbol("ES", bar, idx[-1])
+    rt._notify_trade_updates("ES", closed, {t.signal_id: t.r_multiple}, bars=bars)
+    assert rec.closed_images[0][:4] == b"\x89PNG"
 
 
 def test_runtime_publishes_progress_for_a_still_open_trade(engine, registry):

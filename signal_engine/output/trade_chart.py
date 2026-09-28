@@ -65,6 +65,12 @@ def render_trade_png(bars: pd.DataFrame, trade: dict, *, title: str = "",
                 va="top" if up else "bottom", zorder=4)
         ax.text(x0 + 0.5, stop, f" SL {stop:,.2f} · {risk:.1f} pts", color=_RISK,
                 fontsize=7.5, va="bottom" if up else "top", zorder=4)
+        moved = trade.get("stop")
+        if moved is not None and trade.get("stop_initial") is not None and abs(moved - stop) > 0.01:
+            locked = (moved - entry) if final > entry else (entry - moved)
+            ax.hlines(moved, x0, x1, color="#f5a623", linewidth=1.0, linestyles="--", zorder=3)
+            ax.text(x1, moved, f" stop movido {moved:,.2f} ({locked:+.2f} pts)", color="#f5a623",
+                    fontsize=7, va="bottom" if final > entry else "top", ha="right", zorder=4)
         ax.text(x0 + 0.5, entry, f" Entrada {entry:,.2f}", color="#b2b5be", fontsize=7.5,
                 va="bottom" if not up else "top", zorder=4,
                 bbox={"boxstyle": "round,pad=0.2", "facecolor": _BG, "edgecolor": "none",

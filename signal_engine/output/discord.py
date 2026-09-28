@@ -380,7 +380,9 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
     side = _side(p.get("direction", "LONG"))
     if event.kind == "trade_idea_cancelled":
         return _embed(f"⚪ IDEA #{num} CANCELADA — {sym}",
-                      f"{p.get('reason', 'sin reacción').capitalize()}. Sin entrada.",
+                      f"{p.get('reason', 'sin reacción').capitalize()}. Sin entrada.\n"
+                      f"(Era la posible {side} en la zona {_px(p.get('bottom'))} – "
+                      f"{_px(p.get('top'))}; no tiene que ver con otras ideas abiertas.)",
                       _CANCEL_COLOR, event.disclaimer)
     plan = p.get("plan") or {}
     risk = p.get("risk_points")
@@ -490,7 +492,12 @@ def _build_stop_moved_payload(event: OutputEvent) -> dict:
     entry, stop = p.get("entry"), p.get("stop")
     long = p.get("direction", "LONG") == "LONG"
     locked = (stop - entry) if long else (entry - stop)
-    what = "stop a BE" if abs(locked) < 0.01 else f"trailing: stop a {_px(stop)}"
+    if abs(locked) < 0.01:
+        what = "stop a BE"
+    elif 0 < locked <= 5:                     # entry + a few pts that pay the costs
+        what = f"stop a BE+{locked:g} ({_px(stop)})"
+    else:
+        what = f"trailing: stop a {_px(stop)}"
     return _embed(
         f"🔒 {name} — {what} · {p.get('instrument', '?')}",
         (f"Asegura +{locked:.2f} pts" if locked >= 0.01 else "Ya no puede perder")
