@@ -65,9 +65,11 @@ class IdeaBoard:
 
     # ------------------------------------------------------------------ #
     def _day(self, ts: pd.Timestamp) -> str:
+        # CME trading day: the session that opens at 18:00 ET counts as the
+        # next date, the same day the daily limits use
         ts = pd.Timestamp(ts)
         ts = ts.tz_localize(self.tz) if ts.tzinfo is None else ts.tz_convert(self.tz)
-        return ts.date().isoformat()
+        return (ts + pd.Timedelta(hours=6)).date().isoformat()
 
     def _new(self, symbol: str, st: ZoneState, now: pd.Timestamp, *,
              direct: bool) -> Idea:

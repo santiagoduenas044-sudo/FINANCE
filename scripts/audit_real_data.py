@@ -306,7 +306,8 @@ def _simulate(s, cfg, arr: _Arrays, policy: dict):
     for i in range(arr.index.searchsorted(s.timestamp, side="right"), len(arr.index)):
         ts = arr.index[i]
         tr.update_on_bar(t, {"high": arr.h[i], "low": arr.l[i], "close": arr.c[i]}, ts)
-        if t.is_open and g.eod_close_enabled and eod_due(arr.session[i], ts, g.eod_close_time):
+        if t.is_open and g.eod_close_enabled and eod_due(arr.session[i], ts, g.eod_close_time,
+                                                         opened_at=t.opened_at):
             tr.close_symbol_eod(s.instrument, float(arr.c[i]), ts)
         if not t.is_open:
             return t

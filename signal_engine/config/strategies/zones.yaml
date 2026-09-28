@@ -56,14 +56,19 @@ ghost:
   min_rr: 0.5
   partial_at_tp1: 0.5               # bank half at target 1, run the rest
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
-  # the account flat before 16:59. Entries still stop at 15:30.
+  # the account flat before 16:59.
   eod_close_time: "16:55"
+  # Trades every session: day (RTH) and night (Globex, from 18:00 ET).
+  # No new entries from 16:15 until the 18:00 reopen, so nothing is opened
+  # just to be closed by the 16:55 flat.
+  valid_sessions: ["RTH", "ETH"]
+  last_entry_time: "16:15"
   # The operator always trades 5 micros: every $ figure is for 5 MNQ ($10/pt).
   contracts: 5
   trade_micro: true
   # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
   # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
-  # Session / 15:30 cut-off / 16:00 flat / one position / cooldown still apply.
+  # Entry cut-off / 16:55 flat / one position / cooldown still apply.
   min_confluence_score: null
   min_stop_atr_mult: 0.0
   max_stop_atr_mult: 0.0

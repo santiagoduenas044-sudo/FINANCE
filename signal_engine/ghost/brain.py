@@ -49,6 +49,18 @@ def _map_base_reason(text: str) -> NoTradeReason:
     return NoTradeReason.SETUP_INCOMPLETE
 
 
+
+# CME equity futures stop at 17:00 ET and reopen at 18:00 ET every day.
+SESSION_REOPEN = "18:00"
+
+
+def entry_window_closed(hhmm: str, last_entry_time: str | None) -> bool:
+    """No new entries from `last_entry_time` until the daily reopen: e.g.
+    16:15 -> 18:00 is closed, 18:00 onwards (the overnight session) is open
+    again. Same as the old RTH-only rule inside RTH (15:30 -> 16:00)."""
+    return bool(last_entry_time) and last_entry_time <= hhmm < SESSION_REOPEN
+
+
 class GhostBrain:
     def __init__(self, cfg: GhostConfig):
         self.cfg = cfg
@@ -110,8 +122,7 @@ class GhostBrain:
             reasons.append(NoTradeReason.STALE_DATA)
         if ms.session not in cfg.valid_sessions:
             reasons.append(NoTradeReason.INVALID_SESSION)
-        if (cfg.last_entry_time and ms.session == "RTH"
-                and sig.timestamp.strftime("%H:%M") >= cfg.last_entry_time):
+        if entry_window_closed(sig.timestamp.strftime("%H:%M"), cfg.last_entry_time):
             reasons.append(NoTradeReason.TOO_LATE)
         if conflicting:
             reasons.append(NoTradeReason.CONFLICTING_SETUPS)

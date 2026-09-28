@@ -23,9 +23,24 @@ def test_eod_waits_for_the_close_time_but_never_leaves_a_trade_overnight():
     assert eod_due("ETH", _t("16:01"), None)                    # legacy: at RTH end
     assert not eod_due("ETH", _t("16:01"), "16:55")
     assert eod_due("ETH", _t("16:55"), "16:55")
-    assert eod_due("ETH", _t("18:05"), "16:55")                 # missed bar: still closes
-    assert eod_due("ETH", _t("08:00"), "16:55")
+    assert eod_due("ETH", _t("17:30"), "16:55")
+    # the night session (from 18:00) is tradable: a position opened there stays
+    assert not eod_due("ETH", _t("20:00"), "16:55", opened_at=_t("19:00"))
+    assert not eod_due("ETH", _t("08:00"), "16:55", opened_at=_t("19:00") - pd.Timedelta(days=1))
+    # missed close bar: a position from before the halt closes on the next bar
+    assert eod_due("ETH", _t("18:05"), "16:55", opened_at=_t("15:00"))
     assert not eod_due("RTH", _t("15:59"), "16:55")
+
+
+def test_entries_every_session_but_not_right_before_the_halt():
+    from signal_engine.ghost.brain import entry_window_closed
+    assert not entry_window_closed("10:00", "16:15")
+    assert entry_window_closed("16:15", "16:15") and entry_window_closed("17:59", "16:15")
+    assert not entry_window_closed("18:00", "16:15")            # night session reopens
+    assert not entry_window_closed("02:30", "16:15")
+    assert not entry_window_closed("16:30", None)
+    g = EngineConfig.load(strategy="zones").ghost
+    assert g.valid_sessions == ["RTH", "ETH"] and g.last_entry_time == "16:15"
 
 
 def test_live_strategy_closes_at_1655():

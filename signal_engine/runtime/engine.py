@@ -24,6 +24,7 @@ import pandas as pd
 from ..data.contracts import ContractRegistry
 from ..data.engine import DataEngine
 from ..features.analyzer import LazyAnalysis
+from ..ghost.brain import SESSION_REOPEN, entry_window_closed
 from ..ghost.narrative import market_read, trade_thesis
 from ..output.dispatcher import OutputDispatcher
 from ..output.events import OutputEvent
@@ -467,8 +468,10 @@ class BotRuntime:
                 # as ETH/CLOSED, so this fires AT the close using that bar's
                 # real price). Runs AFTER update_symbol so a same-bar TP/stop
                 # hit is still the real outcome, not overridden by EOD.
+                oldest = min((t.opened_at for t in self.paper_tracker.open_trades
+                              if t.is_open and t.instrument == symbol), default=None)
                 if gcfg.eod_close_enabled and eod_due(ctx.session, ctx.decision_time,
-                                                      gcfg.eod_close_time):
+                                                      gcfg.eod_close_time, opened_at=oldest):
                     eod_closed = self.paper_tracker.close_symbol_eod(
                         symbol, float(bars.iloc[-1]["close"]), ctx.decision_time)
                     just_closed = just_closed + eod_closed
@@ -711,7 +714,7 @@ class BotRuntime:
         window, no open position, not cooling down, fresh data."""
         hhmm = ctx.decision_time.strftime("%H:%M")
         window_open = (ctx.session in gcfg.valid_sessions
-                       and not (gcfg.last_entry_time and hhmm >= gcfg.last_entry_time))
+                       and not entry_window_closed(hhmm, gcfg.last_entry_time))
         busy = (self.paper_tracker is not None and self.paper_tracker.has_open(symbol))
         cooling = bool(cooldown_check and cooldown_check(symbol)[0])
         day_done = self._day_block(ctx.decision_time) is not None
@@ -1175,17 +1178,21 @@ def _stop_move_worth_telling(trade, ncfg) -> bool:
     return True
 
 
-def eod_due(session: str, bar_time, eod_close_time: str | None) -> bool:
+def eod_due(session: str, bar_time, eod_close_time: str | None, *,
+            opened_at=None) -> bool:
     """Whether an open position must be force-closed on this bar. Without a
-    close time: as soon as the bar leaves RTH. With one (ET "HH:MM"): outside
-    RTH once that time is reached — or any later out-of-hours bar (overnight,
-    maintenance, pre-market), so a missed bar can never leave it open."""
+    close time: as soon as the bar leaves RTH. With one (ET "HH:MM"): from
+    that time until the 18:00 reopen — the overnight session is tradable —
+    or on any bar of a later trading day than the position's entry, so a
+    missed close bar can never carry a position past the daily halt."""
     if session == "RTH":
         return False
     if eod_close_time is None:
         return True
     hhmm = bar_time.strftime("%H:%M")
-    return hhmm >= eod_close_time or hhmm < "09:30"
+    if eod_close_time <= hhmm < SESSION_REOPEN:
+        return True
+    return opened_at is not None and trading_day(opened_at) != trading_day(bar_time)
 
 
 def _tf_seconds(tf: str) -> float:

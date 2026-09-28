@@ -86,7 +86,7 @@ def replay(t: dict, bars: pd.DataFrame, cfg: EngineConfig):
     for ts, bar in bars[bars.index > opened].iterrows():
         tr.update_on_bar(trade, bar, ts)
         if trade.is_open and g.eod_close_enabled and \
-                eod_due(de.classifier.classify(ts), ts, g.eod_close_time):
+                eod_due(de.classifier.classify(ts), ts, g.eod_close_time, opened_at=opened):
             tr.close_symbol_eod(t["instrument"], float(bar["close"]), ts)
         if not trade.is_open:
             return trade
