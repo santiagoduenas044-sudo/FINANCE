@@ -60,8 +60,8 @@ def render_trade_png(bars: pd.DataFrame, trade: dict, *, title: str = "",
             ax.text(x0 + 0.5, tp1, f" TP1 {tp1:,.2f}", color=_REWARD, fontsize=7,
                     va="bottom", zorder=4)
         up = final > entry
-        ax.text(x0 + 0.5, final, f" TP {final:,.2f} · {abs(final - entry):.1f} pts "
-                f"({abs(final - entry) / risk:.1f}R)", color=_REWARD, fontsize=7.5,
+        ax.text(x0 + 0.5, final, f" TP {final:,.2f} · {abs(final - entry):.1f} pts",
+                color=_REWARD, fontsize=7.5,
                 va="top" if up else "bottom", zorder=4)
         ax.text(x0 + 0.5, stop, f" SL {stop:,.2f} · {risk:.1f} pts", color=_RISK,
                 fontsize=7.5, va="bottom" if up else "top", zorder=4)
@@ -86,8 +86,7 @@ def render_trade_png(bars: pd.DataFrame, trade: dict, *, title: str = "",
         ax.plot([x0, x1], [entry, exit_px], color=color, linestyle="--", linewidth=1.2,
                 zorder=4)
         if pts is not None:
-            r = trade.get("r_multiple")
-            ax.text(x1, exit_px, f" {pts:+.2f} pts" + (f" ({r:+.2f}R)" if r is not None else ""),
+            ax.text(x1, exit_px, f" {pts:+.2f} pts",
                     color="white", fontsize=8, va="center", zorder=5,
                     bbox={"boxstyle": "round,pad=0.3", "facecolor": color,
                           "edgecolor": "none"})
@@ -152,7 +151,7 @@ def render_plan_png(bars: pd.DataFrame, *, direction: str, zone_bottom: float,
         for a, b, color in ((entry, far, _REWARD), (entry, stop, _RISK)):
             ax.add_patch(Rectangle((x0, min(a, b)), width, abs(b - a), facecolor=color,
                                    alpha=0.22, edgecolor=color, linewidth=0.8, zorder=1))
-        ax.text(x0 + 0.5, far, f" TP {far:,.2f} ({abs(far - entry) / risk:.1f}R)",
+        ax.text(x0 + 0.5, far, f" TP {far:,.2f} ({abs(far - entry):.0f} pts)",
                 color=_REWARD, fontsize=7.5, va="top" if far > entry else "bottom", zorder=4)
         ax.text(x0 + 0.5, stop, f" SL {stop:,.2f} ({risk:.0f} pts)", color=_RISK, fontsize=7.5,
                 va="bottom" if long else "top", zorder=4)

@@ -269,9 +269,9 @@ def test_trade_closed_event_carries_realised_pnl():
     body = build_discord_payload(ev)
     fields = {f["name"]: f["value"] for f in body["embeds"][0]["fields"]}
     assert fields["P&L (pts)"] == "+30.00"
-    assert fields["Result"] == "+1.50R"
+    assert "Result" not in fields                    # points only
     assert fields["Exit reason"] == "TP1"
-    assert fields["Best (MFE)"] == "+1.80R"
+    assert "Best (MFE pts)" in fields and "R" not in fields["Best (MFE pts)"]
 
 
 def test_trade_closed_dedup_key_is_distinct_from_the_open_event():
@@ -308,7 +308,7 @@ def test_trade_progress_shows_where_the_trade_stands():
     assert ev.kind == "trade_progress"
     fields = {f["name"]: f["value"]
               for f in build_discord_payload(ev)["embeds"][0]["fields"]}
-    assert fields["Open P&L"] == "+1.50R"
+    assert "Open P&L" not in fields                  # points only, no multiples of the stop
     assert fields["P&L (pts)"] == "+30.00"
     assert fields["Now"] != "—"
 
@@ -316,7 +316,7 @@ def test_trade_progress_shows_where_the_trade_stands():
 def test_adverse_milestone_is_titled_as_such():
     ev = OutputEvent.from_trade_progress(
         _closed_dict(pnl_points=-10.0, r_multiple=-0.5), -0.5)
-    assert "-0.5R" in ev.title
+    assert "-10.0 pts" in ev.title                   # half the 20-pt stop
 
 
 # --------------------------------------------------------------------------- #

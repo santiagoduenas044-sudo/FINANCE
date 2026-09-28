@@ -196,11 +196,11 @@ STOP_POLICIES = {
     "config actual": {},
     "sin BE ni trailing": dict(breakeven_after_tp1=False, be_trigger_r=None,
                                trail_start_r=None),
-    "BE a 0.5R": dict(be_trigger_r=0.5),
-    "BE a 1R": dict(be_trigger_r=1.0),
-    "trailing 1R desde 1R": dict(trail_start_r=1.0, trail_distance_r=1.0),
-    "trailing 0.5R desde 1.5R": dict(trail_start_r=1.5, trail_distance_r=0.5),
-    "BE 1R + trailing 1R desde 2R": dict(be_trigger_r=1.0, trail_start_r=2.0,
+    "BE al ir ½ stop a favor": dict(be_trigger_r=0.5),
+    "BE al ir 1 stop a favor": dict(be_trigger_r=1.0),
+    "trailing a 1 stop, desde +1 stop": dict(trail_start_r=1.0, trail_distance_r=1.0),
+    "trailing a ½ stop, desde +1.5 stop": dict(trail_start_r=1.5, trail_distance_r=0.5),
+    "BE a +1 stop + trailing desde +2": dict(be_trigger_r=1.0, trail_start_r=2.0,
                                          trail_distance_r=1.0),
 }
 
@@ -211,13 +211,13 @@ STOP_POLICIES = {
 # lo and hi R, else fallback R — the target adapts to where the structure is.
 TARGET_VARIANTS = {
     "plan actual": None,
-    "2:1 fijo (1 objetivo)": [2.0],
-    "1.5:1 fijo (1 objetivo)": [1.5],
-    "3:1 fijo (1 objetivo)": [3.0],
-    "TP1 1R + TP 2R": [1.0, 2.0],
-    "dinámico 1.5–3R (1 objetivo)": [(1.5, 3.0, 2.0)],
-    "TP1 1R + dinámico 1.5–3R": [1.0, (1.5, 3.0, 2.0)],
-    "dinámico 2–4R (1 objetivo)": [(2.0, 4.0, 2.5)],
+    "TP a 2× el stop": [2.0],
+    "TP a 1.5× el stop": [1.5],
+    "TP a 3× el stop": [3.0],
+    "TP1 a 1× + TP a 2× el stop": [1.0, 2.0],
+    "dinámico 1.5–3× el stop": [(1.5, 3.0, 2.0)],
+    "TP1 a 1× + dinámico 1.5–3×": [1.0, (1.5, 3.0, 2.0)],
+    "dinámico 2–4× el stop": [(2.0, 4.0, 2.5)],
 }
 
 
@@ -305,8 +305,9 @@ FEATURE_WINDOW = 120            # bars after the signal for mfe/mae
 
 
 def _features(s, d, arr: _Arrays, risk: float) -> dict:
+    """All distances in POINTS; "a favor" = in the trade's direction."""
     i = int(arr.index.searchsorted(s.timestamp, side="right")) - 1
-    if i < 1 or risk <= 0:
+    if i < 1:
         return {}
     sign = 1.0 if s.direction.value == "LONG" else -1.0
     c = arr.c[i]
@@ -317,25 +318,24 @@ def _features(s, d, arr: _Arrays, risk: float) -> dict:
     pos = (c - lo) / (hi - lo) if hi > lo else 0.5
     ts = pd.Timestamp(s.timestamp)
     ny = ts.tz_convert("America/New_York") if ts.tzinfo else ts
+    swings = ctx.get("swing_rs") or []
     f = {
         "date": ny.strftime("%Y-%m-%d"), "year": ny.year, "weekday": ny.dayofweek,
         "minute": ny.hour * 60 + ny.minute, "session": arr.session[i],
-        # trend into the entry, in R: > 0 = price was already moving the trade's way
-        "mom_30": sign * (c - arr.c[max(0, i - 30)]) / risk,
-        "mom_60": sign * (c - arr.c[max(0, i - 60)]) / risk,
-        "mom_240": sign * (c - arr.c[max(0, i - 240)]) / risk,
-        "mov_dia": sign * (c - arr.c[start]) / risk,
+        # how far price already moved the trade's way into the entry
+        "mom_30": sign * (c - arr.c[max(0, i - 30)]),
+        "mom_60": sign * (c - arr.c[max(0, i - 60)]),
+        "mom_240": sign * (c - arr.c[max(0, i - 240)]),
+        "mov_dia": sign * (c - arr.c[start]),
         # 0 = entering at the day's extreme against the trade (buy the low),
         # 1 = chasing (buy the high)
         "rango_dia": pos if sign > 0 else 1.0 - pos,
-        "rango_dia_r": (hi - lo) / risk,
-        # typical 1m bar vs the stop: small = the stop is wide for the tape
-        "atr30_r": float(np.mean(arr.h[max(0, i - 30):i + 1] - arr.l[max(0, i - 30):i + 1])) / risk,
-        "zona_ancho_r": abs(ctx.get("zone_top", mid) - ctx.get("zone_bottom", mid)) / risk,
-        "entrada_vs_mid_r": sign * (s.entry - mid) / risk,
-        "plan_rr": ctx.get("plan_rr"),
-        "swing_1_r": (ctx.get("swing_rs") or [None])[0],
-        "n_swings": len(ctx.get("swing_rs") or []),
+        "rango_dia_pts": hi - lo,
+        "vela_prom_pts": float(np.mean(arr.h[max(0, i - 30):i + 1] - arr.l[max(0, i - 30):i + 1])),
+        "zona_ancho_pts": abs(ctx.get("zone_top", mid) - ctx.get("zone_bottom", mid)),
+        "entrada_vs_mid_pts": sign * (s.entry - mid),
+        "objetivo_pts": abs(s.take_profits[-1] - s.entry) if s.take_profits else None,
+        "swing_libre_pts": swings[0] * abs(mid - s.stop) if swings else None,
         "score": d.confluence.score if d.confluence else None,
         "vwap": getattr(getattr(d, "market_state", None), "vwap_side", None),
     }
@@ -343,13 +343,13 @@ def _features(s, d, arr: _Arrays, risk: float) -> dict:
     if formed:
         f["zona_edad_min"] = (ts - pd.Timestamp(formed)).total_seconds() / 60
     j = min(len(arr.c), i + 1 + FEATURE_WINDOW)
-    if j > i + 1:
+    if j > i + 1:                   # outcome columns: how far it went each way in 2 h
         if sign > 0:
-            f["mfe_r"] = (arr.h[i + 1:j].max() - s.entry) / risk
-            f["mae_r"] = (s.entry - arr.l[i + 1:j].min()) / risk
+            f["mfe_pts"] = arr.h[i + 1:j].max() - s.entry
+            f["mae_pts"] = s.entry - arr.l[i + 1:j].min()
         else:
-            f["mfe_r"] = (s.entry - arr.l[i + 1:j].min()) / risk
-            f["mae_r"] = (arr.h[i + 1:j].max() - s.entry) / risk
+            f["mfe_pts"] = s.entry - arr.l[i + 1:j].min()
+            f["mae_pts"] = arr.h[i + 1:j].max() - s.entry
     return f
 
 
@@ -399,7 +399,7 @@ def shadow(cfg, de, exec_bars, decisions):
                "exit": t.exit_reason.value if t.exit_reason else "?", "policy_pnl": {},
                "target_pnl": {}}
         row.update(_features(s, d, arr, t.initial_risk))
-        # the same entry with one fixed 2R target and no stop management, for
+        # the same entry with one target at 2x the stop and no management, for
         # every scored signal: judges the ENTRY apart from the exit plan
         s2 = _with_targets(s, [2.0])
         v = None if s2 is None else _simulate(s2, cfg, arr, _FLAT)
@@ -425,30 +425,37 @@ def shadow(cfg, de, exec_bars, decisions):
 # report
 # --------------------------------------------------------------------------- #
 def stats(rows, cost):
-    """rows: dicts with pnl_pts, risk_pts. Returns summary with costs applied."""
+    """rows: dicts with pnl_pts. Summary in POINTS after costs (the operator
+    trades a fixed position, so $ = points x $ per point):
+    n, wr (share of winners), avg_pts per trade, pts net, dd_pts (worst
+    peak-to-trough), pf (points won / points lost)."""
     if not rows:
         return None
-    r = [(x["pnl_pts"] - cost) / x["risk_pts"] for x in rows]
-    wins = [v for v in r if v > 0]
-    losses = [v for v in r if v <= 0]
+    p = [x["pnl_pts"] - cost for x in rows]
+    won, lost = sum(v for v in p if v > 0), -sum(v for v in p if v <= 0)
     eq = peak = dd = 0.0
-    for v in r:
+    for v in p:
         eq += v
         peak = max(peak, eq)
         dd = max(dd, peak - eq)
-    pf = sum(wins) / -sum(losses) if sum(losses) < 0 else float("inf")
-    return {"n": len(r), "wr": len(wins) / len(r), "exp": sum(r) / len(r),
-            "pf": pf, "net": sum(r), "dd": dd,
-            "pts": sum(x["pnl_pts"] - cost for x in rows)}
+    return {"n": len(p), "wr": sum(1 for v in p if v > 0) / len(p),
+            "avg_pts": sum(p) / len(p), "pts": sum(p), "dd_pts": dd,
+            "pf": won / lost if lost > 0 else float("inf")}
+
+
+def _usd(pts, pv):
+    return f"{'+' if pts >= 0 else '−'}${abs(pts * pv):,.0f}"
 
 
 def line(label, s, pv=None):
     if s is None:
         return f"  {label:<30} —"
+    pv = pv or 1.0
     pf = "inf" if s["pf"] == float("inf") else f"{s['pf']:.2f}"
-    usd = f"  ${s['pts'] * pv:>9,.0f}" if pv else ""
-    return (f"  {label:<30}{s['n']:>4}  WR {s['wr']:>4.0%}  exp {s['exp']:+.3f}R  "
-            f"PF {pf:>5}  net {s['net']:+6.1f}R  DD {s['dd']:4.1f}R{usd}")
+    return (f"  {label:<30}{s['n']:>5}  gana {s['wr']:>4.0%}  "
+            f"prom {_usd(s['avg_pts'], pv):>6}/trade ({s['avg_pts']:+.1f} pts)  PF {pf:>5}  "
+            f"neto {_usd(s['pts'], pv):>9} ({s['pts']:+,.0f} pts)  "
+            f"peor caída {_usd(-s['dd_pts'], pv)}")
 
 
 def warn(n):
@@ -468,6 +475,7 @@ def position(cfg, symbol) -> tuple[str, float]:
 def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow_rows,
            cost, ideas, shadow_path: Path | None = None):
     label, pv = position(cfg, symbol)
+    _line = lambda lab, st, *_: line(lab, st, pv)   # every row in $ of the position
     days = len({ts.date() for ts in steps})
     print(f"\n=== AUDITORÍA CON DATOS REALES — {symbol} ===")
     print(f"Datos: {exec_bars.index[0]:%Y-%m-%d} a {exec_bars.index[-1]:%Y-%m-%d} · "
@@ -490,54 +498,55 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
               for t in tracker.closed_trades]
     print("\n-- Lo que el bot habría operado (una posición a la vez) --")
     s = stats(closed, cost)
-    print(line("TOTAL", s, pv) + (warn(s["n"]) if s else ""))
+    print(_line("TOTAL", s, pv) + (warn(s["n"]) if s else ""))
     for k in sorted({x["setup"] for x in closed}):
-        print(line(k, stats([x for x in closed if x["setup"] == k], cost), pv))
+        print(_line(k, stats([x for x in closed if x["setup"] == k], cost), pv))
     if cfg.setups.zone_retrace.enabled:
-        print(line("con aviso previo (🟢)", stats([x for x in closed if not x["direct"]], cost), pv))
-        print(line("señal directa (⚡)", stats([x for x in closed if x["direct"]], cost), pv))
+        print(_line("con aviso previo (🟢)", stats([x for x in closed if not x["direct"]], cost), pv))
+        print(_line("señal directa (⚡)", stats([x for x in closed if x["direct"]], cost), pv))
     print("  salidas: " + ", ".join(f"{k} {v}" for k, v in
                                     Counter(x["exit"] for x in closed).most_common()))
     by_hour = defaultdict(list)
     for x in closed:
         by_hour[x["hour"]].append(x)
     for h in sorted(by_hour):
-        print(line(f"entrada {h:02d}:00-{h:02d}:59", stats(by_hour[h], cost)))
+        print(_line(f"entrada {h:02d}:00-{h:02d}:59", stats(by_hour[h], cost)))
 
     print("\n-- Sombra: TODAS las señales puntuadas, cada una por separado --")
-    print(line("todas", stats(shadow_rows, cost)))
-    print(line("  aprobadas por GHOST", stats([x for x in shadow_rows if x["approved"]], cost)))
-    print(line("  rechazadas por GHOST", stats([x for x in shadow_rows if not x["approved"]], cost)))
+    print(_line("todas", stats(shadow_rows, cost)))
+    print(_line("  aprobadas por GHOST", stats([x for x in shadow_rows if x["approved"]], cost)))
+    print(_line("  rechazadas por GHOST", stats([x for x in shadow_rows if not x["approved"]], cost)))
     for k in sorted({x["setup"] for x in shadow_rows}):
-        print(line(f"setup {k}", stats([x for x in shadow_rows if x["setup"] == k], cost)))
+        print(_line(f"setup {k}", stats([x for x in shadow_rows if x["setup"] == k], cost)))
     thr = cfg.ghost.min_confluence_score or 35   # buckets still useful without a gate
     for lo_, hi_ in [(-99, 20), (20, thr), (thr, 50), (50, 999)]:
         rows = [x for x in shadow_rows if lo_ <= x["score"] < hi_]
-        print(line(f"score {lo_:>3}..{hi_:<3}", stats(rows, cost)))
+        print(_line(f"score {lo_:>3}..{hi_:<3}", stats(rows, cost)))
     for reason in ["stop_too_tight", "stop_too_wide", "insufficient_confluence",
                    "excessive_volatility", "conflicting_setups", "too_late_in_session"]:
         rows = [x for x in shadow_rows if reason in x["reasons"]]
         if rows:
-            print(line(f"rechazo {reason}", stats(rows, cost)))
-    print("\n-- Objetivos (R:R): mismas señales aprobadas --")
+            print(_line(f"rechazo {reason}", stats(rows, cost)))
+    print("\n-- Objetivos: mismas señales aprobadas --")
     for name in [*TARGET_VARIANTS, RUNNER]:
         rows = [{"pnl_pts": x["target_pnl"][name], "risk_pts": x["risk_pts"]}
                 for x in shadow_rows if name in x.get("target_pnl", {})]
-        print(line(name, stats(rows, cost), pv))
+        print(_line(name, stats(rows, cost), pv))
     print("\n-- Manejo del stop: mismas señales aprobadas, distintas reglas --")
     for name in STOP_POLICIES:
         rows = [{"pnl_pts": x["policy_pnl"][name], "risk_pts": x["risk_pts"]}
                 for x in shadow_rows if name in x.get("policy_pnl", {})]
-        print(line(name, stats(rows, cost), pv))
+        print(_line(name, stats(rows, cost), pv))
     print("\nLectura: si 'rechazadas' rinde igual o mejor que 'aprobadas', el filtro de GHOST"
           "\nno está separando nada. Si los scores altos no rinden más que los bajos, el"
-          "\nscore de confluencia no predice resultado. Un exp menor que 0 después de costos"
-          "\nsignifica que ese setup pierde dinero real.")
+          "\nscore de confluencia no predice resultado. Un promedio por trade menor que 0"
+          "\ndespués de costos significa que ese setup pierde dinero real.")
 
     out = shadow_path or DATA_DIR / symbol / "audit_shadow.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
     sdf = pd.DataFrame(shadow_rows)
-    sdf["cost_pts"] = cost                        # scripts/edge_finder.py reads it
+    sdf["cost_pts"] = cost                        # scripts/edge_finder.py reads these
+    sdf["usd_per_point"] = pv
     sdf.to_csv(out, index=False)
     print(f"\nDetalle por señal guardado en {out}")
 
@@ -562,13 +571,12 @@ def summary(symbol, cfg, strategy, contract, steps, tracker, candidates, decisio
              "direct": bool((t.context or {}).get("idea_direct"))} for t in closed]
     cum, equity, trades = 0.0, [], []
     for t in closed:
-        r = (t.pnl_points - cost) / t.initial_risk
-        cum += r
-        equity.append({"t": t.closed_at.isoformat(), "cum": cum})
+        cum += t.pnl_points - cost
+        equity.append({"t": t.closed_at.isoformat(), "cum_pts": cum})
         trades.append({"opened_at": t.opened_at.isoformat(), "closed_at": t.closed_at.isoformat(),
                        "direction": t.direction, "entry": t.entry,
                        "exit_price": t.exit_price, "exit": t.exit_reason.value,
-                       "pnl_pts": t.pnl_points - cost, "r": r,
+                       "pnl_pts": t.pnl_points - cost,
                        "idea": (t.context or {}).get("idea_number"),
                        "direct": bool((t.context or {}).get("idea_direct"))})
     by_hour = defaultdict(list)

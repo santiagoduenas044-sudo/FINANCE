@@ -16,34 +16,49 @@ ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "data_store" / "backtests"
 
 
+def _usd(pts: float | None, pv: float) -> str:
+    if pts is None:
+        return "—"
+    return f"{'+' if pts >= 0 else '−'}${abs(pts * pv):,.0f}"
+
+
 def _row(label: str, s: dict | None, pv: float | None) -> str:
+    """One line in dollars of the position (and points). Old runs saved
+    without per-trade points show '—' where the number is not known."""
     if not s:
         return f"  {label:<36} —"
+    pv = pv or 1.0
+    pts = s.get("pts")
+    avg = s.get("avg_pts", pts / s["n"] if pts is not None and s["n"] else None)
+    dd = s.get("dd_pts")
     pf = "inf" if s.get("pf") is None else f"{s['pf']:.2f}"
-    usd = f"  ${s['pts'] * pv:>+10,.0f}" if pv and s.get("pts") is not None else ""
     warn = "  (poca muestra)" if s["n"] < 30 else ""
-    return (f"  {label:<36}{s['n']:>5}  WR {s['wr']:>4.0%}  exp {s['exp']:+.3f}R  "
-            f"PF {pf:>5}  net {s['net']:+7.1f}R  DD {s['dd']:5.1f}R{usd}{warn}")
+    return (f"  {label:<36}{s['n']:>5}  gana {s['wr']:>4.0%}  "
+            f"prom {_usd(avg, pv):>6}/trade  PF {pf:>5}  neto {_usd(pts, pv):>9}"
+            + (f" ({pts:+,.0f} pts)" if pts is not None else "")
+            + f"  peor caída {_usd(-dd, pv) if dd is not None else '—'}{warn}")
 
 
 def _by_year(equity: list[dict]) -> dict[str, dict]:
-    """Per-trade R from the cumulative curve, grouped by the year it closed."""
+    """Per-trade points from the cumulative curve, grouped by closing year."""
     out: dict[str, list[float]] = defaultdict(list)
     prev = 0.0
     for p in equity:
-        out[p["t"][:4]].append(p["cum"] - prev)
-        prev = p["cum"]
+        if "cum_pts" not in p:
+            return {}                     # run saved before the curve was in points
+        out[p["t"][:4]].append(p["cum_pts"] - prev)
+        prev = p["cum_pts"]
     res = {}
-    for y, rs in sorted(out.items()):
+    for y, ps in sorted(out.items()):
         eq = peak = dd = 0.0
-        for r in rs:
-            eq += r
+        for v in ps:
+            eq += v
             peak = max(peak, eq)
             dd = max(dd, peak - eq)
-        wins, losses = [r for r in rs if r > 0], [r for r in rs if r <= 0]
-        res[y] = {"n": len(rs), "wr": len(wins) / len(rs), "exp": sum(rs) / len(rs),
-                  "pf": sum(wins) / -sum(losses) if sum(losses) < 0 else None,
-                  "net": sum(rs), "dd": dd}
+        won, lost = sum(v for v in ps if v > 0), -sum(v for v in ps if v <= 0)
+        res[y] = {"n": len(ps), "wr": sum(1 for v in ps if v > 0) / len(ps),
+                  "avg_pts": sum(ps) / len(ps), "pts": sum(ps), "dd_pts": dd,
+                  "pf": won / lost if lost > 0 else None}
     return res
 
 
@@ -63,8 +78,8 @@ def main() -> int:
     print(f"== {path.name}: {m.get('symbol')} · {m.get('strategy')} · {m.get('start')} → "
           f"{m.get('end')} · {m.get('sessions')} sesiones · costo {m.get('cost_points')} pts"
           f" · {m.get('position') or ''}")
-    print("   (WR = % ganadoras · exp = R promedio por trade · PF = profit factor ·"
-          " DD = peor caída en R)")
+    print(f"   (todo en dólares de {m.get('position') or 'la posición'} después de costos · gana = % de"
+          " trades ganadores · PF = dólares ganados / dólares perdidos)")
 
     print("\n-- TOTAL --")
     print(_row("todas", d.get("total"), pv))
@@ -73,8 +88,11 @@ def main() -> int:
     print("  salidas:", d.get("exits"))
 
     print("\n-- POR AÑO --")
-    for y, s in _by_year(d.get("equity") or []).items():
-        print(_row(y, s, None))
+    years = _by_year(d.get("equity") or [])
+    if not years:
+        print("  (este backtest es anterior al cambio a puntos; córrelo de nuevo para verlo por año)")
+    for y, s in years.items():
+        print(_row(y, s, pv))
 
     print("\n-- POR HORA DE ENTRADA (ET) --")
     for h, s in (d.get("by_hour") or {}).items():
@@ -84,7 +102,8 @@ def main() -> int:
                        ("MANEJO DEL STOP (mismas señales)", "policies")):
         print(f"\n-- {title} --")
         items = sorted((d.get(key) or {}).items(),
-                       key=lambda kv: -(kv[1] or {}).get("net", -1e9))
+                       key=lambda kv: -((kv[1] or {}).get("pts") if (kv[1] or {}).get("pts")
+                                        is not None else -1e12))
         for k, v in items:
             print(_row(k, v, pv))
 

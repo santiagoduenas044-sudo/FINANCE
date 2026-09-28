@@ -125,8 +125,8 @@ def test_vwap_reclaim_short_calls_vwap_resistance():
 
 def test_expectation_quotes_targets_in_points_and_r():
     t = trade_thesis(_decision())
-    assert "Subir hasta TP1 20,020.00 (+1.0R, 20.0 pts)" in t["espero"]
-    assert "TP2 20,040.00 (+2.0R, 40.0 pts)" in t["espero"]
+    assert "Subir hasta TP1 20,020.00 (+20.0 pts)" in t["espero"]
+    assert "TP2 20,040.00 (+40.0 pts)" in t["espero"]
     assert "20.0 pts de riesgo" in t["espero"]
 
 

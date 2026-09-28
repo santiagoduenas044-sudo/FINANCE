@@ -28,17 +28,17 @@ import numpy as np
 import pandas as pd
 
 NUMERIC = {
-    "mom_30": "tendencia 30 min a favor (R)",
-    "mom_60": "tendencia 1 h a favor (R)",
-    "mom_240": "tendencia 4 h a favor (R)",
-    "mov_dia": "movimiento del día a favor (R)",
+    "mom_30": "movimiento a favor 30 min antes (pts)",
+    "mom_60": "movimiento a favor 1 h antes (pts)",
+    "mom_240": "movimiento a favor 4 h antes (pts)",
+    "mov_dia": "movimiento a favor en el día (pts)",
     "rango_dia": "posición en el rango del día (0=extremo en contra)",
-    "rango_dia_r": "rango del día (R)",
-    "atr30_r": "tamaño de vela 1m / stop",
-    "zona_ancho_r": "ancho de la zona (R)",
-    "entrada_vs_mid_r": "entrada pasada del medio (R)",
-    "plan_rr": "R:R del plan",
-    "swing_1_r": "primer swing libre (R)",
+    "rango_dia_pts": "rango del día (pts)",
+    "vela_prom_pts": "tamaño promedio de vela 1m (pts)",
+    "zona_ancho_pts": "ancho de la zona (pts)",
+    "entrada_vs_mid_pts": "entrada pasada del medio (pts)",
+    "objetivo_pts": "distancia al objetivo (pts)",
+    "swing_libre_pts": "primer máximo/mínimo libre (pts)",
     "zona_edad_min": "edad de la zona (min)",
     "risk_pts": "stop (pts)",
     "score": "score de confluencia",
@@ -57,7 +57,7 @@ def _t(x: np.ndarray) -> float:
 
 
 def _s(x: np.ndarray) -> tuple[int, float, float, float]:
-    """n, expectancy R, t-stat, net R."""
+    """n, average points per trade, t-stat, net points."""
     return (len(x), float(x.mean()) if len(x) else 0.0, _t(x), float(x.sum()))
 
 
@@ -78,8 +78,12 @@ def _filters(train: pd.DataFrame) -> list[tuple[str, callable]]:
     return out
 
 
+PV = 10.0          # $ per point of the position; set from the CSV in main()
+
+
 def _fmt(n, e, t, net) -> str:
-    return f"{n:>5} {e:+.3f}R t={t:+.1f} {net:+7.1f}R"
+    return (f"{n:>5} prom {'+' if e >= 0 else '−'}${abs(e * PV):,.0f}/trade conf={t:+.1f} "
+            f"neto {'+' if net >= 0 else '−'}${abs(net * PV):,.0f}")
 
 
 def main() -> int:
@@ -97,23 +101,26 @@ def main() -> int:
         return 1
     cost = a.cost if a.cost is not None else float(df["cost_pts"].iloc[0]) \
         if "cost_pts" in df else 1.25
+    global PV
+    if "usd_per_point" in df and df["usd_per_point"].notna().any():
+        PV = float(df["usd_per_point"].dropna().iloc[0])
     df = df[df["risk_pts"] > 0].copy()
     df["hour"] = df["minute"] // 60 if "minute" in df else df["hour"]
-    outcomes = {"plan": (df["pnl_pts"] - cost) / df["risk_pts"]}
+    outcomes = {"plan del bot": df["pnl_pts"] - cost}
     if "pnl_2r_pts" in df:
-        outcomes["2R fijo"] = (df["pnl_2r_pts"] - cost) / df["risk_pts"]
+        outcomes["salida simple (TP a 2× el stop)"] = df["pnl_2r_pts"] - cost
     train_m = df["date"] < a.split
     train, test = df[train_m], df[~train_m]
     print(f"== {Path(a.csv).name}: {len(df)} señales · TRAIN {train['date'].min()} → "
           f"{train['date'].max()} ({len(train)}) · TEST {test['date'].min()} → "
           f"{test['date'].max()} ({len(test)}) · costo {cost} pts")
-    print("   exp = R promedio por trade después de costos · t = qué tan lejos del azar"
-          " (|t| ≥ 2 ≈ poco probable por suerte)")
+    print(f"   dólares con ${PV:g} por punto, después de costos · conf = qué tan lejos del azar"
+          " (≥ 2 ≈ poco probable por suerte)")
 
-    if {"mfe_r", "mae_r"} <= set(df):
-        print(f"\n-- Qué pasa después de entrar (2 h) --  llega a +1R: "
-              f"{(df['mfe_r'] >= 1).mean():.0%} · a +2R: {(df['mfe_r'] >= 2).mean():.0%} · "
-              f"va en contra 1R: {(df['mae_r'] >= 1).mean():.0%}")
+    if {"mfe_pts", "mae_pts"} <= set(df):
+        print(f"\n-- Qué pasa después de entrar (2 h) --  llega a +20 pts a favor: "
+              f"{(df['mfe_pts'] >= 20).mean():.0%} · a +40 pts: {(df['mfe_pts'] >= 40).mean():.0%} · "
+              f"va 20 pts en contra: {(df['mae_pts'] >= 20).mean():.0%}")
 
     filters = _filters(train)
     for oname, r in outcomes.items():
@@ -129,7 +136,7 @@ def main() -> int:
         cands = [x for x in rows if x[2][0] >= a.min_n and x[2][1] > 0 and x[2][2] >= 2.0]
         cands.sort(key=lambda x: -x[2][2])
         by_chance = sum(1 for x in rows if x[2][0] >= a.min_n) * 0.023
-        print(f"\n  Filtros que ganan en TRAIN (t ≥ 2, n ≥ {a.min_n}): {len(cands)} "
+        print(f"\n  Filtros que ganan en TRAIN (conf ≥ 2, n ≥ {a.min_n}): {len(cands)} "
               f"de {len(rows)} probados (por puro azar se esperan ~{by_chance:.0f})")
         held = 0
         for label, _, tr, te in cands[:25]:
@@ -154,7 +161,7 @@ def main() -> int:
                 ok = te[0] >= 30 and te[1] > 0 and te[2] >= 1.0
                 print(f"  {'✔' if ok else '✘'} {label[:90]}\n      TRAIN {_fmt(*tr)}   TEST {_fmt(*te)}")
 
-    print("\nCómo leerlo: solo un ✔ con t alto en TRAIN Y en TEST es una ventaja candidata."
+    print("\nCómo leerlo: solo un ✔ que gana en TRAIN Y en TEST es una ventaja candidata."
           "\nSi casi todo es ✘, la entrada no tiene ventaja que un filtro simple pueda rescatar.")
     return 0
 

@@ -398,7 +398,7 @@ class BotRuntime:
                                    if self.paper_tracker else []) if t.is_open]
         closed = list(self.paper_tracker.closed_trades) if self.paper_tracker else []
         wins = [t for t in closed if t.pnl_points > 0]
-        open_r = sum(t.r_multiple for t in open_trades) if open_trades else None
+        open_pts = sum(t.pnl_points for t in open_trades) if open_trades else None
         uptime = "—"
         if self.started_at is not None:
             secs = int((datetime.now(timezone.utc) - self.started_at).total_seconds())
@@ -413,11 +413,11 @@ class BotRuntime:
             "closed_today": len(closed),
             "realised_points": round(self.daily_realized_pnl, 2),
             "win_rate": (f"{len(wins) / len(closed):.0%}" if closed else "—"),
-            "open_r": round(open_r, 2) if open_r is not None else None,
+            "open_pts": round(open_pts, 2) if open_pts is not None else None,
             "open_trades": [
                 f"{t.instrument} {t.direction} @ {t.entry:.2f} → "
                 f"{(t.current_price or t.entry):.2f} "
-                f"({t.pnl_points:+.2f} pts, {t.r_multiple:+.2f}R)"
+                f"({t.pnl_points:+.2f} pts)"
                 for t in open_trades
             ],
             "market_read": {sym: list(lines)

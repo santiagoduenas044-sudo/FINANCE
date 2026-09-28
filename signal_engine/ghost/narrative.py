@@ -135,8 +135,7 @@ def trade_thesis(decision, *, breakeven_after_tp1: bool = False,
     targets = []
     for i, tp in enumerate(sig.take_profits[:2], start=1):
         pts = abs(tp - sig.entry)
-        r = pts / risk if risk else 0.0
-        targets.append(f"TP{i} {_p(tp)} (+{r:.1f}R, {pts:.1f} pts)")
+        targets.append(f"TP{i} {_p(tp)} (+{pts:.1f} pts)")
     move = "subir" if long else "bajar"
     espero = f"{move.capitalize()} hasta {' y luego '.join(targets)}. " if targets else ""
     espero += f"Stop en {_p(sig.stop)} ({risk:.1f} pts de riesgo)."

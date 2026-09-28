@@ -33,12 +33,12 @@ def _run(p):
 
 def test_planted_edge_holds_out_of_sample(tmp_path):
     out = _run(_csv(tmp_path, planted=True))
-    assert "✔ tendencia 1 h a favor (R) ≥" in out
+    assert "✔ movimiento a favor 1 h antes (pts) ≥" in out
 
 
 def test_noise_does_not_pass(tmp_path):
     out = _run(_csv(tmp_path, planted=False))
-    assert "✔ tendencia 1 h a favor (R) ≥" not in out
+    assert "✔ movimiento a favor 1 h antes (pts) ≥" not in out
 
 
 def test_old_csv_is_explained(tmp_path):

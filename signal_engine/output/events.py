@@ -126,13 +126,17 @@ class OutputEvent:
     @classmethod
     def from_trade_progress(cls, paper_trade_dict: dict,
                             milestone_r: float) -> "OutputEvent":
-        """An OPEN trade crossed an R milestone. dedup_key pins the milestone so
-        a trade oscillating around +1R cannot re-announce it."""
+        """An OPEN trade crossed a progress milestone (a multiple of its stop,
+        titled in points). dedup_key pins the milestone so a trade oscillating
+        around it cannot re-announce it."""
         instrument = paper_trade_dict.get("instrument", "?")
         direction = paper_trade_dict.get("direction", "LONG")
         up = milestone_r > 0
         mark = "🟢" if up else "🟠"
-        label = f"{milestone_r:+g}R"
+        d = paper_trade_dict
+        risk = d.get("initial_risk") or abs((d.get("entry") or 0.0) - (d.get("stop") or 0.0))
+        pts = milestone_r * risk
+        label = f"{pts:+.1f} pts"
         return cls(
             kind="trade_progress",
             dedup_key=f"{paper_trade_dict.get('signal_id', '')}:r{milestone_r:g}",

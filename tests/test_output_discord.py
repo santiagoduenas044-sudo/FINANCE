@@ -184,7 +184,7 @@ def test_payload_contains_all_candidate_fields():
     field_names = {f["name"] for f in payload["embeds"][0]["fields"]}
     expected = {
         "Instrument", "Setup", "Bias", "Timestamp", "Timeframe", "Entry",
-        "Stop Loss", "Take Profit 1", "Take Profit 2", "R:R", "Market context",
+        "Stop Loss", "Take Profit 1", "Take Profit 2", "Objetivos (pts)", "Market context",
         "Reasons", "Referenced liquidity / structure", "Invalidation",
         "Expiration", "Status",
     }

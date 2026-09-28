@@ -55,8 +55,8 @@ def render_fields(c: SetupCandidate) -> list[tuple[str, str]]:
         fields.append(("Take Profit 1", _fmt_price(tps[0])))
     if len(tps) >= 2:
         fields.append(("Take Profit 2", _fmt_price(tps[1])))
-    if c.risk_reward:
-        fields.append(("R:R", ", ".join(f"{r:.2f}" for r in c.risk_reward)))
+    if tps and c.entry is not None:
+        fields.append(("Objetivos (pts)", ", ".join(f"{abs(tp - c.entry):.2f}" for tp in tps)))
     if c.market_context:
         ctx = ", ".join(f"{k}={v}" for k, v in c.market_context.items())
         fields.append(("Market context", _truncate(ctx)))
@@ -93,8 +93,8 @@ def render_signal_fields(s: Signal) -> list[tuple[str, str]]:
         fields.append(("Take Profit 1", _fmt_price(tps[0])))
     if len(tps) >= 2:
         fields.append(("Take Profit 2", _fmt_price(tps[1])))
-    if s.risk_reward:
-        fields.append(("R:R", ", ".join(f"{r:.2f}" for r in s.risk_reward)))
+    if tps and s.entry is not None:
+        fields.append(("Objetivos (pts)", ", ".join(f"{abs(tp - s.entry):.2f}" for tp in tps)))
     if s.market_context:
         ctx = ", ".join(f"{k}={v}" for k, v in s.market_context.items())
         fields.append(("Market context", _truncate(ctx)))
@@ -184,7 +184,7 @@ def _build_trade_opened_payload(event: OutputEvent) -> dict:
     sig_id  = p.get("signal_id", "")[:8]
 
     def fp(v): return f"{v:.2f}" if v is not None else "—"
-    def fr(v): return f"+{v:.2f}R" if v is not None else "—"
+    def fr(tp): return f"+{abs(tp - entry):.2f} pts" if entry is not None else "—"
 
     fields = [
         {"name": "Instrument", "value": instrument, "inline": True},
@@ -195,9 +195,9 @@ def _build_trade_opened_payload(event: OutputEvent) -> dict:
         {"name": "Risk (pts)", "value": fp(risk),   "inline": True},
     ]
     if tp1 is not None:
-        fields.append({"name": "TP1", "value": f"{fp(tp1)} ({fr(tp1_r)})", "inline": True})
+        fields.append({"name": "TP1", "value": f"{fp(tp1)} ({fr(tp1)})", "inline": True})
     if tp2 is not None:
-        fields.append({"name": "TP2", "value": f"{fp(tp2)} ({fr(tp2_r)})", "inline": True})
+        fields.append({"name": "TP2", "value": f"{fp(tp2)} ({fr(tp2)})", "inline": True})
     if tp3 is not None:
         fields.append({"name": "TP3", "value": fp(tp3), "inline": True})
     fields += [
@@ -229,12 +229,11 @@ def _pts(v) -> str:
     return f"{v:+.2f}" if v is not None else "—"
 
 
-def _rmult(v) -> str:
-    return f"{v:+.2f}R" if v is not None else "—"
+
 
 
 def _build_trade_closed_payload(event: OutputEvent) -> dict:
-    """Realised outcome of a paper trade: exit reason, P&L in points and R, and
+    """Realised outcome of a paper trade: exit reason, P&L in points, and
     how far it ran in each direction before closing (MFE/MAE)."""
     p = event.status_payload or {}
     if (p.get("context") or {}).get("idea_number") is not None:
@@ -249,10 +248,9 @@ def _build_trade_closed_payload(event: OutputEvent) -> dict:
         {"name": "Exit",       "value": _fmt_price(p.get("exit_price")), "inline": True},
         {"name": "Exit reason", "value": (p.get("exit_reason") or "—"), "inline": True},
         {"name": "P&L (pts)",  "value": _pts(p.get("pnl_points")), "inline": True},
-        {"name": "Result",     "value": _rmult(r),                 "inline": True},
         {"name": "Bars held",  "value": str(p.get("bars_held", "—")), "inline": True},
-        {"name": "Best (MFE)", "value": _rmult(p.get("mfe_r")),    "inline": True},
-        {"name": "Worst (MAE)", "value": _rmult(p.get("mae_r")),   "inline": True},
+        {"name": "Best (MFE pts)", "value": _pts(p.get("mfe_points")), "inline": True},
+        {"name": "Worst (MAE pts)", "value": _pts(p.get("mae_points")), "inline": True},
         {"name": "Signal ID",  "value": p.get("signal_id", "")[:8] + "…", "inline": True},
     ]
     embed = {
@@ -266,8 +264,8 @@ def _build_trade_closed_payload(event: OutputEvent) -> dict:
 
 
 def _build_trade_progress_payload(event: OutputEvent) -> dict:
-    """An open trade crossed an R milestone — a short 'where it stands now'
-    update rather than the full trade plan."""
+    """An open trade crossed a progress milestone — a short 'where it stands
+    now' update rather than the full trade plan."""
     p = event.status_payload or {}
     milestone = p.get("milestone_r", 0.0)
     color = _WIN_COLOR if milestone > 0 else 0xFFA000
@@ -278,8 +276,7 @@ def _build_trade_progress_payload(event: OutputEvent) -> dict:
         {"name": "Entry",      "value": _fmt_price(p.get("entry")), "inline": True},
         {"name": "Now",        "value": _fmt_price(p.get("current_price")), "inline": True},
         {"name": "P&L (pts)",  "value": _pts(p.get("pnl_points")), "inline": True},
-        {"name": "Open P&L",   "value": _rmult(p.get("r_multiple")), "inline": True},
-        {"name": "Best (MFE)", "value": _rmult(p.get("mfe_r")),   "inline": True},
+        {"name": "Best (MFE pts)", "value": _pts(p.get("mfe_points")), "inline": True},
         {"name": "Stop",       "value": _fmt_price(p.get("stop")), "inline": True},
         {"name": "TP1",        "value": _fmt_price(p.get("tp1")),  "inline": True},
         {"name": "TP2",        "value": _fmt_price(p.get("tp2")),  "inline": True},
@@ -310,7 +307,7 @@ def _build_status_digest_payload(event: OutputEvent) -> dict:
         {"name": "Closed today", "value": str(p.get("closed_today", 0)), "inline": True},
         {"name": "Realised today", "value": _pts(p.get("realised_points")), "inline": True},
         {"name": "Win rate",     "value": p.get("win_rate", "—"), "inline": True},
-        {"name": "Open P&L",     "value": _rmult(p.get("open_r")), "inline": True},
+        {"name": "Open P&L",     "value": _pts(p.get("open_pts")), "inline": True},
         {"name": "Open positions", "value": _truncate(body), "inline": False},
     ]
     for sym, lines in (p.get("market_read") or {}).items():
@@ -359,13 +356,20 @@ def _embed(title: str, description: str, color: int, footer: str) -> dict:
                         "color": color, "footer": {"text": footer}}]}
 
 
-def _targets_line(tp1, final, rr=None, *, breakeven: bool = False) -> str:
+def _targets_line(tp1, final, ref=None, per_point: dict | None = None, *,
+                  breakeven: bool = False) -> str:
+    """'🎯 TP 24,060.00 · +60 pts ≈ $600 5 MNQ' — distance from `ref` (the
+    entry) in points and dollars."""
+    def gain(tp):
+        if ref is None or tp is None:
+            return ""
+        pts = abs(tp - ref)
+        shown = f"{pts:.1f}".rstrip("0").rstrip(".")
+        return f" · +{shown} pts{_usd(pts, per_point)}"
     if final is None or final == tp1:          # single target
-        return f"🎯 TP {_px(tp1)}" + (f" ({rr:g}R)" if rr else "")
+        return f"🎯 TP {_px(tp1)}{gain(tp1)}"
     out = f"🎯 TP1 {_px(tp1)}" + (" → stop a BE" if breakeven else "")
-    if final is not None:
-        out += f" · TP {_px(final)}" + (f" ({rr:g}R)" if rr else "")
-    return out
+    return out + f" · TP {_px(final)}{gain(final)}"
 
 
 # Short on purpose: a signal is read in a few seconds on a phone. Every line is
@@ -383,7 +387,8 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
     lines = [f"Vigila **{_px(p.get('mid'))}** (zona {_px(p.get('bottom'))} – {_px(p.get('top'))})",
              f"🛑 SL {_px(p.get('stop'))} · ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}"]
     if plan.get("tp1") is not None:
-        lines.append(_targets_line(plan["tp1"], plan.get("final"), plan.get("plan_rr")))
+        lines.append(_targets_line(plan["tp1"], plan.get("final"), p.get("mid"),
+                                   p.get("usd_per_point")))
     lines.append("⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún.")
     return _embed(f"🟡 IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
                   _IDEA_COLOR, event.disclaimer)
@@ -403,7 +408,8 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
     lines = [f"✅ **Entra ahora {_px(entry)}** · óptima {_px(mid)}",
              f"🛑 SL {_px(stop)}" + (f" · ~{risk:.0f} pts{_usd(risk, ctx.get('usd_per_point'))}"
                                      if risk is not None else ""),
-             _targets_line(p.get("tp1"), p.get("tp2"), ctx.get("plan_rr"), breakeven=True)]
+             _targets_line(p.get("tp1"), p.get("tp2"), entry, ctx.get("usd_per_point"),
+                           breakeven=True)]
     return _embed(title, "\n".join(lines), _TRADE_COLOR.get(direction, _WIN_COLOR),
                   event.disclaimer)
 
@@ -417,7 +423,6 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
     ctx = p.get("context") or {}
     num = ctx.get("idea_number")
     pts = p.get("pnl_points") or 0.0
-    r = p.get("r_multiple") or 0.0
     reason = (p.get("exit_reason") or "").upper()
     label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
     if reason == "STOP" and p.get("tp1_hit"):
@@ -432,7 +437,7 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
                                       key=lambda kv: kv[1]))
     return _embed(
         f"{mark} IDEA #{num} — {label} · {pts:+.2f} pts",
-        f"{_px(p.get('entry'))} → {_px(p.get('exit_price'))} · {r:+.2f}R{usd}",
+        f"{_px(p.get('entry'))} → {_px(p.get('exit_price'))}{usd}",
         _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
         event.disclaimer)
 

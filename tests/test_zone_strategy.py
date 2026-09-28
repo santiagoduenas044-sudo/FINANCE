@@ -105,10 +105,10 @@ def test_messages_read_like_trade_ideas():
     assert opened["description"].splitlines() == [
         "✅ **Entra ahora 100.00** · óptima 100.00",
         "🛑 SL 120.00 · ~20 pts ≈ $40 MNQ / $400 NQ",
-        "🎯 TP1 75.00 → stop a BE · TP 40.00 (3R)"]
+        "🎯 TP1 75.00 → stop a BE · TP 40.00 · +60 pts ≈ $120 MNQ / $1,200 NQ"]
     closed = build_discord_payload(OutputEvent.from_trade_closed(trade))["embeds"][0]
     assert closed["title"] == "🛑 IDEA #4 — Stop · -20.00 pts"
-    assert closed["description"] == "100.00 → 120.00 · -1.00R · −$40 MNQ · −$400 NQ"
+    assert closed["description"] == "100.00 → 120.00 · −$40 MNQ · −$400 NQ"
 
 
 def test_live_bot_runs_the_zone_strategy_by_default(monkeypatch):
@@ -145,7 +145,7 @@ def test_heads_up_is_short_and_has_the_numbers():
     assert e["description"].splitlines() == [
         "Vigila **30,841.50** (zona 30,832.25 – 30,850.75)",
         "🛑 SL 30,876.50 · ~35 pts ≈ $70 MNQ / $700 NQ",
-        "🎯 TP1 30,806.50 · TP 30,670.00 (4.9R)",
+        "🎯 TP1 30,806.50 · TP 30,670.00 · +171.5 pts ≈ $343 MNQ / $3,430 NQ",
         "⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún."]
 
 

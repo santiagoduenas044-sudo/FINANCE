@@ -380,7 +380,7 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
       <div class="grid g-4 mb" id="bt-tiles"></div>
       <div class="grid g-2 mb">
         <div class="panel">
-          <div class="ph"><span class="mn">EQ</span><h2>Curva de capital (R, con costos)</h2></div>
+          <div class="ph"><span class="mn">EQ</span><h2>Curva de capital ($, con costos)</h2></div>
           <div class="pb"><div id="bt-equity"></div></div>
         </div>
         <div class="panel">
@@ -389,7 +389,7 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         </div>
       </div>
       <div class="panel mb">
-        <div class="ph"><span class="mn">RR</span><h2>Objetivos (R:R) · mismas señales</h2></div>
+        <div class="ph"><span class="mn">RR</span><h2>Objetivos · mismas señales</h2></div>
         <div class="pb tight scroll" id="bt-targets"></div>
       </div>
       <div class="grid g-2 mb">
@@ -510,13 +510,16 @@ const nyDay = iso => { const d = okDate(iso); return d ? fmtDate.format(d) : nul
 // $ por punto: contrato grande y micro (el micro primero, es lo que se opera)
 const PV = { NQ: [["MNQ", 2], ["NQ", 20]], ES: [["MES", 5], ["ES", 50]] };
 const posPV = sym => { const p = S.status?.position?.[sym]; return p ? Object.entries(p) : (PV[sym] || []); };
+const dol = (pts, pv) => (pts == null || !isFinite(pts) || !pv) ? "—"
+  : `${pts < 0 ? "−" : "+"}$${Math.abs(pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+const symPV = sym => (posPV(sym)[0] || [null, 1])[1];
 const usd = (pts, sym) => posPV(sym).map(([k, v]) =>
   `${pts < 0 ? "−" : "+"}$${Math.abs(pts * v).toLocaleString("en-US", { maximumFractionDigits: 0 })} ${k}`).join(" · ");
 const EXIT_ES = { TP1: "TP1", TP2: "Objetivo final", STOP: "Stop", INVALIDATION: "Invalidada",
   CANCELLED: "Cancelada", EXPIRED: "Expirada", EOD: "Cierre fin de día" };
 const REASON_ES = { active_trade: "ya había un trade abierto", cooldown: "pausa tras un stop",
   too_late_in_session: "muy tarde", invalid_session: "fuera de horario", excessive_volatility: "volatilidad excesiva",
-  setup_incomplete: "setup incompleto", insufficient_rr: "R:R insuficiente", target_too_close: "objetivo muy cerca",
+  setup_incomplete: "setup incompleto", insufficient_rr: "objetivo muy corto para el stop", target_too_close: "objetivo muy cerca",
   stale_data: "datos atrasados", duplicate: "duplicada", conflicting_setups: "señales opuestas",
   stop_too_tight: "stop muy ajustado", stop_too_wide: "stop muy ancho", risk_rejected: "riesgo" };
 function tile(lab, fig, sub, tone) {
@@ -749,7 +752,7 @@ function renderNow() {
     $("now").innerHTML = `
       <div class="state" style="color:${long ? css("--good") : css("--critical")}">● ${long ? "Compra" : "Venta"} abierta${n ? " · idea #" + n : ""}</div>
       <div class="big ${cls(t.pnl_points)}">${sgn(t.pnl_points)} pts</div>
-      <div class="usd">${usd(t.pnl_points || 0, sym)} · ${sgn(t.r_multiple)}R</div>
+      <div class="usd">${usd(t.pnl_points || 0, sym)}</div>
       <div class="rail" aria-hidden="true">
         <span class="tk" style="left:${pos(t.entry)}%"></span>
         ${t.tp1 != null && far !== t.tp1 ? `<span class="tk" style="left:${pos(t.tp1)}%"></span>` : ""}
@@ -844,29 +847,29 @@ function renderHistory() {
   const tr = S.closed.slice().filter(t => t.closed_at && (!S.symbol || t.instrument === S.symbol))
     .sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
   let cum = 0, peak = 0, dd = 0;
-  const eq = tr.map(t => { cum += t.r_multiple || 0; peak = Math.max(peak, cum); dd = Math.min(dd, cum - peak); return { t: t.closed_at, cum }; });
-  const pts = tr.reduce((s, t) => s + (t.pnl_points || 0), 0);
-  const w = tr.filter(t => t.r_multiple > 0), l = tr.filter(t => t.r_multiple < 0);
-  const gw = w.reduce((s, t) => s + t.r_multiple, 0), gl = -l.reduce((s, t) => s + t.r_multiple, 0);
+  const eq = tr.map(t => { cum += t.pnl_points || 0; peak = Math.max(peak, cum); dd = Math.min(dd, cum - peak); return { t: t.closed_at, cum_pts: cum }; });
+  const pts = cum;
+  const w = tr.filter(t => t.pnl_points > 0), l = tr.filter(t => t.pnl_points < 0);
+  const gw = w.reduce((s, t) => s + t.pnl_points, 0), gl = -l.reduce((s, t) => s + t.pnl_points, 0);
   const pf = gl > 0 ? gw / gl : (gw > 0 ? Infinity : null);
   $("perf-tiles").innerHTML =
     tile("Resultado total", `${sgn(pts, 1)} pts`, tr.length ? usd(pts, S.symbol) : "—", pts >= 0 ? "good" : "critical") +
     tile("Acierto", tr.length ? Math.round(w.length / tr.length * 100) + "%" : "—", `${w.length} ganados · ${l.length} perdidos · ${tr.length - w.length - l.length} en cero`) +
     tile("Factor de beneficio", pf == null ? "—" : pf === Infinity ? "∞" : num(pf), "ganado ÷ perdido", pf == null ? "" : pf >= 1 ? "good" : "critical") +
-    tile("Peor racha", num(dd, 1) + "R", "caída máxima, en múltiplos del stop", dd < 0 ? "critical" : "");
-  $("eq-total").textContent = tr.length ? sgn(cum) + "R" : "";
-  $("equity").innerHTML = btEquitySvg(eq, "");
+    tile("Peor racha", tr.length ? dol(dd, symPV(S.symbol)) : "—", `caída máxima · ${num(dd, 1)} pts`, dd < 0 ? "critical" : "");
+  $("eq-total").textContent = tr.length ? dol(cum, symPV(S.symbol)) : "";
+  $("equity").innerHTML = btEquitySvg(eq, "", symPV(S.symbol));
   $("closed-n").textContent = tr.length || "";
   const R = 'style="text-align:right"';
   $("closed-table").innerHTML = tr.length ? `<table><thead><tr><th>Cierre ET</th><th>Idea</th><th>Dir.</th>
-      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>R</th></tr></thead><tbody>` +
+      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>Dólares</th></tr></thead><tbody>` +
     tr.slice().reverse().map(t => `<tr><td class="t">${esc(dhm(t.closed_at))}</td>
       <td>${t.context?.idea_number ? (t.context.idea_direct ? "⚡" : "🟢") + " #" + t.context.idea_number : esc(t.setup)}</td>
       <td><span class="tag ${t.direction === "LONG" ? "up" : "down"}">${t.direction === "LONG" ? "Compra" : "Venta"}</span></td>
       <td class="num" ${R}>${num(t.entry)}</td><td class="num" ${R}>${num(t.exit_price)}</td>
       <td>${esc(EXIT_ES[t.exit_reason] || t.exit_reason || "—")}${t.context?.correction ? ' <span class="badge warn">corregido</span>' : ""}</td>
       <td class="num ${cls(t.pnl_points)}" ${R}>${sgn(t.pnl_points)}</td>
-      <td class="num ${cls(t.r_multiple)}" style="text-align:right;font-weight:700">${sgn(t.r_multiple)}R</td></tr>`).join("") + "</tbody></table>"
+      <td class="num ${cls(t.pnl_points)}" style="text-align:right;font-weight:700">${dol(t.pnl_points, symPV(S.symbol))}</td></tr>`).join("") + "</tbody></table>"
     : `<div class="empty">Ninguna operación ha cerrado todavía.</div>`;
 }
 
@@ -967,29 +970,31 @@ function btRow(label, s, pv, extra = "") {
   const R = `style="text-align:right"`;
   if (!s) return `<tr${extra}><td>${esc(label)}</td><td colspan="7" class="zero">—</td></tr>`;
   const pf = s.pf == null ? "∞" : num(s.pf, 2);
+  const avg = s.avg_pts ?? (s.pts != null && s.n ? s.pts / s.n : null);
   return `<tr${extra}><td style="color:var(--ink-1)">${esc(label)}</td><td class="num" ${R}>${s.n}</td>
-    <td class="num" ${R}>${(s.wr * 100).toFixed(0)}%</td><td class="num ${cls(s.exp)}" ${R}>${sgn(s.exp, 3)}R</td>
-    <td class="num" ${R}>${pf}</td><td class="num ${cls(s.net)}" style="text-align:right;font-weight:800">${sgn(s.net, 1)}R</td>
-    <td class="num neg" ${R}>${num(s.dd, 1)}R</td>
-    <td class="num ${cls(s.pts)}" ${R}>${pv ? (s.pts >= 0 ? "+$" : "−$") + Math.abs(s.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 }) : "—"}</td></tr>`;
+    <td class="num" ${R}>${(s.wr * 100).toFixed(0)}%</td><td class="num ${cls(avg)}" ${R}>${dol(avg, pv || 1)}</td>
+    <td class="num" ${R}>${pf}</td><td class="num ${cls(s.pts)}" style="text-align:right;font-weight:800">${dol(s.pts, pv || 1)}</td>
+    <td class="num ${cls(s.pts)}" ${R}>${sgn(s.pts, 0)}</td>
+    <td class="num neg" ${R}>${s.dd_pts != null ? dol(-s.dd_pts, pv || 1) : "—"}</td></tr>`;
 }
 function btTable(rows) {
   const R = `style="text-align:right"`;
-  return `<table><thead><tr><th></th><th ${R}>Trades</th><th ${R}>Acierto</th><th ${R}>Esperanza</th>
-    <th ${R}>PF</th><th ${R}>Neto</th><th ${R}>Caída</th><th ${R}>$ (${esc(BT.data?.meta?.position || "1 " + (BT.data?.meta?.symbol || ""))})</th></tr></thead><tbody>${rows}</tbody></table>`;
+  return `<table><thead><tr><th></th><th ${R}>Trades</th><th ${R}>Acierto</th><th ${R}>Prom./trade</th>
+    <th ${R}>PF</th><th ${R}>Neto $</th><th ${R}>Neto pts</th><th ${R}>Peor caída</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
-function btEquitySvg(eq, note = "costos incluidos") {
+function btEquitySvg(eq, note = "costos incluidos", pv = 1) {
   if (eq.length < 2) return `<div class="empty"><span class="ic">◇</span>Pocas operaciones para una curva.</div>`;
+  if (eq[0].cum_pts == null) return `<div class="empty"><span class="ic">◇</span>Este backtest es anterior a la curva en dólares; córrelo de nuevo para verla.</div>`;
   const W = 100, H = 170, P = { t: 10, r: 4, b: 20, l: 30 };
-  const vals = [0, ...eq.map(p => p.cum)];
+  const vals = [0, ...eq.map(p => p.cum_pts * pv)];
   const lo = Math.min(...vals), hi = Math.max(...vals), rng = (hi - lo) || 1;
   const x = i => P.l + (i / (vals.length - 1)) * (W - P.l - P.r);
   const y = v => P.t + (1 - (v - lo) / rng) * (H - P.t - P.b);
   const pts = vals.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`);
   const col = css(vals[vals.length - 1] >= 0 ? "--good" : "--critical");
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-      aria-label="Curva de capital del backtest en R">
+      aria-label="Curva de capital en dólares">
     ${[hi, (hi + lo) / 2, lo].map(t => `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${y(t).toFixed(2)}"
       y2="${y(t).toFixed(2)}" vector-effect="non-scaling-stroke"/>`).join("")}
     <line x1="${P.l}" x2="${W - P.r}" y1="${y(0).toFixed(2)}" y2="${y(0).toFixed(2)}" stroke="${css("--rule")}"
@@ -997,7 +1002,7 @@ function btEquitySvg(eq, note = "costos incluidos") {
     <polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
     <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink-3);padding:5px 4px 0 30px">
       <span>${esc(String(eq[0].t).slice(0, 10))}</span><span>${esc(String(eq[eq.length - 1].t).slice(0, 10))}</span></div>
-    <p class="foot">De ${num(lo, 1)}R a ${num(hi, 1)}R · ${eq.length} operaciones${note ? ", " + note : ""}.</p>`;
+    <p class="foot">De ${dol(lo, 1)} a ${dol(hi, 1)} · ${eq.length} operaciones${note ? ", " + note : ""}.</p>`;
 }
 
 function renderBacktest() {
@@ -1020,7 +1025,7 @@ function renderBacktest() {
     $("bt-note").textContent = "⚠ Falló: " + (st.log_tail || []).slice(-2).join(" ");
   }
   $("bt-runs").innerHTML = BT.runs.map(r => `<option value="${esc(r.id)}" ${r.id === BT.sel ? "selected" : ""}>
-    ${esc(r.meta?.start)} → ${esc(r.meta?.end)} · ${esc(r.meta?.strategy)} · ${sgn(r.total?.net, 1)}R</option>`).join("");
+    ${esc(r.meta?.start)} → ${esc(r.meta?.end)} · ${esc(r.meta?.strategy)} · ${dol(r.total?.pts, r.meta?.point_value || 1)}</option>`).join("");
 
   const d = BT.data;
   ["bt-tiles", "bt-equity", "bt-targets", "bt-hours", "bt-trades"].forEach(id => {
@@ -1038,19 +1043,19 @@ function renderBacktest() {
     &nbsp;<span class="pill"><span class="k">costo</span><span class="v">${num(m.cost_points, 2)} pts/trade</span></span>`
     + (t && t.n < 30 ? `<p class="foot">⚠ Menos de 30 operaciones: no alcanza para sacar conclusiones.</p>` : "");
   $("bt-tiles").innerHTML = !t ? "" :
-    tile("Resultado neto", sgn(t.net, 1) + "R", pv ? `${t.pts >= 0 ? "+" : "−"}$${Math.abs(t.pts * pv).toLocaleString("en-US", { maximumFractionDigits: 0 })} con ${esc(m.position || "1 " + m.symbol)} · ${sgn(t.pts, 1)} pts` : "", t.net >= 0 ? "good" : "critical") +
-    tile("Operaciones · acierto", `${t.n} · ${(t.wr * 100).toFixed(0)}%`, `esperanza ${sgn(t.exp, 3)}R por trade`, t.exp >= 0 ? "good" : "critical") +
+    tile("Resultado neto", dol(t.pts, pv || 1), `con ${esc(m.position || "1 " + m.symbol)} · ${sgn(t.pts, 1)} pts`, t.pts >= 0 ? "good" : "critical") +
+    tile("Operaciones · acierto", `${t.n} · ${(t.wr * 100).toFixed(0)}%`, `promedio ${dol(t.avg_pts ?? t.pts / t.n, pv || 1)} por trade`, t.pts >= 0 ? "good" : "critical") +
     tile("Factor de beneficio", t.pf == null ? "∞" : num(t.pf, 2), "ganado ÷ perdido", (t.pf ?? 9) >= 1 ? "good" : "critical") +
-    tile("Máxima caída", "−" + num(t.dd, 1) + "R", "peor racha, en múltiplos de tu stop", "critical");
-  $("bt-equity").innerHTML = btEquitySvg(d.equity || []);
+    tile("Máxima caída", t.dd_pts != null ? dol(-t.dd_pts, pv || 1) : "—", "peor racha", "critical");
+  $("bt-equity").innerHTML = btEquitySvg(d.equity || [], "costos incluidos", pv || 1);
   const pol = Object.entries(d.policies || {});
-  const bestNet = Math.max(...pol.map(([, s]) => s?.net ?? -1e9));
-  $("bt-policies").innerHTML = btTable(pol.map(([k, s]) => btRow(k, s, pv, s && s.net === bestNet ? ' class="best"' : "")).join(""))
+  const bestNet = Math.max(...pol.map(([, s]) => s?.pts ?? -1e9));
+  $("bt-policies").innerHTML = btTable(pol.map(([k, s]) => btRow(k, s, pv, s && s.pts === bestNet ? ' class="best"' : "")).join(""))
     + `<p class="foot" style="padding:0 8px 8px">Cada fila vuelve a jugar las mismas señales aprobadas con otra regla de stop. Verde = mayor neto.</p>`;
   const tg = Object.entries(d.targets || {});
-  const bestT = Math.max(...tg.map(([, s]) => s?.net ?? -1e9));
-  $("bt-targets").innerHTML = tg.length ? btTable(tg.map(([k, s]) => btRow(k, s, pv, s && s.net === bestT ? ' class="best"' : "")).join(""))
-    + `<p class="foot" style="padding:0 8px 8px">Mismas entradas y stops; solo cambia dónde se toma la ganancia. R = distancia de la óptima al stop.</p>`
+  const bestT = Math.max(...tg.map(([, s]) => s?.pts ?? -1e9));
+  $("bt-targets").innerHTML = tg.length ? btTable(tg.map(([k, s]) => btRow(k, s, pv, s && s.pts === bestT ? ' class="best"' : "")).join(""))
+    + `<p class="foot" style="padding:0 8px 8px">Mismas entradas y stops; solo cambia dónde se toma la ganancia.</p>`
     : `<div class="empty">Este backtest es anterior a la comparación de objetivos.</div>`;
   $("bt-hours").innerHTML = btTable(Object.entries(d.by_hour || {}).map(([h, s]) => btRow(h, s, pv)).join(""));
   $("bt-mix").innerHTML = btTable(
@@ -1062,14 +1067,14 @@ function renderBacktest() {
   $("bt-n").textContent = tr.length;
   const R = `style="text-align:right"`;
   $("bt-trades").innerHTML = tr.length ? `<table><thead><tr><th>Entrada ET</th><th>Dir.</th><th>Tipo</th>
-      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>R</th></tr></thead><tbody>` +
+      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>Dólares</th></tr></thead><tbody>` +
     tr.map(x => `<tr><td class="t">${esc(String(x.opened_at).slice(0, 16).replace("T", " "))}</td>
       <td><span class="tag ${x.direction === "LONG" ? "up" : "down"}">${x.direction === "LONG" ? "▲" : "▼"}</span></td>
       <td>${x.direct ? "⚡" : "🟢"} ${x.idea ? "#" + x.idea : ""}</td>
       <td class="num" ${R}>${num(x.entry)}</td><td class="num" ${R}>${num(x.exit_price)}</td>
       <td>${esc(EXIT_ES[x.exit] || x.exit)}</td>
       <td class="num ${cls(x.pnl_pts)}" ${R}>${sgn(x.pnl_pts)}</td>
-      <td class="num ${cls(x.r)}" style="text-align:right;font-weight:800">${sgn(x.r)}R</td></tr>`).join("") + "</tbody></table>"
+      <td class="num ${cls(x.pnl_pts)}" style="text-align:right;font-weight:800">${dol(x.pnl_pts, pv || 1)}</td></tr>`).join("") + "</tbody></table>"
     : `<div class="empty"><span class="ic">◇</span>Sin operaciones en este periodo.</div>`;
 }
 
@@ -1187,7 +1192,7 @@ function prRegister() {
         hline(e.x, e.x + w, e.y, "#cbd2dc", false),
         tag(cx, tp.y + (up ? -4 : 4), `Objetivo ${num(rew)} (${num(rew / ent * 100)}%) ${money(rew * k)}`, GOOD, "#04130a", "center", up ? "bottom" : "top"),
         tag(cx, sl.y + (up ? 4 : -4), `Stop ${num(rsk)} (${num(rsk / ent * 100)}%) ${money(-rsk * k)}`, BAD, "#fff", "center", up ? "top" : "bottom"),
-        tag(cx, e.y, `R:R ${rsk ? num(rew / rsk) : "—"}`, "#2a3140", "#eef1f5", "center")];
+        tag(cx, e.y, `Entrada ${num(ent)}`, "#2a3140", "#eef1f5", "center")];
     },
     performEventPressedMove: ({ points: p }) => {
       if (p.length < 4) return;
@@ -1709,7 +1714,7 @@ function prPaint() {
   $("pr-bid").textContent = $("pr-ask").textContent = shown;
   const tk = prTicket(), k = tk.qty * tk.ppt;
   $("pr-sum").innerHTML = `<span>riesgo <b class="neg">${money(-tk.slPts * k)}</b></span><span>objetivo <b class="pos">${money(tk.tpPts * k)}</b></span>` +
-    `<span>1:${num(tk.tpPts / tk.slPts, 1)}</span>`;
+    "";
 
   if (p && b) {
     const long = isLong(p.dir), pts = long ? b.c - p.entry : p.entry - b.c, usd = pts * p.qty * p.ppt, kk = p.qty * p.ppt;
@@ -1717,7 +1722,7 @@ function prPaint() {
     $("pr-pos").innerHTML = `<div class="poshead"><span class="sidetag ${long ? "l" : "s"}">${long ? "LARGO" : "CORTO"}</span>
         ${p.qty} ${esc(p.inst)} @ ${num(p.entry)}</div>
       <div class="posbig ${cls(usd)}">${money(usd)}</div>
-      <div class="possub">${sgn(pts)} pts${p.risk ? ` · ${sgn(pts / p.risk)}R` : ""}</div>
+      <div class="possub">${sgn(pts)} pts</div>
       <dl class="kv"><dt>SL</dt><dd>${num(p.sl)} <span class="${cls(slUsd)}">${money(slUsd)}</span></dd>
         <dt>TP</dt><dd>${num(p.tp)} <span class="pos">${money(tpUsd)}</span></dd></dl>
       <div class="posact"><button class="pbtn" data-a="close" type="button">Cerrar</button>
