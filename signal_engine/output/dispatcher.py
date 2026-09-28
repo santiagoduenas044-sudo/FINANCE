@@ -125,6 +125,11 @@ class OutputDispatcher:
         """The record once the day is flat (today, week, total, last trades)."""
         self._emit(OutputEvent.from_daily_record(text, day))
 
+    def publish_note(self, *, title: str, text: str, color: int, key: str,
+                     image: bytes | None = None) -> None:
+        """A plain titled message, optionally with a chart (paper sub-bots)."""
+        self._emit(OutputEvent.from_note(title, text, color, key, image))
+
     def publish_day_done(self, payload: dict) -> None:
         """A daily limit was reached; the bot stops trading until tomorrow."""
         self._emit(OutputEvent.from_day_done(payload))

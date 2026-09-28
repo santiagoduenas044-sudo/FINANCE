@@ -196,6 +196,19 @@ class OutputEvent:
         )
 
     @classmethod
+    def from_note(cls, title: str, text: str, color: int, key: str,
+                  image_png: bytes | None = None) -> "OutputEvent":
+        """A plain titled message (the paper sub-bots: box, entry, close...)."""
+        return cls(
+            kind="note",
+            dedup_key=f"note:{key}",
+            title=title,
+            disclaimer="Simulated paper trading — not financial advice.",
+            status_payload={"text": text, "color": color},
+            image_png=image_png,
+        )
+
+    @classmethod
     def from_day_done(cls, payload: dict) -> "OutputEvent":
         """A daily limit was reached: no more trades this trading day."""
         return cls(

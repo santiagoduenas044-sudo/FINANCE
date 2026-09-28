@@ -19,6 +19,8 @@ honest visual distinction between real delayed data and the sample fallback.
 """
 from __future__ import annotations
 
+import os
+
 import logging
 import sys
 from dataclasses import dataclass
@@ -44,6 +46,7 @@ DEFAULT_SIGNAL_LOG = ROOT / "data_store" / "signal_log.jsonl"
 DEFAULT_GHOST_LOG = ROOT / "data_store" / "ghost_log.jsonl"
 DEFAULT_PAPER_DIR = ROOT / "data_store" / "paper"
 DEFAULT_IDEAS_FILE = ROOT / "data_store" / "ideas.json"
+DEFAULT_SUBBOTS_DIR = ROOT / "data_store" / "subbots"
 BARS_PER_TICK = 5  # how many 1m bars the simulated fallback delivers per poll
 
 # Symbol -> bundled sample contract for the SimulatedLiveAdapter fallback.
@@ -201,6 +204,17 @@ def build_runtime(
         from .ideas import IdeaBoard
         runtime.idea_board = IdeaBoard(DEFAULT_IDEAS_FILE,
                                        timezone=data_engine.cfg.data.timezone)
+
+    # Paper sub-bot APERTURA (opening-range breakout) on NQ, next to GHOST.
+    # BOT_SUBBOT_APERTURA=false turns it off.
+    if "NQ" in live_feeds and os.environ.get("BOT_SUBBOT_APERTURA", "true").strip().lower() \
+            not in {"0", "false", "no", "off"}:
+        from ..output.trade_chart import render_trade_png
+        from ..subbots.opening_range import OpeningRangeBot
+        runtime.subbots["NQ"] = OpeningRangeBot(
+            DEFAULT_SUBBOTS_DIR,
+            publish=dispatcher.publish_note if dispatcher is not None else None,
+            chart=render_trade_png)
 
     # Record each feed's real source on the runtime so status/chart can report
     # simulated-vs-delayed honestly (read-only metadata; no logic depends on it).

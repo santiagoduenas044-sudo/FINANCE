@@ -138,6 +138,10 @@ def build_discord_payload(event: OutputEvent) -> dict:
         return _build_stop_moved_payload(event)
     if event.kind == "day_done":
         return _build_day_done_payload(event)
+    if event.kind == "note":
+        p = event.status_payload or {}
+        return _embed(event.title, p.get("text", ""), int(p.get("color", 0x3498DB)),
+                      event.disclaimer)
     if event.kind == "daily_record":
         p = event.status_payload or {}
         return _embed("🔔 Cierre del día", p.get("text", ""), 0x3498DB, event.disclaimer)

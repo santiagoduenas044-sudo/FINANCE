@@ -68,11 +68,11 @@ ghost:
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
   # the account flat before 16:59.
   eod_close_time: "16:55"
-  # Trades every session: day (RTH) and night (Globex, from 18:00 ET).
-  # No new entries from 16:15 until the 18:00 reopen, so nothing is opened
-  # just to be closed by the 16:55 flat.
-  valid_sessions: ["RTH", "ETH"]
-  last_entry_time: "16:15"
+  # Day session only (09:30-15:30 entries). The 5-year lab run with the night
+  # included lost ~$167,000 on 5 MNQ: overnight stops of 15-18 pts are inside
+  # the noise, and almost every night hour lost money.
+  valid_sessions: ["RTH"]
+  last_entry_time: "15:30"
   # The operator always trades 5 micros: every $ figure is for 5 MNQ ($10/pt).
   contracts: 5
   trade_micro: true

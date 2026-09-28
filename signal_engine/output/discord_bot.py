@@ -36,6 +36,7 @@ _ALIASES = {
     "!trades": "trades",
     "!record": "record", "!récord": "record", "!historial": "record",
     "!why": "why", "!mercado": "why", "!porque": "why",
+    "!apertura": "apertura",
     "!help": "help", "!ayuda": "help",
 }
 
@@ -45,6 +46,7 @@ HELP = (
     "`!record` / `!récord` — récord en dólares: hoy, semana, total y últimos trades\n"
     "`!trades` — últimos trades cerrados y su resultado\n"
     "`!why` / `!mercado` — qué está viendo el bot ahora y por qué\n"
+    "`!apertura` — el subbot APERTURA: caja de hoy, trade abierto y su récord\n"
     "`!help` / `!ayuda` — esta lista"
 )
 
@@ -127,8 +129,15 @@ def _why(runtime) -> str:
     return "\n\n".join(parts)
 
 
+def _apertura(runtime) -> str:
+    bot = (getattr(runtime, "subbots", None) or {}).get("NQ")
+    if bot is None:
+        return "El subbot APERTURA no está activo (BOT_SUBBOT_APERTURA=false o sin feed de NQ)."
+    return bot.record_text()
+
+
 _HANDLERS = {"status": _status, "trades": _trades, "why": _why, "record": _record,
-             "help": lambda _rt: HELP}
+             "apertura": _apertura, "help": lambda _rt: HELP}
 
 
 def build_reply(content: str, runtime) -> str | None:

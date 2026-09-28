@@ -40,7 +40,8 @@ def test_entries_every_session_but_not_right_before_the_halt():
     assert not entry_window_closed("02:30", "16:15")
     assert not entry_window_closed("16:30", None)
     g = EngineConfig.load(strategy="zones").ghost
-    assert g.valid_sessions == ["RTH", "ETH"] and g.last_entry_time == "16:15"
+    # the lab showed the night only loses: day session, entries until 15:30
+    assert g.valid_sessions == ["RTH"] and g.last_entry_time == "15:30"
 
 
 def test_live_strategy_closes_at_1655():
