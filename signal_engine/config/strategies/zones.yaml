@@ -60,6 +60,11 @@ ghost:
   min_rr: 0.5
   partial_at_tp1: 0.0               # no partial: one target, whole position
   breakeven_after_tp1: false
+  # Once price has covered 70% of the way to the target, the stop moves to
+  # the entry + 2 pts (pays the ~1 pt of commission and slippage), so a trade
+  # that almost reached the target never turns into a full loss.
+  be_at_progress: 0.7
+  be_offset_points: 2.0
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
   # the account flat before 16:59.
   eod_close_time: "16:55"
@@ -78,9 +83,9 @@ ghost:
   min_stop_atr_mult: 0.0
   max_stop_atr_mult: 0.0
   cooldown_bars: 15                 # 15 minutes after a stop-out
-  # Stop for the day after 3 trades or once the day is down $500 on the
-  # 5-MNQ position (two full 25-pt stops). Change the numbers here.
-  max_trades_per_day: 3
+  # No limit on the number of trades; the day still stops once it is down
+  # $500 on the 5-MNQ position. Change the numbers here (null = off).
+  max_trades_per_day: null
   daily_loss_limit_usd: 500
 
 output:

@@ -42,7 +42,8 @@ class PaperTradeTracker:
     def __init__(self, store_dir: str | Path | None = None,
                  breakeven_after_tp1: bool = False, partial_at_tp1: float = 0.0,
                  be_trigger_r: float | None = None, be_offset_points: float = 0.0,
-                 trail_start_r: float | None = None, trail_distance_r: float = 1.0):
+                 trail_start_r: float | None = None, trail_distance_r: float = 1.0,
+                 be_at_progress: float | None = None):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
         # the stop to entry instead and that giveback becomes ~0R. Measured on
@@ -61,8 +62,11 @@ class PaperTradeTracker:
         #     stop to entry (+ be_offset_points, e.g. to cover costs).
         #   trail_start_r / trail_distance_r: once it has run trail_start_r R,
         #     the stop follows the best price at trail_distance_r R behind.
+        #   be_at_progress: once price has covered this fraction of the way
+        #     to the final target, stop to entry (+ be_offset_points).
         self.be_trigger_r = be_trigger_r
         self.be_offset_points = be_offset_points
+        self.be_at_progress = be_at_progress
         self.trail_start_r = trail_start_r
         self.trail_distance_r = trail_distance_r
         self.open_trades: list[PaperTrade] = []
@@ -81,7 +85,7 @@ class PaperTradeTracker:
                    partial_at_tp1=whole_contract_partial(gcfg.partial_at_tp1, gcfg.contracts),
                    be_trigger_r=gcfg.be_trigger_r,
                    be_offset_points=gcfg.be_offset_points, trail_start_r=gcfg.trail_start_r,
-                   trail_distance_r=gcfg.trail_distance_r)
+                   trail_distance_r=gcfg.trail_distance_r, be_at_progress=gcfg.be_at_progress)
 
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
@@ -267,9 +271,14 @@ class PaperTradeTracker:
         reached so far, including this bar; effective from the next bar."""
         long = trade.is_long
         new = trade.stop
+        off = self.be_offset_points
         if self.be_trigger_r is not None and trade.mfe_r >= self.be_trigger_r:
-            off = self.be_offset_points
             new = self._tighter(trade, new, trade.entry + off if long else trade.entry - off)
+        final = trade.tp2 if trade.tp2 is not None else trade.tp1
+        if self.be_at_progress is not None and final is not None:
+            dist = abs(final - trade.entry)
+            if dist > 0 and trade.mfe_points >= self.be_at_progress * dist:
+                new = self._tighter(trade, new, trade.entry + off if long else trade.entry - off)
         if self.trail_start_r is not None and trade.mfe_r >= self.trail_start_r:
             gap = self.trail_distance_r * trade.initial_risk
             best = trade.entry + trade.mfe_points if long else trade.entry - trade.mfe_points

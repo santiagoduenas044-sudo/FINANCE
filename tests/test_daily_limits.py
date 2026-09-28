@@ -34,6 +34,7 @@ def test_live_strategy_is_one_3r_target_without_breakeven():
     z = cfg.setups.zone_retrace
     assert (z.fixed_target_r, z.single_target) == (3.0, True)
     assert cfg.ghost.partial_at_tp1 == 0.0 and cfg.ghost.breakeven_after_tp1 is False
+    assert (cfg.ghost.be_at_progress, cfg.ghost.be_offset_points) == (0.7, 2.0)
 
 
 def test_trading_day_rolls_at_six_pm_like_apex():
@@ -100,7 +101,7 @@ def test_limits_off_when_not_configured():
 
 def test_live_strategy_has_daily_limits():
     g = EngineConfig.load(strategy="zones").ghost
-    assert (g.max_trades_per_day, g.daily_loss_limit_usd) == (3, 500)
+    assert (g.max_trades_per_day, g.daily_loss_limit_usd) == (None, 500)
 
 
 def test_messages_speak_in_contracts():
@@ -112,3 +113,30 @@ def test_messages_speak_in_contracts():
             "reason": "ya se hicieron 3 trades hoy (límite 3)", "open_trade": False}
     e = build_discord_payload(OutputEvent.from_day_done(done))["embeds"][0]
     assert "Fin del día" in e["title"] and "−$150" in e["description"]
+
+
+def _walk(tracker, direction, bars):
+    t0 = _t("2026-09-28 10:00")
+    long = direction == "LONG"
+    t = tracker.open_trade(signal_id="b", instrument="NQ", direction=direction, setup="zone_retrace",
+                           entry=100.0, stop=75.0 if long else 125.0,
+                           take_profits=[175.0 if long else 25.0], opened_at=t0)
+    for k, (h, l, c) in enumerate(bars):
+        tracker.update_on_bar(t, pd.Series({"high": h, "low": l, "close": c}),
+                              t0 + pd.Timedelta(minutes=k + 1))
+        if not t.is_open:
+            break
+    return t
+
+
+def test_breakeven_plus_at_70_percent_of_the_way():
+    g = EngineConfig.load(strategy="zones").ghost
+    # long: target 75 pts away, 70% = +52.5 pts. Runs +55 then falls through the stop
+    t = _walk(PaperTradeTracker.from_config(g), "LONG", [(155, 120, 150), (152, 99, 101), (102, 70, 72)])
+    assert t.exit_reason.value == "STOP" and t.pnl_points == 2.0      # entry + 2 pts, not -25
+    # short, same shape
+    t = _walk(PaperTradeTracker.from_config(g), "SHORT", [(101, 45, 50), (99, 48, 95), (130, 90, 128)])
+    assert t.pnl_points == 2.0
+    # only +50 pts (67%): the stop stays where it was
+    t = _walk(PaperTradeTracker.from_config(g), "LONG", [(150, 120, 148), (149, 70, 72)])
+    assert t.pnl_points == -25.0

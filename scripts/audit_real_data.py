@@ -269,7 +269,7 @@ def _runner(s, cfg, arr) -> float | None:
     far = mid + 20 * r if s.direction.value == "LONG" else mid - 20 * r
     tps = {"tp1": s.take_profits[0], "final": s.take_profits[-1], "far": far}
     flat = dict(partial_at_tp1=0.0, breakeven_after_tp1=False, be_trigger_r=None,
-                trail_start_r=None)
+                trail_start_r=None, be_at_progress=None)
     total = 0.0
     for w, which, pol in RUNNER_LEGS:
         t = _simulate(replace(s, take_profits=[tps[which]]), cfg, arr, {**flat, **pol})
@@ -305,7 +305,8 @@ def _tracker(cfg, policy: dict) -> PaperTradeTracker:
     base = dict(breakeven_after_tp1=g.breakeven_after_tp1,
                 partial_at_tp1=whole_contract_partial(g.partial_at_tp1, g.contracts),
                 be_trigger_r=g.be_trigger_r, be_offset_points=g.be_offset_points,
-                trail_start_r=g.trail_start_r, trail_distance_r=g.trail_distance_r)
+                trail_start_r=g.trail_start_r, trail_distance_r=g.trail_distance_r,
+                be_at_progress=g.be_at_progress)
     return PaperTradeTracker(**{**base, **policy})
 
 
@@ -379,7 +380,7 @@ def _features(s, d, arr: _Arrays, risk: float) -> dict:
 
 
 _FLAT = dict(partial_at_tp1=0.0, breakeven_after_tp1=False, be_trigger_r=None,
-             trail_start_r=None)
+             trail_start_r=None, be_at_progress=None)
 
 
 def _simulate(s, cfg, arr: _Arrays, policy: dict):
@@ -433,6 +434,8 @@ def shadow(cfg, de, exec_bars, decisions):
             for name, pol in STOP_POLICIES.items():
                 if callable(pol):
                     pol = pol(s)
+                if pol:                     # each variant measures only its own rule
+                    pol = {"be_at_progress": None, **pol}
                 v = _simulate(s, cfg, arr, pol) if pol else t
                 if v is not None:
                     row["policy_pnl"][name] = v.pnl_points

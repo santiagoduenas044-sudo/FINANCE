@@ -394,6 +394,10 @@ class GhostConfig(BaseModel):
     # optional offset in points (e.g. +1 to cover costs).
     be_trigger_r: Optional[float] = None
     be_offset_points: float = 0.0
+    # Breakeven once price has covered this fraction of the way from the
+    # entry to the final target (0.7 = 70%), with the same points offset.
+    # Measured per trade, since the target distance changes with each stop.
+    be_at_progress: Optional[float] = None
     # Trailing: after trail_start_r R in favour, the stop follows the best
     # price at trail_distance_r R behind it.
     trail_start_r: Optional[float] = None

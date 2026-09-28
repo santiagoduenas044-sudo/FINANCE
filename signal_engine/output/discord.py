@@ -494,7 +494,7 @@ def _build_stop_moved_payload(event: OutputEvent) -> dict:
     return _embed(
         f"🔒 {name} — {what} · {p.get('instrument', '?')}",
         (f"Asegura +{locked:.2f} pts" if locked >= 0.01 else "Ya no puede perder")
-        + f" · precio {_px(p.get('current_price'))} · resto a {_px(p.get('tp2'))}",
+        + f" · precio {_px(p.get('current_price'))} · objetivo {_px(p.get('tp2') or p.get('tp1'))}",
         _WIN_COLOR, event.disclaimer)
 
 

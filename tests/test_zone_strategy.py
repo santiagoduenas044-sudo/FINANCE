@@ -177,7 +177,7 @@ def test_stop_move_message_is_short():
              "stop": 90.0, "tp2": 40.0, "current_price": 80.0, "context": {"idea_number": 3}}
     e = build_discord_payload(OutputEvent.from_stop_moved(trade, 100.0))["embeds"][0]
     assert e["title"] == "🔒 IDEA #3 — trailing: stop a 90.00 · NQ"
-    assert e["description"] == "Asegura +10.00 pts · precio 80.00 · resto a 40.00"
+    assert e["description"] == "Asegura +10.00 pts · precio 80.00 · objetivo 40.00"
 
 
 def test_heads_up_goes_out_with_its_chart():
