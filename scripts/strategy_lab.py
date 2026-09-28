@@ -595,9 +595,10 @@ def streak(p: list[float]) -> tuple[int, float]:
     return best, cost
 
 
-def apex_table(rows, raws: dict, apex_dd: float) -> None:
+def apex_table(rows, raws: dict, apex_dd: float, extra_cost: float = 0.0) -> None:
     """With 1 and 2 MNQ: net, per year, worst drop and worst losing streak,
-    against the account's allowed drawdown."""
+    against the account's allowed drawdown. `extra_cost`: points to add to
+    each trade's cost when the run was priced for another contract (1 NQ)."""
     print(f"\n== ¿Cabe en la cuenta? (peor caída contra el límite de ${apex_dd:,.0f}) ==")
     print(f"  {'':<56} {'MNQ':>3} {'neto':>11} {'por año':>9} {'peor caída':>11} "
           f"{'racha mala':>16}")
@@ -605,7 +606,7 @@ def apex_table(rows, raws: dict, apex_dd: float) -> None:
         (r for r in rows if r["test"]["n"]), key=lambda r: -r["test"]["conf"])[:5]
     for r in sorted(good, key=lambda r: -r["test"]["conf"])[:10]:
         days = raws[r["name"]]
-        pts = [p for _, p, *_ in days]
+        pts = [p - extra_cost for _, p, *_ in days]
         span = (pd.Timestamp(days[-1][0]) - pd.Timestamp(days[0][0])).days / 365.25 if days else 1
         for n in (1, 2):
             usd_ = [p * 2.0 * n for p in pts]
@@ -765,7 +766,8 @@ def main() -> int:
                           else f"{'—':>10} {'—':>11}")
         print(f"  {r['name']:<62} {cell(s)}   {cell(o)}")
     print(f"  (izquierda: {label} · derecha: {alt_label})")
-    apex_table(rows, raws, a.apex_dd)
+    mnq_cost = POSITIONS["riesgo"][2] / POSITIONS["riesgo"][1] + 2 * a.slip_ticks * TICK
+    apex_table(rows, raws, a.apex_dd, extra_cost=mnq_cost - cost)
     print(f"\n({time.time() - t0:.0f} s)")
     if a.json_out:
         Path(a.json_out).write_text(json.dumps({"meta": {**vars(a), "cost_pts": cost, "pv": pv,
