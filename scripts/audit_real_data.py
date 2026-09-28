@@ -205,6 +205,25 @@ STOP_POLICIES = {
 }
 
 
+def _be_at_progress(frac: float):
+    """Stop to breakeven once price has covered `frac` of the way from the
+    entry to the final target — worked out per trade, since the target
+    distance changes with each stop."""
+    def policy(s) -> dict:
+        risk = abs(s.entry - s.stop)
+        if not s.take_profits or risk <= 0:
+            return {}
+        return dict(be_trigger_r=frac * abs(s.take_profits[-1] - s.entry) / risk)
+    return policy
+
+
+STOP_POLICIES.update({
+    "BE al 50% del camino al TP": _be_at_progress(0.5),
+    "BE al 70% del camino al TP": _be_at_progress(0.7),
+    "BE al 90% del camino al TP": _be_at_progress(0.9),
+})
+
+
 # Target variants on the SAME approved signals: the plan's R is |midpoint -
 # stop| (what the message shows); None = the plan as configured.
 # A tuple (lo, hi, fallback) is DYNAMIC: the nearest untaken swing between
@@ -406,6 +425,8 @@ def shadow(cfg, de, exec_bars, decisions):
         row["pnl_2r_pts"] = v.pnl_points if v is not None else None
         if row["approved"]:
             for name, pol in STOP_POLICIES.items():
+                if callable(pol):
+                    pol = pol(s)
                 v = _simulate(s, cfg, arr, pol) if pol else t
                 if v is not None:
                     row["policy_pnl"][name] = v.pnl_points
