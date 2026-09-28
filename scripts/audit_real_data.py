@@ -205,15 +205,17 @@ STOP_POLICIES = {
 }
 
 
-def _be_at_progress(frac: float):
-    """Stop to breakeven once price has covered `frac` of the way from the
-    entry to the final target — worked out per trade, since the target
-    distance changes with each stop."""
+def _be_at_progress(frac: float, plus_pts: float = 0.0):
+    """Stop to breakeven (+ `plus_pts` in favour, e.g. to cover commission and
+    slippage) once price has covered `frac` of the way from the entry to the
+    final target — worked out per trade, since the target distance changes
+    with each stop."""
     def policy(s) -> dict:
         risk = abs(s.entry - s.stop)
         if not s.take_profits or risk <= 0:
             return {}
-        return dict(be_trigger_r=frac * abs(s.take_profits[-1] - s.entry) / risk)
+        return dict(be_trigger_r=frac * abs(s.take_profits[-1] - s.entry) / risk,
+                    be_offset_points=plus_pts)
     return policy
 
 
@@ -221,6 +223,10 @@ STOP_POLICIES.update({
     "BE al 50% del camino al TP": _be_at_progress(0.5),
     "BE al 70% del camino al TP": _be_at_progress(0.7),
     "BE al 90% del camino al TP": _be_at_progress(0.9),
+    # "BE+": lock a little profit that at least pays the trade's costs (~1 pt)
+    "BE+2 pts al 50% del camino": _be_at_progress(0.5, 2.0),
+    "BE+2 pts al 70% del camino": _be_at_progress(0.7, 2.0),
+    "BE+5 pts al 70% del camino": _be_at_progress(0.7, 5.0),
 })
 
 
