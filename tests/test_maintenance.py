@@ -82,3 +82,28 @@ def test_backtest_reports_are_readable_from_the_phone(tmp_path):
     assert "+$400" in text and "5 MNQ" in text
     assert client.get("/api/backtest/runs/r1/report?kind=filters").status_code == 404
     assert client.get("/api/backtest/runs/..%2Fx/report").status_code == 404
+
+
+def test_strategy_lab_runs_from_the_phone(tmp_path):
+    import time
+    from signal_engine.api.lab import LabManager
+    root = tmp_path / "repo"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "strategy_lab.py").write_text(
+        "import sys, time\ntime.sleep(1.5)\nprint('✔ Zonas 15 min', sys.argv[1:])\n")
+    restarts = []
+    app = create_app(None, backtests=BacktestManager(root), lab=LabManager(root),
+                     restart_fn=lambda: restarts.append(1), supervised=True)
+    c = TestClient(app)
+    assert c.get("/api/lab/status").json()["state"] == "idle"
+    assert c.post("/api/lab/run?position=10nq").status_code == 400
+    assert c.post("/api/lab/run?position=1nq&sessions=all").json()["state"] == "running"
+    r = c.post("/api/system/restart")                        # would kill the lab
+    assert r.status_code == 409 and "laboratorio" in r.json()["detail"] and restarts == []
+    deadline = time.time() + 30
+    while c.get("/api/lab/status").json()["state"] == "running" and time.time() < deadline:
+        time.sleep(0.3)
+    st = c.get("/api/lab/status").json()
+    assert st["state"] == "done" and "✔ Zonas 15 min" in st["text"] and "'1nq'" in st["text"]
+    # a fresh manager (after a restart) still shows the last report
+    assert "✔ Zonas 15 min" in LabManager(root).status()["text"]

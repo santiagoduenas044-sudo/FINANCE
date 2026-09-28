@@ -26,6 +26,7 @@ from ..runtime.models import BotStatus
 from ..live.movers import MoversService
 from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
+from .lab import LabError, LabManager
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
 
@@ -58,7 +59,7 @@ def _extract_token(request: Request) -> str:
 def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                service=None, backtests: BacktestManager | None = None,
                movers: MoversService | None = None, restart_fn=None,
-               supervised: bool | None = None) -> FastAPI:
+               supervised: bool | None = None, lab: LabManager | None = None) -> FastAPI:
     settings = settings or ServerSettings()
     app = FastAPI(title="Futures Signal Engine — Control Dashboard")
     app.state.settings = settings
@@ -67,6 +68,7 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     backtests = backtests or BacktestManager(Path(__file__).resolve().parents[2])
     movers = movers or MoversService()
     replay = ReplayData(backtests.root)
+    lab = lab or LabManager(backtests.root, python=backtests.python)
     restart_fn = restart_fn or maintenance.schedule_restart
     # launchd runs run.sh, which execs Python: the parent is launchd itself
     # (pid 1) and KeepAlive brings the bot back after it exits. Anything else
@@ -358,12 +360,26 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         except maintenance.MaintenanceError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
+    # -- Strategy lab (dashboard "Backtest") --------------------------------- #
+    @app.get("/api/lab/status")
+    def lab_status() -> dict:
+        return lab.status()
+
+    @app.post("/api/lab/run")
+    def lab_run(position: str = "5mnq", sessions: str = "rth") -> dict:
+        try:
+            return lab.start(position=position, sessions=sessions)
+        except LabError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
     # -- Remote maintenance (dashboard "Sistema"): update + restart --------- #
     def _restart_block() -> str | None:
         if not supervised:
             return "El bot no corre bajo launchd; reinícialo a mano en la Mac."
         if backtests.running():
             return "Hay un backtest corriendo: reiniciar lo cortaría. Espera a que termine."
+        if lab.running():
+            return "El laboratorio está corriendo: reiniciar lo cortaría. Espera a que termine."
         return None
 
     @app.get("/api/system/version")

@@ -376,6 +376,17 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         </div>
       </div>
       <div class="panel mb">
+        <div class="ph"><span class="mn">LAB</span><h2>Laboratorio de estrategias</h2><div class="gap"></div>
+          <span class="pill"><span class="v" id="lab-state">—</span></span></div>
+        <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ</option><option value="1nq">1 NQ</option></select>
+          <select id="lab-ses" aria-label="Horario"><option value="rth">09:30–15:30</option><option value="all">día y noche</option></select>
+          <button class="pbtn on" id="lab-go" type="button">Correr laboratorio (~2 min)</button></div>
+        <p class="foot" style="padding:0 14px">Prueba ideas distintas (zonas en 1/5/15 min, ruptura de apertura,
+          tendencia + retroceso, vuelta al VWAP) en 5 años de NQ con costos reales. ✔ = gana en 2021–2023 Y en 2024–2026.</p>
+        <div class="pb" id="lab-wrap" hidden><pre class="report" id="lab-out"></pre></div>
+      </div>
+      <div class="panel mb">
         <div class="ph"><span class="mn">RES</span><h2>Resultados</h2><div class="gap"></div>
           <select id="bt-runs" aria-label="Backtest guardado"></select></div>
         <div class="pb" id="bt-head"></div>
@@ -1008,6 +1019,24 @@ async function btReport(kind) {
       (kind === "filters" ? "\n(este backtest es de una versión anterior; corre uno nuevo)" : "");
   }
 }
+const LAB = { timer: null };
+async function labPoll() {
+  try {
+    const st = await api("/api/lab/status");
+    $("lab-state").textContent = { idle: "sin correr", running: "corriendo…", done: "listo", failed: "falló" }[st.state] || st.state;
+    $("lab-go").disabled = st.state === "running";
+    if (st.text) { $("lab-wrap").hidden = false; $("lab-out").textContent = st.text; }
+    clearTimeout(LAB.timer);
+    if (st.state === "running") LAB.timer = setTimeout(labPoll, 4000);
+  } catch (e) { $("lab-state").textContent = "⚠ " + e.message; }
+}
+$("lab-go").onclick = async () => {
+  try {
+    await api(`/api/lab/run?position=${$("lab-pos").value}&sessions=${$("lab-ses").value}`, { method: "POST" });
+    $("lab-wrap").hidden = false; $("lab-out").textContent = "Corriendo… la primera vez prepara los datos (1–2 min).";
+    labPoll();
+  } catch (e) { $("lab-state").textContent = "⚠ " + e.message; }
+};
 $("bt-rep-summary").onclick = () => btReport("summary");
 $("bt-rep-filters").onclick = () => btReport("filters");
 
@@ -1076,7 +1105,7 @@ function btEquitySvg(eq, note = "costos incluidos", pv = 1) {
 }
 
 function renderBacktest() {
-  if (!BT.init) { btInit().then(renderBacktest); return; }
+  if (!BT.init) { btInit().then(renderBacktest); labPoll(); return; }
   const st = BT.status || { state: "idle" };
   const running = st.state === "running";
   $("bt-state").textContent = { idle: "listo", running: "corriendo", done: "terminado", failed: "falló" }[st.state] || st.state;
