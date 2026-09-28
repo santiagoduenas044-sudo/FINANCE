@@ -267,6 +267,9 @@ tr.best td { background: rgba(31, 216, 115, .08); }
 .acct .k { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
 .acct .v { font: 700 15px var(--mono); white-space: nowrap; }
 .acct .v small { font-weight: 500; font-size: 11px; color: var(--ink-3); }
+.report { margin: 0; padding: 10px 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: 8px;
+  font: 11.5px/1.5 var(--mono); color: var(--ink-2); white-space: pre; overflow: auto; max-height: 520px; }
+.upd-log { margin-top: 10px; font-size: 13px; line-height: 1.6; }
 .keys-help { color: var(--ink-3); font-size: 12px; line-height: 1.8; }
 .keys-help kbd { font: 11px var(--mono); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 4px;
   padding: 0 5px; color: var(--ink-1); }
@@ -376,6 +379,10 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <div class="ph"><span class="mn">RES</span><h2>Resultados</h2><div class="gap"></div>
           <select id="bt-runs" aria-label="Backtest guardado"></select></div>
         <div class="pb" id="bt-head"></div>
+        <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;padding-top:0">
+          <button class="pbtn" id="bt-rep-summary" type="button">Ver resumen completo</button>
+          <button class="pbtn" id="bt-rep-filters" type="button">Buscar filtros (prueba a ciegas)</button></div>
+        <div class="pb" id="bt-report-wrap" hidden><pre class="report" id="bt-report"></pre></div>
       </div>
       <div class="grid g-4 mb" id="bt-tiles"></div>
       <div class="grid g-2 mb">
@@ -473,6 +480,14 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
 
   <!-- ═════════ 5 · SISTEMA ═════════ -->
   <section class="view" id="v-system">
+    <div class="card mb"><h3>Actualizar el bot <span class="r mono" id="upd-ver"></span></h3>
+      <div class="body">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="pbtn on" id="upd-go" type="button">Buscar actualización e instalar</button>
+          <button class="pbtn" id="upd-restart" type="button">Solo reiniciar</button></div>
+        <div class="upd-log" id="upd-log"></div>
+        <p class="foot">Baja la última versión de GitHub y reinicia el bot solo (tarda ~20 s). No se puede
+          reiniciar mientras corre un backtest, porque lo cortaría.</p></div></div>
     <div class="card mb"><h3>Salud del bot <span class="r" id="svc-cycles"></span></h3>
       <div class="body"><div class="comp" id="components"></div><p class="foot" id="errbox" hidden></p></div></div>
     <div class="card"><h3>Últimas decisiones del filtro <span class="r">aprobadas y descartadas</span></h3>
@@ -491,7 +506,11 @@ async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
   const r = await fetch(path, o);
-  if (!r.ok) throw new Error(path + " → " + r.status);
+  if (!r.ok) {
+    let why = "";
+    try { why = (await r.json()).detail || ""; } catch {}
+    throw new Error(why || path + " → " + r.status);
+  }
   return r.json();
 }
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -876,7 +895,43 @@ function renderHistory() {
 /* ═══════════════════════════ 4 · SISTEMA ═══════════════════════════ */
 const COMP_ES = { data: "Datos", analysis: "Análisis", setup: "Estrategia", signal: "Señales", risk: "Riesgo",
   ghost: "Filtro GHOST", discord: "Discord" };
+async function updVersion() {
+  try {
+    const v = await api("/api/system/version");
+    $("upd-ver").textContent = v.error ? "" : `${v.commit} · ${String(v.date || "").slice(0, 10)}`;
+    $("upd-ver").title = v.subject || "";
+  } catch {}
+}
+async function waitBack(msg) {
+  $("upd-log").innerHTML = msg + "<br>Reiniciando… esta página se recarga sola.";
+  await new Promise(r => setTimeout(r, 6000));
+  for (let i = 0; i < 40; i++) {
+    try { await api("/api/status"); location.reload(); return; } catch {}
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  $("upd-log").innerHTML += "<br>⚠ El bot no volvió en 90 s: revisa la Mac.";
+}
+$("upd-go").onclick = async () => {
+  $("upd-go").disabled = true; $("upd-log").textContent = "Buscando actualización…";
+  try {
+    const r = await api("/api/system/update", { method: "POST" });
+    if (!r.updated) { $("upd-log").textContent = "✅ Ya tienes la última versión (" + r.after + ")."; return; }
+    const list = r.commits.map(c => "• " + esc(c.replace(/^\w+ /, ""))).join("<br>");
+    const head = `✅ Actualizado ${esc(r.before)} → ${esc(r.after)} (${r.files} archivos)` +
+      (r.dependencies && r.dependencies !== "ok" ? "<br>⚠ Dependencias: " + esc(r.dependencies) : "") + "<br>" + list;
+    if (r.restarting) await waitBack(head);
+    else $("upd-log").innerHTML = head + (r.restart_blocked ? "<br>⚠ No reinicié: " + esc(r.restart_blocked) : "");
+  } catch (e) { $("upd-log").textContent = "⚠ " + e.message; }
+  finally { $("upd-go").disabled = false; updVersion(); }
+};
+$("upd-restart").onclick = async () => {
+  if (!confirm("¿Reiniciar el bot ahora?")) return;
+  try { await api("/api/system/restart", { method: "POST" }); await waitBack("Reinicio pedido."); }
+  catch (e) { $("upd-log").textContent = "⚠ " + e.message; }
+};
+
 function renderSystem() {
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";
@@ -942,8 +997,23 @@ async function btPoll(first = false) {
   }
 }
 
+async function btReport(kind) {
+  if (!BT.sel) return;
+  $("bt-report-wrap").hidden = false;
+  $("bt-report").textContent = kind === "filters" ? "Buscando filtros… (puede tardar un minuto)" : "Cargando…";
+  try {
+    $("bt-report").textContent = (await api(`/api/backtest/runs/${encodeURIComponent(BT.sel)}/report?kind=${kind}`)).text;
+  } catch (e) {
+    $("bt-report").textContent = "No se pudo: " + e.message +
+      (kind === "filters" ? "\n(este backtest es de una versión anterior; corre uno nuevo)" : "");
+  }
+}
+$("bt-rep-summary").onclick = () => btReport("summary");
+$("bt-rep-filters").onclick = () => btReport("filters");
+
 async function btSelect(id) {
   BT.sel = id;
+  $("bt-report-wrap").hidden = true;
   try { BT.data = await api("/api/backtest/runs/" + encodeURIComponent(id)); } catch { BT.data = null; }
   renderBacktest();
 }

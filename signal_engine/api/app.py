@@ -10,6 +10,7 @@ URLs, no tokens) — see signal_engine/runtime/engine.py.
 """
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from ..runtime.engine import BotRuntime, read_signal_log
 from ..runtime.models import BotStatus
 
 from ..live.movers import MoversService
+from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
@@ -55,7 +57,8 @@ def _extract_token(request: Request) -> str:
 
 def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                service=None, backtests: BacktestManager | None = None,
-               movers: MoversService | None = None) -> FastAPI:
+               movers: MoversService | None = None, restart_fn=None,
+               supervised: bool | None = None) -> FastAPI:
     settings = settings or ServerSettings()
     app = FastAPI(title="Futures Signal Engine — Control Dashboard")
     app.state.settings = settings
@@ -64,6 +67,12 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     backtests = backtests or BacktestManager(Path(__file__).resolve().parents[2])
     movers = movers or MoversService()
     replay = ReplayData(backtests.root)
+    restart_fn = restart_fn or maintenance.schedule_restart
+    # launchd runs run.sh, which execs Python: the parent is launchd itself
+    # (pid 1) and KeepAlive brings the bot back after it exits. Anything else
+    # (a manual run in a Terminal) must not be told to exit.
+    if supervised is None:
+        supervised = os.getppid() == 1 or os.environ.get("BOT_SUPERVISED") == "1"
 
     # -- CORS: only when explicitly configured (never a wildcard) ---------- #
     if settings.cors_origins:
@@ -340,6 +349,48 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             return backtests.get(run_id)
         except BacktestError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.get("/api/backtest/runs/{run_id}/report")
+    def backtest_report(run_id: str, kind: str = "summary") -> dict:
+        try:
+            return {"text": maintenance.report(backtests.root, run_id, kind,
+                                               python=backtests.python)}
+        except maintenance.MaintenanceError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    # -- Remote maintenance (dashboard "Sistema"): update + restart --------- #
+    def _restart_block() -> str | None:
+        if not supervised:
+            return "El bot no corre bajo launchd; reinícialo a mano en la Mac."
+        if backtests.running():
+            return "Hay un backtest corriendo: reiniciar lo cortaría. Espera a que termine."
+        return None
+
+    @app.get("/api/system/version")
+    def system_version() -> dict:
+        return {**maintenance.version(backtests.root), "can_restart": _restart_block() is None,
+                "restart_blocked": _restart_block()}
+
+    @app.post("/api/system/update")
+    def system_update(restart: bool = True) -> dict:
+        try:
+            res = maintenance.update(backtests.root, python=backtests.python)
+        except (maintenance.MaintenanceError, OSError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        blocked = _restart_block()
+        res["restarting"] = bool(restart and res["updated"] and not blocked)
+        res["restart_blocked"] = blocked if restart and res["updated"] else None
+        if res["restarting"]:
+            restart_fn()
+        return res
+
+    @app.post("/api/system/restart")
+    def system_restart() -> dict:
+        blocked = _restart_block()
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
+        restart_fn()
+        return {"restarting": True}
 
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
