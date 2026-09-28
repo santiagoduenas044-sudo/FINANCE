@@ -9,6 +9,11 @@ reads, so the whole history replays through the real bot:
     PYTHONPATH=. .venv/bin/python scripts/audit_real_data.py --offline \\
         --contract DATABENTO --start 2026-06-01
 
+Stocks for the strategy lab's "big companies" filter (Nasdaq exchange
+bars, XNAS.ITCH), one CSV per name in market_data/<SYMBOL>/:
+
+    PYTHONPATH=. .venv/bin/python scripts/fetch_databento.py --stocks grandes --start 2021-09-27
+
 The API key is read from $DATABENTO_API_KEY or the DATABENTO_API_KEY line in
 .env — it is never printed. The script shows the exact cost Databento will
 charge and asks before downloading (--yes skips the question).
@@ -26,7 +31,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "market_data"
 CONTRACT = "DATABENTO"
 DATASET = "GLBX.MDP3"
+STOCKS_DATASET = "XNAS.ITCH"
 SCHEMA = "ohlcv-1m"
+# the largest Nasdaq-100 weights (same list as scripts/strategy_lab.py)
+MEGACAPS = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "GOOGL", "TSLA")
 
 
 def api_key() -> str:
@@ -61,9 +69,25 @@ def to_bot_csv(df: pd.DataFrame, out: Path) -> Path:
     return out
 
 
+def stock_list(arg: str) -> tuple[str, ...]:
+    if arg.strip().lower() == "grandes":
+        return MEGACAPS
+    return tuple(x.strip().upper() for x in arg.split(",") if x.strip())
+
+
+def split_by_symbol(df: pd.DataFrame, symbols) -> dict[str, pd.DataFrame]:
+    """One frame per ticker (Databento's to_df names each row's symbol)."""
+    if "symbol" not in df:
+        raise SystemExit("La respuesta no trae la columna 'symbol'; actualiza el cliente "
+                         "(.venv/bin/pip install -U databento).")
+    return {s: g for s in symbols if not (g := df[df["symbol"] == s]).empty}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--symbol", default="NQ", help="raíz CME: NQ, ES, MNQ...")
+    ap.add_argument("--stocks", help="acciones en vez del futuro: 'grandes' (NVDA, MSFT, AAPL, "
+                                     "AMZN, META, AVGO, GOOGL, TSLA) o una lista NVDA,AAPL")
     ap.add_argument("--start", required=True, help="YYYY-MM-DD")
     ap.add_argument("--end", help="YYYY-MM-DD (default: hace 2 días; lo más reciente "
                                   "requiere suscripción)")
@@ -78,12 +102,19 @@ def main() -> int:
     # newest hours need a live subscription (HTTP 422 dataset_unavailable_range).
     end = a.end or (pd.Timestamp.now(tz="UTC").normalize()
                     - pd.Timedelta(days=2)).strftime("%Y-%m-%d")
-    query = dict(dataset=DATASET, symbols=f"{a.symbol}.v.0", stype_in="continuous",
-                 schema=SCHEMA, start=a.start, end=end)
+    stocks = stock_list(a.stocks) if a.stocks else None
+    if stocks:
+        query = dict(dataset=STOCKS_DATASET, symbols=list(stocks), stype_in="raw_symbol",
+                     schema=SCHEMA, start=a.start, end=end)
+        what = ", ".join(stocks)
+    else:
+        query = dict(dataset=DATASET, symbols=f"{a.symbol}.v.0", stype_in="continuous",
+                     schema=SCHEMA, start=a.start, end=end)
+        what = a.symbol
     client = db.Historical(api_key())
     cost = client.metadata.get_cost(**query)
     size_mb = client.metadata.get_billable_size(**query) / 1e6
-    print(f"{a.symbol} {SCHEMA} {a.start} → {end}: {size_mb:,.1f} MB, "
+    print(f"{what} {SCHEMA} {a.start} → {end}: {size_mb:,.1f} MB, "
           f"costo ${cost:,.2f} (se descuenta del crédito si tienes)")
     if not a.yes and input("¿Descargar? [s/N] ").strip().lower() not in ("s", "si", "sí", "y"):
         print("Cancelado; no se cobró nada.")
@@ -91,6 +122,11 @@ def main() -> int:
     df = client.timeseries.get_range(**query).to_df()
     if df.empty:
         raise SystemExit("Databento no devolvió barras para ese rango.")
+    if stocks:
+        for sym, part in split_by_symbol(df, stocks).items():
+            out = to_bot_csv(part, DATA_DIR / sym / f"{CONTRACT}_1m.csv")
+            print(f"{sym}: {len(part):,} barras → {out.relative_to(ROOT)}")
+        return 0
     out = to_bot_csv(df, DATA_DIR / a.symbol / f"{CONTRACT}_1m.csv")
     total = sum(1 for _ in open(out)) - 1
     print(f"{len(df):,} barras nuevas · {total:,} en total en {out.relative_to(ROOT)}")

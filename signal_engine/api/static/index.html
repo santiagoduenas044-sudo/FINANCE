@@ -379,11 +379,12 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <div class="ph"><span class="mn">LAB</span><h2>Laboratorio de estrategias</h2><div class="gap"></div>
           <span class="pill"><span class="v" id="lab-state">—</span></span></div>
         <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ</option><option value="1nq">1 NQ</option></select>
+          <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ fijos</option><option value="1nq">1 NQ fijo</option><option value="riesgo">Riesgo fijo $300</option></select>
           <select id="lab-ses" aria-label="Horario"><option value="rth">09:30–15:30</option><option value="all">día y noche</option></select>
-          <button class="pbtn on" id="lab-go" type="button">Correr laboratorio (~2 min)</button></div>
-        <p class="foot" style="padding:0 14px">Prueba ideas distintas (zonas en 1/5/15 min, ruptura de apertura,
-          tendencia + retroceso, vuelta al VWAP) en 5 años de NQ con costos reales. ✔ = gana en 2021–2023 Y en 2024–2026.</p>
+          <button class="pbtn on" id="lab-go" type="button">Correr laboratorio (~3–5 min)</button></div>
+        <p class="foot" style="padding:0 14px">Prueba ideas distintas (zonas en 1/5/15 min con stop fijo o dinámico, cajas y rupturas,
+          rebotes en EMA, vuelta al VWAP, filtro de NQ y de las grandes) en 5 años de NQ con costos reales.
+          ✔ = gana en 2021–2023 Y en 2024–2026. "Riesgo fijo" usa los MNQ que caben en $300 de stop.</p>
         <div class="pb" id="lab-wrap" hidden><pre class="report" id="lab-out"></pre></div>
       </div>
       <div class="panel mb">

@@ -55,7 +55,7 @@ def test_flat_at_1655():
     mk = _market(rows, start="2025-03-03 15:20")
     trades = lab.run(mk, [lab.Signal(mk.t[0], True, 90.0, k=3.0)], 0.0, "rth")
     # entry 15:21, nothing hit: closed on the 16:54 minute, the last before 16:55
-    assert trades == [("2025-03-03", 0.5)]
+    assert trades == [("2025-03-03", 0.5, 10.0)]           # (date, points, stop points)
 
 
 def test_zone_signals_wait_for_the_bar_to_close():
@@ -68,3 +68,97 @@ def test_zone_signals_wait_for_the_bar_to_close():
     for s in lab.zones(mk, "5min", 2.0):
         opened = bars.index[bars["end"].to_numpy() == s.ready]
         assert len(opened) == 1                        # ready = the close of a real bar
+
+
+def test_fixed_dollar_risk_sizes_in_micros():
+    trades = [("d", 50.0, 25.0), ("d", -25.0, 25.0), ("d", 10.0, 3.0), ("d", -1.0, 200.0)]
+    # $300 / (25 pts x $2) = 6 MNQ; a 3-pt stop is capped at 15 MNQ; a 200-pt stop does not fit
+    assert lab.sized_usd(trades, "riesgo", 2.0, 300.0) == [("d", 600.0), ("d", -300.0), ("d", 300.0)]
+    assert lab.sized_usd(trades[:1], "5mnq", 10.0, 300.0) == [("d", 500.0)]
+
+
+def test_run_skips_stops_wider_than_the_sizing_allows():
+    rows = [(100, 100, 100, 100), (100, 106, 99, 105), (105, 111, 104, 110)]
+    mk = _market(rows)
+    assert lab.run(mk, [lab.Signal(mk.t[0], True, 95.0, k=2.0)], 0.0, "rth", max_risk=4.0) == []
+
+
+def _random_market(n=3000, seed=3, start="2025-03-03 09:30"):
+    rng = np.random.default_rng(seed)
+    c = 20000 + np.cumsum(rng.normal(0, 4, n))
+    o = np.r_[c[0], c[:-1]]
+    return _market(list(zip(o, np.maximum(o, c) + 2, np.minimum(o, c) - 2, c)), start=start)
+
+
+def test_dynamic_stop_sits_behind_the_last_hour_and_the_origin():
+    mk = _random_market()
+    b = mk.bars("1min")
+    H, L, end = b["high"].to_numpy(), b["low"].to_numpy(), b["end"].to_numpy()
+    sigs = lab.zones(mk, "1min", 3.0, stop="dinamico", buffer=3.0)
+    assert sigs
+    for s in sigs:
+        i = int(np.flatnonzero(end == s.ready)[0])
+        if s.long:
+            assert s.stop <= L[max(0, i - 60):i + 1].min() - 3.0 + 1e-9
+        else:
+            assert s.stop >= H[max(0, i - 60):i + 1].max() + 3.0 - 1e-9
+
+
+def test_box_breakout_enters_on_the_close_outside_with_stop_across():
+    # 25 quiet 5-minute candles (warm-up + a 60-min box), then one closes above it
+    rows = []
+    for _ in range(25 * 5):
+        rows.append((100, 101, 99, 100))
+    rows += [(100, 104, 100, 103)] * 4 + [(103, 106, 102, 105)]
+    mk = _market(rows, start="2025-03-03 09:30")
+    sigs = lab.boxes(mk, 12, 2.0, False, 3.5)
+    assert len(sigs) == 1 and sigs[0].long and sigs[0].stop == 98.0
+    assert pd.Timestamp(sigs[0].ready) == pd.Timestamp("2025-03-03 09:30") + pd.Timedelta(minutes=130)
+
+
+def test_break_of_yesterdays_high():
+    day1 = pd.date_range("2025-03-03 09:30", "2025-03-03 15:59", freq="1min")
+    day2 = pd.date_range("2025-03-04 09:30", "2025-03-04 10:29", freq="1min")
+    idx = day1.append(day2)
+    df = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "volume": 100.0},
+                      index=idx)
+    df.loc["2025-03-04 10:00":, ["open", "high", "low", "close"]] = [102.0, 104.0, 101.5, 103.0]
+    mk = lab.Market(df)
+    sigs = lab.levels(mk, "ayer", 2.0, False)
+    assert len(sigs) == 1 and sigs[0].long
+    assert pd.Timestamp(sigs[0].ready) == pd.Timestamp("2025-03-04 10:05")
+    assert sigs[0].stop == 100.5                        # behind the breakout candle
+
+
+def test_big_companies_filter_follows_their_emas():
+    mk = _random_market(n=600)
+    idx = pd.date_range("2025-03-03 09:30", periods=100, freq="5min")
+    up = pd.Series(np.linspace(100, 150, 100), index=idx)
+    closes = pd.DataFrame({s: up for s in ("A", "B", "C", "D")})
+    side = lab.breadth(mk, closes)
+    t = np.datetime64("2025-03-03 12:00")
+    assert side(t) == 1.0
+    assert side(np.datetime64("2025-03-04 03:00")) == 0.0          # no fresh stock data
+    sigs = [lab.Signal(t, True, 90.0, k=2.0), lab.Signal(t, False, 200.0, k=2.0)]
+    assert [s.long for s in lab.only_with(sigs, side)] == [True]
+
+
+def test_stock_splits_are_undone():
+    idx = pd.date_range("2024-06-07 15:58", periods=2, freq="1min").append(
+        pd.date_range("2024-06-10 09:30", periods=2, freq="1min"))
+    df = pd.DataFrame({"open": [1200.0, 1200, 121, 121], "high": [1201.0, 1201, 122, 122],
+                       "low": [1199.0, 1199, 120, 120], "close": [1200.0, 1200, 121, 121]},
+                      index=idx)
+    out = lab._unsplit(df)
+    assert out["close"].tolist() == [120.0, 120.0, 121.0, 121.0]
+
+
+def test_megacap_download_splits_by_ticker():
+    spec = importlib.util.spec_from_file_location("fetch_databento", ROOT / "scripts" / "fetch_databento.py")
+    fd = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fd)
+    assert fd.stock_list("grandes")[:3] == ("NVDA", "MSFT", "AAPL")
+    assert fd.stock_list("nvda, aapl") == ("NVDA", "AAPL")
+    df = pd.DataFrame({"symbol": ["NVDA", "AAPL", "NVDA"], "close": [1.0, 2.0, 3.0]})
+    parts = fd.split_by_symbol(df, ("NVDA", "AAPL", "TSLA"))
+    assert sorted(parts) == ["AAPL", "NVDA"] and len(parts["NVDA"]) == 2

@@ -1,7 +1,7 @@
 """Strategy lab launched from the dashboard (Backtest view).
 
 Runs scripts/strategy_lab.py as a separate low-priority process — it takes a
-minute or two — and keeps its printed report in data_store/lab/<time>.txt, so
+few minutes — and keeps its printed report in data_store/lab/<time>.txt, so
 the phone can start it and read the result without a Terminal.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-POSITIONS = ("5mnq", "1nq")
+POSITIONS = ("5mnq", "1nq", "riesgo")
 SESSIONS = ("rth", "all")
 
 

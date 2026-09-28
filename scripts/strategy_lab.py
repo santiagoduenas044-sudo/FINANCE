@@ -5,6 +5,16 @@ make money on TEST (from --split on) to get a ✔.
 
     .venv/bin/python scripts/strategy_lab.py                       # 2021-09 → today
     .venv/bin/python scripts/strategy_lab.py --position 1nq --sessions all
+    .venv/bin/python scripts/strategy_lab.py --position riesgo      # ~$300 at risk per trade
+
+Sizing: a fixed position (5 MNQ / 1 NQ: a wider stop loses more dollars) or
+--position riesgo: as many MNQ as keep the stop at about --risk-usd (a
+wider stop uses fewer micros; the target is still k x the stop, so a win
+still pays k times what a loss costs).
+
+The "big companies" filter needs their 1-minute bars (NVDA, MSFT, AAPL...):
+    PYTHONPATH=. .venv/bin/python scripts/fetch_databento.py --stocks grandes --start 2021-09-27
+Without them those rows are skipped and the report says so.
 
 Rules shared by every strategy (so they compare fairly):
   * signals are read on CLOSED bars of their timeframe; the entry is the open
@@ -33,8 +43,13 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 TICK = 0.25
-# $ per point and round-trip commission (Tradovate at Apex, per position)
-POSITIONS = {"5mnq": ("5 MNQ", 10.0, 5 * 1.04), "1nq": ("1 NQ", 20.0, 3.10)}
+# $ per point and round-trip commission (Tradovate at Apex, per position);
+# "riesgo" is priced per MNQ and sized per trade (see sized_usd)
+POSITIONS = {"5mnq": ("5 MNQ", 10.0, 5 * 1.04), "1nq": ("1 NQ", 20.0, 3.10),
+             "riesgo": ("riesgo fijo en MNQ", 2.0, 1.04)}
+MAX_MICROS = 15                      # never more than 1.5 NQ, however tight the stop
+# the largest Nasdaq-100 weights: their 1-minute bars feed the breadth filter
+MEGACAPS = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "GOOGL", "TSLA")
 
 
 # --------------------------------------------------------------------------- #
@@ -82,6 +97,19 @@ class Market:
             self._bars[tf] = b
         return self._bars[tf]
 
+    def asof(self, tf: str, values: np.ndarray, when) -> float:
+        """values[] of the last `tf` bar CLOSED at `when` (nan before the first)."""
+        end = self.bars(tf)["end"].to_numpy()
+        i = int(np.searchsorted(end, np.datetime64(when), side="right")) - 1
+        return float(values[i]) if i >= 0 else float("nan")
+
+    def atr5(self) -> np.ndarray:
+        """Average 5-minute candle (high-low, last 14): the market's normal move."""
+        if "_atr5" not in self.__dict__:
+            b = self.bars("5min")
+            self._atr5 = (b["high"] - b["low"]).rolling(14, min_periods=5).mean().to_numpy()
+        return self._atr5
+
 
 # --------------------------------------------------------------------------- #
 # simulation
@@ -108,8 +136,10 @@ def entry_open(ts, sessions: str) -> bool:
 
 
 def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
-        be_at: float | None = None, be_plus: float = 2.0) -> list[tuple[str, float]]:
-    """One position at a time. Returns [(entry date, net points)]."""
+        be_at: float | None = None, be_plus: float = 2.0,
+        max_risk: float | None = None) -> list[tuple[str, float, float]]:
+    """One position at a time. Returns [(entry date, net points, stop points)].
+    `max_risk`: skip entries whose stop is farther than that (sizing limit)."""
     out, busy = [], 0
     for s in sorted(signals, key=lambda x: x.ready):
         i0 = int(np.searchsorted(mk.t, s.ready))
@@ -120,7 +150,7 @@ def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
             continue
         entry = mk.o[i0]
         risk = (entry - s.stop) if s.long else (s.stop - entry)
-        if risk <= TICK:
+        if risk <= TICK or (max_risk is not None and risk > max_risk):
             continue
         tgt = s.target if s.target is not None else (
             entry + s.k * risk if s.long else entry - s.k * risk)
@@ -128,7 +158,7 @@ def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
             continue
         j, px = _exit(mk, i0, end, s.long, s.stop, tgt, entry, be_at, be_plus)
         pts = (px - entry) if s.long else (entry - px)
-        out.append((str(pd.Timestamp(mk.t[i0]).date()), pts - cost_pts))
+        out.append((str(pd.Timestamp(mk.t[i0]).date()), pts - cost_pts, float(risk)))
         busy = j + 1
     return out
 
@@ -177,17 +207,27 @@ def _exit(mk, i0, end, long, stop, tgt, entry, be_at, be_plus):
 # --------------------------------------------------------------------------- #
 # strategies (each returns signals; the runner decides entries and exits)
 # --------------------------------------------------------------------------- #
-def zones(mk: Market, tf: str, k: float) -> list[Signal]:
+def zones(mk: Market, tf: str, k: float, stop: str = "origen", buffer: float = 3.0,
+          atr_mult: float = 1.5, lookback_min: int = 60) -> list[Signal]:
     """The bot's idea on any timeframe: a fresh fair-value gap, the FIRST
     return into it, and a candle that closes back past the zone's middle in
-    the gap's direction. Stop behind the move's origin."""
+    the gap's direction.
+
+    stop="origen": behind the move's origin (1 pt), as the bot does.
+    stop="dinamico": behind whichever is farther, the origin or the last
+    hour's high/low (the resistance/support price just tested), plus
+    `buffer` pts, and never closer than `atr_mult` average 5-minute candles
+    (a busy market gets more room)."""
     b = mk.bars(tf)
     O, H, L, C = (b[c].to_numpy() for c in ("open", "high", "low", "close"))
     end = b["end"].to_numpy()
     mins = int(pd.Timedelta(tf).total_seconds() // 60)
     life = max(3, 180 // mins)                 # zones live ~3 hours
     confirm = 5 if mins == 1 else 2            # bars allowed after the first touch
-    max_risk = {1: 50, 5: 80, 15: 120}.get(mins, 150)
+    dyn = stop == "dinamico"
+    max_risk = ({1: 100, 5: 150, 15: 200} if dyn else {1: 50, 5: 80, 15: 120}).get(mins, 150)
+    back = max(3, lookback_min // mins)
+    atr = mk.atr5() if dyn else None
     out, zs = [], []
     for i in range(2, len(b)):
         keep = []
@@ -203,9 +243,17 @@ def zones(mk: Market, tf: str, k: float) -> list[Signal]:
                 if (C[i] < bot) if bull else (C[i] > top):
                     continue                                   # crossed: dead
                 if (C[i] > mid and C[i] > O[i]) if bull else (C[i] < mid and C[i] < O[i]):
-                    risk = (C[i] - z["origin"]) if bull else (z["origin"] - C[i])
+                    if dyn:
+                        lo, hi = L[max(0, i - back):i + 1].min(), H[max(0, i - back):i + 1].max()
+                        px = min(z["origin"], lo) - buffer if bull else max(z["origin"], hi) + buffer
+                        room = atr_mult * mk.asof("5min", atr, end[i])
+                        if np.isfinite(room):
+                            px = min(px, C[i] - room) if bull else max(px, C[i] + room)
+                    else:
+                        px = z["origin"] - 1 if bull else z["origin"] + 1
+                    risk = (C[i] - px) if bull else (px - C[i])
                     if 3 <= risk <= max_risk:
-                        out.append(Signal(end[i], bull, z["origin"], k=k))
+                        out.append(Signal(end[i], bull, px, k=k))
                     continue                                   # one shot per zone
                 if i - z["touch"] >= confirm:
                     continue
@@ -214,10 +262,10 @@ def zones(mk: Market, tf: str, k: float) -> list[Signal]:
         gap_up, gap_dn = L[i] - H[i - 2], L[i - 2] - H[i]
         if 3 <= gap_up <= 60:
             zs.append({"bull": True, "top": L[i], "bot": H[i - 2], "born": i, "touch": None,
-                       "origin": min(L[i - 2], L[i - 1]) - 1})
+                       "origin": min(L[i - 2], L[i - 1])})
         if 3 <= gap_dn <= 60:
             zs.append({"bull": False, "top": L[i - 2], "bot": H[i], "born": i, "touch": None,
-                       "origin": max(H[i - 2], H[i - 1]) + 1})
+                       "origin": max(H[i - 2], H[i - 1])})
     return out
 
 
@@ -250,11 +298,11 @@ def _ema(x: np.ndarray, n: int) -> np.ndarray:
     return pd.Series(x).ewm(span=n, adjust=False).mean().to_numpy()
 
 
-def pullback(mk: Market, tf: str, k: float) -> list[Signal]:
+def pullback(mk: Market, tf: str, k: float, n: int = 20) -> list[Signal]:
     """Trend + pullback: the hourly trend (close vs a rising/falling 50-EMA on
     CLOSED hourly bars) sets the side; enter when a `tf` bar dips to its
-    20-EMA and closes back in the trend's direction. Stop past the last 3
-    bars' extreme."""
+    n-EMA and closes back in the trend's direction (a bounce off the EMA).
+    Stop past the last 3 bars' extreme."""
     b, h1 = mk.bars(tf), mk.bars("1h")
     e50 = _ema(h1["close"].to_numpy(), 50)
     trend = np.where((h1["close"].to_numpy() > e50) & (e50 > np.roll(e50, 3)), 1,
@@ -262,7 +310,7 @@ def pullback(mk: Market, tf: str, k: float) -> list[Signal]:
     known = pd.Series(trend, index=h1["end"].to_numpy())          # usable once the hour closed
     tr = known.reindex(b["end"].to_numpy(), method="ffill").fillna(0).to_numpy()
     O, H, L, C = (b[c].to_numpy() for c in ("open", "high", "low", "close"))
-    e20, end = _ema(C, 20), b["end"].to_numpy()
+    e20, end = _ema(C, n), b["end"].to_numpy()
     out = []
     for i in range(3, len(b)):
         if tr[i] > 0 and L[i] <= e20[i] < C[i] and C[i] > O[i]:
@@ -292,24 +340,201 @@ def vwap_revert(mk: Market, z: float) -> list[Signal]:
     return out
 
 
-def variants(mk: Market):
-    """(name, signals builder, BE rule) — a small grid per idea, so a ✔ is
-    not just the one lucky setting out of hundreds."""
+def boxes(mk: Market, n: int, k: float, vol: bool, tight: float) -> list[Signal]:
+    """Box breakout ("draw the box, enter where it breaks"): the last `n`
+    5-minute candles moved sideways, inside a range smaller than `tight`
+    average candles. The first candle that CLOSES outside the box enters in
+    that direction (with vol: only if its volume is 1.5x the box's average).
+    Stop at the other side of the box; one breakout per box."""
+    b = mk.bars("5min")
+    O, H, L, C, V = (b[c].to_numpy() for c in ("open", "high", "low", "close", "volume"))
+    t, end = b.index.to_numpy(), b["end"].to_numpy()
+    avg = pd.Series(H - L).rolling(50, min_periods=20).mean().to_numpy()
+    span = np.timedelta64(5 * n, "m")
+    out, skip = [], -1
+    for i in range(n, len(b)):
+        if i <= skip or not np.isfinite(avg[i - 1]) or t[i] - t[i - n] != span:
+            continue                                      # a gap (the daily pause) breaks the box
+        hi, lo = H[i - n:i].max(), L[i - n:i].min()
+        if hi - lo > tight * avg[i - 1]:
+            continue
+        up, dn = C[i] > hi, C[i] < lo
+        if not (up or dn):
+            continue
+        if vol and V[i] < 1.5 * V[i - n:i].mean():
+            continue
+        out.append(Signal(end[i], bool(up), lo - 1 if up else hi + 1, k=k))
+        skip = i + n                                      # the next box starts after this one
+    return out
+
+
+def levels(mk: Market, which: str, k: float, vol: bool) -> list[Signal]:
+    """Breakout of yesterday's regular-session high/low (which="ayer") or of
+    the night session's high/low (which="noche", 18:00 → 09:30): the first
+    5-minute close beyond the level between 09:30 and 15:30 (not a candle
+    that opened 20+ pts past it), once per side and day. Stop behind that
+    candle; with vol, its volume must be 1.5x the
+    last hour's average."""
+    m1, b = mk.m1, mk.bars("5min")
+    tday = (m1.index + pd.Timedelta(hours=6)).normalize()
+    mins = m1.index.hour * 60 + m1.index.minute
+    rth = (mins >= 9 * 60 + 30) & (mins < 16 * 60)
+    night = (mins < 9 * 60 + 30) | (mins >= 18 * 60)
+    g_rth = m1[rth].groupby(tday[rth]).agg({"high": "max", "low": "min"})
+    g_night = m1[night].groupby(tday[night]).agg({"high": "max", "low": "min"})
+    ref = g_rth.shift(1) if which == "ayer" else g_night
+    ref = ref.reindex(g_rth.index)
+    bt = b.index
+    bday = (bt + pd.Timedelta(hours=6)).normalize()
+    bmin = bt.hour * 60 + bt.minute
+    O, H, L, C, V = (b[c].to_numpy() for c in ("open", "high", "low", "close", "volume"))
+    vavg = pd.Series(V).rolling(12, min_periods=6).mean().shift(1).to_numpy()
+    end = b["end"].to_numpy()
+    lv = ref.reindex(bday)
+    lhi, llo = lv["high"].to_numpy(), lv["low"].to_numpy()
+    ok = np.asarray((bmin >= 9 * 60 + 30) & (bmin < 15 * 60 + 30))
+    out, done = [], set()
+    for i in np.flatnonzero(ok & np.isfinite(lhi)):
+        if vol and not (np.isfinite(vavg[i]) and V[i] >= 1.5 * vavg[i]):
+            continue
+        d = bday[i]
+        if C[i] > lhi[i] and O[i] <= lhi[i] + 20 and (d, 1) not in done:
+            done.add((d, 1))
+            out.append(Signal(end[i], True, L[i] - 1, k=k))
+        elif C[i] < llo[i] and O[i] >= llo[i] - 20 and (d, -1) not in done:
+            done.add((d, -1))
+            out.append(Signal(end[i], False, H[i] + 1, k=k))
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# filters: keep a signal only when the wider market agrees with its side
+# --------------------------------------------------------------------------- #
+def nq_trend(mk: Market, n: int = 20):
+    """+1 while NQ's last 5-minute close is above its n-EMA, -1 below."""
+    b = mk.bars("5min")
+    c = b["close"].to_numpy()
+    side = np.sign(c - _ema(c, n))
+
+    def f(when) -> float:
+        return mk.asof("5min", side, when)
+    return f
+
+
+def _unsplit(df: pd.DataFrame) -> pd.DataFrame:
+    """Undo stock splits in raw exchange prices (a 10:1 split looks like a
+    90% overnight drop): scale everything before the jump."""
+    c = df["close"]
+    day = df.index.normalize()
+    last = c.groupby(day).last()
+    first = df["open"].groupby(day).first()
+    ratio = (first / last.shift(1)).dropna()
+    for d, r in ratio.items():
+        if r < 0.6 or r > 1.7:
+            f = round(1 / r) if r < 1 else 1 / round(r)
+            before = df.index < d
+            df.loc[before, ["open", "high", "low", "close"]] /= f
+    return df
+
+
+def load_megacaps(start: str, end: str, symbols=MEGACAPS) -> pd.DataFrame | None:
+    """Regular-session 5-minute closes of the big Nasdaq names, one column
+    each (None when their data was never downloaded)."""
+    cols = {}
+    for sym in symbols:
+        csv = ROOT / "market_data" / sym / "DATABENTO_1m.csv"
+        if not csv.exists():
+            continue
+        m1 = _unsplit(load_1m(sym, "DATABENTO", start, end).between_time("09:30", "15:59").copy())
+        cols[sym] = m1["close"].resample("5min", label="left", closed="left").last().dropna()
+    if len(cols) < max(4, len(symbols) // 2):
+        return None
+    return pd.DataFrame(cols)
+
+
+def breadth(mk: Market, closes: pd.DataFrame, n: int = 20, need: float = 0.75):
+    """+1 when at least `need` of the big names are above their own n-EMA
+    (5-minute bars, regular session), -1 when that many are below, 0 in
+    between or when there is no fresh stock data (night, holidays)."""
+    above = pd.DataFrame({s: (c > c.ewm(span=n, adjust=False).mean()).astype(float)
+                          .where(c.notna()) for s, c in closes.items()})
+    share = above.mean(axis=1, skipna=True)
+    count = above.notna().sum(axis=1)
+    share[count < max(4, closes.shape[1] // 2)] = np.nan
+    ends = (share.index + pd.Timedelta("5min")).to_numpy()
+    vals = share.to_numpy()
+
+    def f(when) -> float:
+        i = int(np.searchsorted(ends, np.datetime64(when), side="right")) - 1
+        if i < 0 or np.datetime64(when) - ends[i] > np.timedelta64(10, "m") or not np.isfinite(vals[i]):
+            return 0.0
+        return 1.0 if vals[i] >= need else (-1.0 if vals[i] <= 1 - need else 0.0)
+    return f
+
+
+def only_with(signals: list[Signal], side_fn) -> list[Signal]:
+    """The signals whose side matches the filter at the moment they appear."""
+    return [s for s in signals if side_fn(s.ready) == (1.0 if s.long else -1.0)]
+
+
+def variants(mk: Market, big: pd.DataFrame | None = None):
+    """(name, signals, BE rule) — a small grid per idea, so a ✔ is not just
+    the one lucky setting out of hundreds."""
+    memo: dict = {}
+
+    def once(fn, *args, **kw):                 # each signal list is built only once
+        key = (fn.__name__, args, tuple(sorted(kw.items())))
+        if key not in memo:
+            memo[key] = fn(mk, *args, **kw)
+        return memo[key]
+
+    zones_, boxes_, levels_ = (lambda *a, **k: once(zones, *a, **k),
+                               lambda *a, **k: once(boxes, *a, **k),
+                               lambda *a, **k: once(levels, *a, **k))
     for tf, lab in (("1min", "1 min"), ("5min", "5 min"), ("15min", "15 min")):
         for k in (2.0, 3.0):
-            sig = zones(mk, tf, k)
+            sig = zones_(tf, k)
             yield f"Zonas {lab} · TP {k:g}× stop", sig, None
             yield f"Zonas {lab} · TP {k:g}× stop · BE+2 al 70%", sig, 0.7
+    # the stop behind the level just tested (and wider in a busy market)
+    for tf, lab in (("1min", "1 min"), ("5min", "5 min")):
+        for buf in (3.0, 5.0):
+            sig = zones_(tf, 3.0, stop="dinamico", buffer=buf)
+            yield f"Zonas {lab} · stop dinámico +{buf:g} · TP 3×", sig, None
+            yield f"Zonas {lab} · stop dinámico +{buf:g} · TP 3× · BE+2 al 70%", sig, 0.7
     for minutes in (15, 30):
         for stop_at in ("opuesto", "medio"):
             for k in (1.5, 2.0):
                 yield (f"Ruptura apertura {minutes} min · stop {stop_at} · TP {k:g}×",
                        orb(mk, minutes, k, stop_at), None)
+    for n, tight in ((6, 2.5), (12, 3.5)):
+        for vol in (False, True):
+            yield (f"Caja {n * 5} min · ruptura{' con volumen' if vol else ''} · TP 2×",
+                   boxes_(n, 2.0, vol, tight), None)
+    for which in ("ayer", "noche"):
+        for vol in (False, True):
+            yield (f"Rompe máx/mín de {which}{' con volumen' if vol else ''} · TP 2×",
+                   levels_(which, 2.0, vol), None)
     for tf, lab in (("5min", "5 min"), ("15min", "15 min")):
         for k in (2.0, 3.0):
-            yield f"Tendencia + retroceso {lab} · TP {k:g}×", pullback(mk, tf, k), None
+            yield f"Tendencia + rebote EMA 20 {lab} · TP {k:g}×", pullback(mk, tf, k), None
+    for n in (9, 50, 200):
+        yield f"Tendencia + rebote EMA {n} 5 min · TP 2×", pullback(mk, "5min", 2.0, n), None
     for z in (1.5, 2.5):
         yield f"Vuelta al VWAP · {z:g}× ATR", vwap_revert(mk, z), None
+
+    # the same entries, only on the side the wider market agrees with
+    bases = [("Zonas 1 min · TP 3× · BE+2 al 70%", zones_("1min", 3.0), 0.7),
+             ("Zonas 5 min · TP 3×", zones_("5min", 3.0), None),
+             ("Caja 60 min · ruptura · TP 2×", boxes_(12, 2.0, False, 3.5), None),
+             ("Rompe máx/mín de ayer · TP 2×", levels_("ayer", 2.0, False), None)]
+    nq = nq_trend(mk, 20)
+    for name, sig, be in bases:
+        yield f"{name} · solo si NQ va a favor (EMA 20)", only_with(sig, nq), be
+    if big is not None:
+        grandes = breadth(mk, big, 20)
+        for name, sig, be in bases:
+            yield f"{name} · solo si las grandes van a favor", only_with(sig, grandes), be
 
 
 # --------------------------------------------------------------------------- #
@@ -331,6 +556,20 @@ def usd(pts: float, pv: float) -> str:
     return f"{'+' if pts >= 0 else '−'}${abs(pts * pv):,.0f}"
 
 
+def sized_usd(trades, position: str, pv: float, risk_usd: float) -> list[tuple[str, float]]:
+    """[(date, net $)]. A fixed position: points x its $/pt. "riesgo": as
+    many MNQ as fit the stop in risk_usd (at most MAX_MICROS); the costs in
+    points are the same per micro, so every micro adds the same result."""
+    if position != "riesgo":
+        return [(d, p * pv) for d, p, _ in trades]
+    out = []
+    for d, p, risk in trades:
+        n = min(MAX_MICROS, int(risk_usd // (risk * pv)))
+        if n >= 1:
+            out.append((d, n * p * pv))
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--symbol", default="NQ")
@@ -339,6 +578,8 @@ def main() -> int:
     ap.add_argument("--end", default=pd.Timestamp.now().strftime("%Y-%m-%d"))
     ap.add_argument("--split", default="2024-01-01")
     ap.add_argument("--position", choices=sorted(POSITIONS), default="5mnq")
+    ap.add_argument("--risk-usd", type=float, default=300.0,
+                    help="con --position riesgo: dólares que arriesga cada stop")
     ap.add_argument("--slip-ticks", type=float, default=1.0, help="deslizamiento por lado")
     ap.add_argument("--sessions", choices=("rth", "all"), default="rth")
     ap.add_argument("--min-n", type=int, default=60, help="trades mínimos en TRAIN y en TEST")
@@ -347,16 +588,26 @@ def main() -> int:
 
     label, pv, comm = POSITIONS[a.position]
     cost = comm / pv + 2 * a.slip_ticks * TICK
+    riesgo = a.position == "riesgo"
+    if riesgo:
+        label = f"riesgo fijo ${a.risk_usd:,.0f} por trade (1 a {MAX_MICROS} MNQ)"
     t0 = time.time()
     mk = Market(load_1m(a.symbol, a.data, a.start, a.end))
-    print(f"== Laboratorio · {a.symbol} {a.start} → {a.end} · {label} (${pv:g}/pt) · costo "
-          f"{cost:.2f} pts/trade ({usd(cost, pv)[1:]}) · entradas "
+    big = load_megacaps(a.start, a.end)
+    print(f"== Laboratorio · {a.symbol} {a.start} → {a.end} · {label} · costo "
+          f"{cost:.2f} pts/trade ({'por MNQ ' if riesgo else ''}${cost * pv:,.2f}) · entradas "
           f"{'09:30-15:30' if a.sessions == 'rth' else 'día y noche'} · TRAIN < {a.split} ≤ TEST")
     print("   prom = dólares por trade después de costos · conf = qué tan lejos del azar"
-          " (≥ 2 ≈ poco probable por suerte)\n")
+          " (≥ 2 ≈ poco probable por suerte)")
+    if big is None:
+        print("   (sin datos de las grandes —NVDA, MSFT, AAPL...—: se salta ese filtro. Para "
+              "bajarlos: scripts/fetch_databento.py --stocks grandes)")
+    print()
     rows = []
-    for name, sig, be in variants(mk):
-        trades = run(mk, sig, cost, a.sessions, be_at=be)
+    for name, sig, be in variants(mk, big):
+        trades = run(mk, sig, cost, a.sessions, be_at=be,
+                     max_risk=a.risk_usd / pv if riesgo else None)
+        trades = sized_usd(trades, a.position, pv, a.risk_usd)
         tr = stats([p for d, p in trades if d < a.split])
         te = stats([p for d, p in trades if d >= a.split])
         # a ✔ must earn money in BOTH periods and not by a hair (conf ≥ 1 in each)
@@ -368,18 +619,19 @@ def main() -> int:
         rows.append({"name": name, "ok": ok, "train": tr, "test": te,
                      "all": stats([p for _, p in trades]),
                      "years": {y: stats(v) for y, v in sorted(years.items())}})
-        f = lambda s: (f"{s['n']:>5} gana {s['wr']:>4.0%} prom {usd(s['avg'], pv):>6}"   # noqa: E731
-                       f" neto {usd(s['net'], pv):>9} conf {s['conf']:+.1f}") if s["n"] else "    0"
-        print(f"{'✔' if ok else '✘'} {name:<46} TRAIN {f(tr)}   TEST {f(te)}")
+        f = lambda s: (f"{s['n']:>5} gana {s['wr']:>4.0%} prom {usd(s['avg'], 1):>6}"   # noqa: E731
+                       f" neto {usd(s['net'], 1):>9} conf {s['conf']:+.1f}") if s["n"] else "    0"
+        print(f"{'✔' if ok else '✘'} {name:<62} TRAIN {f(tr)}   TEST {f(te)}", flush=True)
     good = [r for r in rows if r["ok"]]
     print(f"\n→ Ganan en TRAIN y en TEST (conf ≥ 1 en ambos): {len(good)} de {len(rows)}. "
-          "Con tantas pruebas alguna puede pasar por suerte: mira 'conf' y que gane casi todos los años.")
-    for r in sorted(good, key=lambda r: -r["test"]["conf"])[:5]:
+          f"Por pura suerte pasarían ~{len(rows) * 0.025:.0f}: mira 'conf' y que gane casi todos "
+          "los años.")
+    for r in sorted(good, key=lambda r: -r["test"]["conf"])[:6]:
         s = r["all"]
-        print(f"\n  {r['name']}: {s['n']} trades · neto {usd(s['net'], pv)} · peor caída "
-              f"{usd(-s['dd'], pv)}")
+        print(f"\n  {r['name']}: {s['n']} trades · neto {usd(s['net'], 1)} · peor caída "
+              f"{usd(-s['dd'], 1)}")
         for y, ys in r["years"].items():
-            print(f"    {y}: {ys['n']:>4} trades  neto {usd(ys['net'], pv):>9}  gana {ys['wr']:.0%}")
+            print(f"    {y}: {ys['n']:>4} trades  neto {usd(ys['net'], 1):>9}  gana {ys['wr']:.0%}")
     print(f"\n({time.time() - t0:.0f} s)")
     if a.json_out:
         Path(a.json_out).write_text(json.dumps({"meta": {**vars(a), "cost_pts": cost, "pv": pv,
