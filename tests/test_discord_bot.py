@@ -104,11 +104,11 @@ def test_status_shows_state_day_result_and_open_positions():
     rt = _Runtime(payload={
         "status": "ONLINE", "uptime": "3h 12m", "feed": "CONNECTED",
         "trades_today": 2, "closed_today": 1, "realised_points": 14.5,
-        "win_rate": "100%", "open_r": 0.8,
-        "open_trades": ["NQ LONG @ 20,000.00 → 20,016.00 (+16.00 pts, +0.80R)"]})
+        "win_rate": "100%", "open_pts": 16.0,
+        "open_trades": ["NQ LONG @ 20,000.00 → 20,016.00 (+16.00 pts)"]})
     out = build_reply("!status", rt)
     assert "ONLINE" in out and "3h 12m" in out and "CONNECTED" in out
-    assert "+14.50 pts" in out and "+0.80R en total" in out
+    assert "+14.50 pts" in out and "+16.00 pts en total" in out
     assert "NQ LONG @ 20,000.00" in out
 
 
@@ -116,9 +116,9 @@ def test_status_with_nothing_open_says_so():
     assert "_ninguna_" in build_reply("!status", _Runtime())
 
 
-def test_trades_reports_result_in_r_and_points():
+def test_trades_reports_result_in_points_and_dollars():
     out = build_reply("!trades", _Runtime(tracker=_closed_tracker()))
-    assert "✅ NQ LONG orb" in out and "+2.00R" in out and "+40.00 pts" in out
+    assert "✅" in out and "NQ LONG · objetivo" in out and "+40.00 pts" in out and "$" in out
 
 
 def test_trades_newest_first_and_capped():
@@ -134,7 +134,9 @@ def test_trades_newest_first_and_capped():
                          T0 + pd.Timedelta(minutes=10 * i + 5))
     lines = build_reply("!trades", _Runtime(tracker=tr)).splitlines()[1:]
     assert len(lines) == 5
-    assert "setup7" in lines[0] and "setup3" in lines[-1]
+    first = (T0 + pd.Timedelta(minutes=75)).strftime("%H:%M")          # trade 7 closed last
+    last = (T0 + pd.Timedelta(minutes=35)).strftime("%H:%M")           # trade 3
+    assert first in lines[0] and last in lines[-1]
 
 
 def test_trades_empty_state():

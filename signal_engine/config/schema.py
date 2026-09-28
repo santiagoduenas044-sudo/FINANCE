@@ -254,6 +254,9 @@ class NotificationsConfig(BaseModel):
     # Attach a chart (zone, entry, planned stop/targets) to the heads-up and
     # the entry message. Needs matplotlib; without it messages go text-only.
     charts: bool = True
+    # The day's record (today, week, total, last trades in $) once the
+    # 16:55 flat is done — readable on the phone without the dashboard.
+    daily_record: bool = True
     stop_move_step_r: float = 0.5
 
 

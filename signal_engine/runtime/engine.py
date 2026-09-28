@@ -97,6 +97,7 @@ class BotRuntime:
     # daily limits (ghost.max_trades_per_day / daily_loss_limit_usd)
     _day_cache: tuple | None = field(default=None, init=False, repr=False)
     _day_done_sent: str | None = field(default=None, init=False, repr=False)
+    _record_sent: str | None = field(default=None, init=False, repr=False)
     data_feed_status: dict[str, DataFeedStatus] = field(default_factory=dict, init=False)
     feed_last_update_at: dict[str, datetime] = field(default_factory=dict, init=False)
     # Phase 14: latest GHOST market-state + decision per symbol (JSON-safe), for
@@ -490,6 +491,7 @@ class BotRuntime:
                 pass
             self._notify_trade_updates(symbol, just_closed, before_r, before_tp1,
                                        before_stop, bars=bars)
+            self._maybe_daily_record(symbol, ctx.decision_time)
 
         # 2) build market state + GHOST decisions (same analysis the setups saw).
         analysis = LazyAnalysis(self.setup_engine.analyzer, ctx)
@@ -832,6 +834,31 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 log.warning("day-done notification failed (%s)", type(exc).__name__)
         return reason
+
+    def _maybe_daily_record(self, symbol: str, now) -> None:
+        """Once per trading day, right after the 16:55 flat: the record in
+        dollars to Discord. Never raises."""
+        ncfg = self.data_engine.cfg.output.notifications
+        if (self.output_dispatcher is None or self.paper_tracker is None
+                or not getattr(ncfg, "daily_record", False)):
+            return
+        try:
+            t = pd.Timestamp(now)
+            t = t.tz_localize("America/New_York") if t.tzinfo is None else \
+                t.tz_convert("America/New_York")
+            hhmm = t.strftime("%H:%M")
+            close = self.data_engine.cfg.ghost.eod_close_time or "16:00"
+            day = trading_day(t)
+            if not (close <= hhmm < "18:00") or self._record_sent == day:
+                return
+            self._record_sent = day
+            from ..output.record import build_record
+            pv = self._point_values(symbol)
+            label, per_pt = next(iter(pv.items())) if pv else (f"1 punto {symbol}", 1.0)
+            text = build_record(list(self.paper_tracker.closed_trades), t, per_pt, label)
+            self.output_dispatcher.publish_daily_record(text, day)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("daily record failed (%s)", type(exc).__name__)
 
     def _close_chart(self, bars, trade, symbol: str) -> bytes | None:
         """Chart of a closed trade — boxes with the ORIGINAL stop and target,

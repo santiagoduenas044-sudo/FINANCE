@@ -1,4 +1,4 @@
-"""Read-only Discord command bot: !status, !trades, !why, !help.
+"""Read-only Discord command bot: !status, !record, !trades, !why, !help.
 
 Webhooks are one-way, so answering a command needs a gateway connection. It
 dials OUT over a websocket, so it works from a Mac behind a home router with no
@@ -20,6 +20,10 @@ import logging
 import os
 import threading
 
+import pandas as pd
+
+from .record import build_record, exit_label, usd
+
 log = logging.getLogger("signal_engine.output.discord_bot")
 
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
@@ -30,6 +34,7 @@ _MESSAGE_MAX = 2000               # Discord message length limit
 _ALIASES = {
     "!status": "status", "!estado": "status",
     "!trades": "trades",
+    "!record": "record", "!récord": "record", "!historial": "record",
     "!why": "why", "!mercado": "why", "!porque": "why",
     "!help": "help", "!ayuda": "help",
 }
@@ -37,6 +42,7 @@ _ALIASES = {
 HELP = (
     "**Comandos de GHOST** (solo lectura — ninguno opera ni detiene el bot)\n"
     "`!status` / `!estado` — estado del bot, feed y posiciones abiertas con su P&L\n"
+    "`!record` / `!récord` — récord en dólares: hoy, semana, total y últimos trades\n"
     "`!trades` — últimos trades cerrados y su resultado\n"
     "`!why` / `!mercado` — qué está viendo el bot ahora y por qué\n"
     "`!help` / `!ayuda` — esta lista"
@@ -50,7 +56,7 @@ def _clip(text: str) -> str:
 def _status(runtime) -> str:
     p = runtime.status_digest_payload()
     realised = p.get("realised_points")
-    open_r = p.get("open_r")
+    open_pts = p.get("open_pts")
     lines = [
         f"**🤖 GHOST — {p.get('status', '?')}** · activo {p.get('uptime', '—')} "
         f"· feed {p.get('feed', '—')} · estrategia **{p.get('strategy', '—')}**",
@@ -58,7 +64,7 @@ def _status(runtime) -> str:
          f"· realizado: {realised:+.2f} pts · win rate {p.get('win_rate', '—')}"
          if realised is not None else f"Trades hoy: {p.get('trades_today', 0)}"),
         "",
-        "**Posiciones abiertas**" + (f" · {open_r:+.2f}R en total" if open_r is not None else ""),
+        "**Posiciones abiertas**" + (f" · {open_pts:+.2f} pts en total" if open_pts is not None else ""),
     ]
     lines += p.get("open_trades") or ["_ninguna_"]
     return "\n".join(lines)
@@ -70,13 +76,32 @@ def _trades(runtime, limit: int = 5) -> str:
     if not closed:
         return "**Últimos trades**\n_todavía no hay trades cerrados_"
     recent = sorted(closed, key=lambda t: t.closed_at or t.opened_at)[-limit:][::-1]
+    _label, pv = _position(runtime)
     lines = ["**Últimos trades**"]
     for t in recent:
-        mark = "✅" if t.r_multiple > 0 else ("➖" if t.r_multiple == 0 else "🛑")
-        reason = t.exit_reason.value if t.exit_reason else "—"
-        lines.append(f"{mark} {t.instrument} {t.direction} {t.setup} · {reason} · "
-                     f"{t.r_multiple:+.2f}R ({t.pnl_points:+.2f} pts)")
+        mark = "✅" if t.pnl_points > 0.01 else ("➖" if t.pnl_points >= -0.01 else "🛑")
+        when = pd.Timestamp(t.closed_at or t.opened_at)
+        when = when.tz_convert("America/New_York") if when.tzinfo else when
+        lines.append(f"{mark} {when:%d-%b %H:%M} · {t.instrument} {t.direction} · "
+                     f"{exit_label(t)} · {usd(t.pnl_points, pv)} ({t.pnl_points:+.2f} pts)")
     return "\n".join(lines)
+
+
+def _position(runtime) -> tuple[str, float]:
+    """('5 MNQ', 10.0): the position every $ figure is for."""
+    feeds = list(getattr(runtime, "live_feeds", None) or {}) or ["NQ"]
+    try:
+        pos = runtime._point_values(feeds[0])
+    except Exception:  # noqa: BLE001
+        pos = None
+    return next(iter(pos.items())) if pos else (f"1 punto {feeds[0]}", 1.0)
+
+
+def _record(runtime) -> str:
+    tracker = getattr(runtime, "paper_tracker", None)
+    closed = list(tracker.closed_trades) if tracker is not None else []
+    label, pv = _position(runtime)
+    return build_record(closed, pd.Timestamp.now(tz="America/New_York"), pv, label)
 
 
 def _why(runtime) -> str:
@@ -102,7 +127,7 @@ def _why(runtime) -> str:
     return "\n\n".join(parts)
 
 
-_HANDLERS = {"status": _status, "trades": _trades, "why": _why,
+_HANDLERS = {"status": _status, "trades": _trades, "why": _why, "record": _record,
              "help": lambda _rt: HELP}
 
 

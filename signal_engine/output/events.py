@@ -185,6 +185,17 @@ class OutputEvent:
         )
 
     @classmethod
+    def from_daily_record(cls, text: str, day: str) -> "OutputEvent":
+        """The trading record after the day's close (one per trading day)."""
+        return cls(
+            kind="daily_record",
+            dedup_key=f"daily_record:{day}",
+            title="RÉCORD",
+            disclaimer="Simulated paper trading — not financial advice.",
+            status_payload={"text": text, "day": day},
+        )
+
+    @classmethod
     def from_day_done(cls, payload: dict) -> "OutputEvent":
         """A daily limit was reached: no more trades this trading day."""
         return cls(
