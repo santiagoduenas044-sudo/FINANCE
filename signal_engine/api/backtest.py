@@ -26,9 +26,8 @@ STRATEGY_INFO = {
     "zones": ("Zonas (estilo TradingMind) — la que usa el bot en vivo",
               "Marca huecos de precio (FVG) frescos en velas de 5 min. Avisa 🟡 cuando el "
               "precio se acerca y solo entra en el PRIMER regreso a la zona si una vela de "
-              "1 min reacciona ahí. Stop 20–35 pts detrás del origen del movimiento; cierra "
-              "la mitad en TP1 (1R) y pasa a breakeven; el resto va al máximo/mínimo sin "
-              "tomar más cercano (2–5R). Opera día y noche (desde las 18:00 ET); sin entradas nuevas de 16:15 a 18:00 y todo cerrado a las 16:55. "
+              "1 min reacciona ahí. Stop 20–35 pts detrás del origen del movimiento; un solo "
+              "objetivo a 3R con toda la posición, sin parcial ni breakeven. Opera día y noche (desde las 18:00 ET); sin entradas nuevas de 16:15 a 18:00 y todo cerrado a las 16:55. "
               "Una operación a la vez."),
     "legacy": ("Setups antiguos (5 min) — la estrategia anterior del bot",
                "Tres setups en velas de 5 min: ruptura del rango de apertura (ORB), barrida "

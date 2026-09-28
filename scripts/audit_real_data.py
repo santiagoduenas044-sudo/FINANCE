@@ -37,6 +37,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -290,6 +291,70 @@ class _Arrays:
         self.l = bars["low"].to_numpy(float)
         self.c = bars["close"].to_numpy(float)
         self.session = bars[SESSION].to_numpy()
+        # CME trading day of each bar (the 18:00 ET open counts as the next day)
+        ny = self.index.tz_convert("America/New_York").tz_localize(None) \
+            if self.index.tz is not None else self.index
+        self.day = ((ny + pd.Timedelta(hours=6)).normalize()
+                    .to_numpy().astype("datetime64[D]").astype(np.int64))
+
+
+# Features of a signal at the moment it fires, from the 1m bars up to that
+# bar only (nothing from the future except the mfe/mae outcome columns).
+# "a favor" = measured in the trade's direction.
+FEATURE_WINDOW = 120            # bars after the signal for mfe/mae
+
+
+def _features(s, d, arr: _Arrays, risk: float) -> dict:
+    i = int(arr.index.searchsorted(s.timestamp, side="right")) - 1
+    if i < 1 or risk <= 0:
+        return {}
+    sign = 1.0 if s.direction.value == "LONG" else -1.0
+    c = arr.c[i]
+    ctx = s.market_context or {}
+    mid = ctx.get("zone_mid", s.entry)
+    start = int(np.searchsorted(arr.day, arr.day[i]))           # first bar of the trading day
+    hi, lo = arr.h[start:i + 1].max(), arr.l[start:i + 1].min()
+    pos = (c - lo) / (hi - lo) if hi > lo else 0.5
+    ts = pd.Timestamp(s.timestamp)
+    ny = ts.tz_convert("America/New_York") if ts.tzinfo else ts
+    f = {
+        "date": ny.strftime("%Y-%m-%d"), "year": ny.year, "weekday": ny.dayofweek,
+        "minute": ny.hour * 60 + ny.minute, "session": arr.session[i],
+        # trend into the entry, in R: > 0 = price was already moving the trade's way
+        "mom_30": sign * (c - arr.c[max(0, i - 30)]) / risk,
+        "mom_60": sign * (c - arr.c[max(0, i - 60)]) / risk,
+        "mom_240": sign * (c - arr.c[max(0, i - 240)]) / risk,
+        "mov_dia": sign * (c - arr.c[start]) / risk,
+        # 0 = entering at the day's extreme against the trade (buy the low),
+        # 1 = chasing (buy the high)
+        "rango_dia": pos if sign > 0 else 1.0 - pos,
+        "rango_dia_r": (hi - lo) / risk,
+        # typical 1m bar vs the stop: small = the stop is wide for the tape
+        "atr30_r": float(np.mean(arr.h[max(0, i - 30):i + 1] - arr.l[max(0, i - 30):i + 1])) / risk,
+        "zona_ancho_r": abs(ctx.get("zone_top", mid) - ctx.get("zone_bottom", mid)) / risk,
+        "entrada_vs_mid_r": sign * (s.entry - mid) / risk,
+        "plan_rr": ctx.get("plan_rr"),
+        "swing_1_r": (ctx.get("swing_rs") or [None])[0],
+        "n_swings": len(ctx.get("swing_rs") or []),
+        "score": d.confluence.score if d.confluence else None,
+        "vwap": getattr(getattr(d, "market_state", None), "vwap_side", None),
+    }
+    formed = ctx.get("zone_formed_at")
+    if formed:
+        f["zona_edad_min"] = (ts - pd.Timestamp(formed)).total_seconds() / 60
+    j = min(len(arr.c), i + 1 + FEATURE_WINDOW)
+    if j > i + 1:
+        if sign > 0:
+            f["mfe_r"] = (arr.h[i + 1:j].max() - s.entry) / risk
+            f["mae_r"] = (s.entry - arr.l[i + 1:j].min()) / risk
+        else:
+            f["mfe_r"] = (s.entry - arr.l[i + 1:j].min()) / risk
+            f["mae_r"] = (arr.h[i + 1:j].max() - s.entry) / risk
+    return f
+
+
+_FLAT = dict(partial_at_tp1=0.0, breakeven_after_tp1=False, be_trigger_r=None,
+             trail_start_r=None)
 
 
 def _simulate(s, cfg, arr: _Arrays, policy: dict):
@@ -333,6 +398,12 @@ def shadow(cfg, de, exec_bars, decisions):
                "risk_pts": t.initial_risk, "pnl_pts": t.pnl_points,
                "exit": t.exit_reason.value if t.exit_reason else "?", "policy_pnl": {},
                "target_pnl": {}}
+        row.update(_features(s, d, arr, t.initial_risk))
+        # the same entry with one fixed 2R target and no stop management, for
+        # every scored signal: judges the ENTRY apart from the exit plan
+        s2 = _with_targets(s, [2.0])
+        v = None if s2 is None else _simulate(s2, cfg, arr, _FLAT)
+        row["pnl_2r_pts"] = v.pnl_points if v is not None else None
         if row["approved"]:
             for name, pol in STOP_POLICIES.items():
                 v = _simulate(s, cfg, arr, pol) if pol else t
@@ -465,7 +536,9 @@ def report(symbol, cfg, exec_bars, steps, tracker, candidates, decisions, shadow
 
     out = shadow_path or DATA_DIR / symbol / "audit_shadow.csv"
     out.parent.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(shadow_rows).to_csv(out, index=False)
+    sdf = pd.DataFrame(shadow_rows)
+    sdf["cost_pts"] = cost                        # scripts/edge_finder.py reads it
+    sdf.to_csv(out, index=False)
     print(f"\nDetalle por señal guardado en {out}")
 
 

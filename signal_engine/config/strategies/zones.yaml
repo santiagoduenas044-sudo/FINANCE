@@ -42,8 +42,12 @@ setups:
     min_target_r: 2.0
     max_target_r: 5.0
     fallback_target_r: 3.0
-    fixed_target_r: null            # e.g. 2.0 = fixed 2:1 (see backtest "Objetivos")
-    single_target: false
+    # One target at 3R for the whole position: in the 5-year backtest
+    # (2021-09 -> 2026-09, 2,607 trades) it lost the least of every exit tried
+    # (-37.6R vs -74.0R for TP1 + BE + TP2). BE after TP1 kept closing trades
+    # that went on to the final target.
+    fixed_target_r: 3.0
+    single_target: true
     expiration_bars: 5
 
 signals:
@@ -54,7 +58,8 @@ signals:
 
 ghost:
   min_rr: 0.5
-  partial_at_tp1: 0.5               # bank half at target 1, run the rest
+  partial_at_tp1: 0.0               # no partial: one target, whole position
+  breakeven_after_tp1: false
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
   # the account flat before 16:59.
   eod_close_time: "16:55"

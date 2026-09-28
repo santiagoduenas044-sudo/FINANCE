@@ -245,6 +245,7 @@ class ZoneRetraceDetector(SetupDetector):
             market_context={"session": ctx.session, "zone_id": z.zone_id,
                             "zone_top": z.top, "zone_bottom": z.bottom,
                             "zone_mid": round(z.mid, 2),
+                            "zone_formed_at": pd.Timestamp(z.formed_at).isoformat(),
                             "plan_rr": round(abs(final - z.mid) / plan_r, 1),
                             "swing_rs": plan["swing_rs"],
                             "target_basis": basis},

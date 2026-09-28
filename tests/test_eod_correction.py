@@ -65,6 +65,9 @@ def test_replay_turns_the_4pm_flat_into_the_real_result():
                   ("16:40", 30705, 30740, 30681, 30735),   # rally, BE not touched
                   ("16:55", 30735, 30740, 30730, 30736)])  # new flat
     cfg = EngineConfig.load(strategy="zones")
+    # the exit rules idea #4 traded under: half at TP1, then breakeven
+    cfg = cfg.model_copy(update={"ghost": cfg.ghost.model_copy(
+        update={"partial_at_tp1": 0.5, "breakeven_after_tp1": True})})
     new = correct.replay(old, bars, cfg)
     assert new.exit_reason.value == "EOD" and new.closed_at == _t("16:55")
     # 5 MNQ: 3 banked at TP1, 2 closed by the flat (whole contracts, not 2.5)

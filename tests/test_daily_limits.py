@@ -25,8 +25,15 @@ def test_partials_are_whole_contracts():
     assert whole_contract_partial(0.9, 5) == pytest.approx(0.8)      # always leave one
     assert whole_contract_partial(0.5, 1) == 0.5                     # single contract: as set
     assert whole_contract_partial(0.0, 5) == 0.0
-    g = EngineConfig.load(strategy="zones").ghost
+    g = EngineConfig.load(strategy="zones").ghost.model_copy(update={"partial_at_tp1": 0.5})
     assert PaperTradeTracker.from_config(g).partial_at_tp1 == pytest.approx(0.6)
+
+
+def test_live_strategy_is_one_3r_target_without_breakeven():
+    cfg = EngineConfig.load(strategy="zones")
+    z = cfg.setups.zone_retrace
+    assert (z.fixed_target_r, z.single_target) == (3.0, True)
+    assert cfg.ghost.partial_at_tp1 == 0.0 and cfg.ghost.breakeven_after_tp1 is False
 
 
 def test_trading_day_rolls_at_six_pm_like_apex():
