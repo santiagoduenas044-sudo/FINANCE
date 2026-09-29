@@ -121,18 +121,30 @@ PYEOF
         echo "ORBIT apagado (no vuelve a arrancar hasta 'ctl.sh orbit on'; su récord se conserva)";;
       restart) launchctl kickstart -k "$DOMAIN/$ORBIT_LABEL" && echo "ORBIT reiniciado";;
       probar)
-        # replay the last days of Yahoo bars through ORBIT (temporary folder,
-        # the real record is untouched); "probar discord" also posts them
+        # replay past bars through ORBIT (temporary folder, the real record is
+        # untouched). "probar" = Yahoo's last days · "probar discord" also posts
+        # them · "probar 2026-01-01 [2026-06-30]" = Databento history
+        shift 2
+        _args=()
+        for _a in "$@"; do
+          case "$_a" in
+            discord) _args+=(--discord) ;;
+            detalle) _args+=(--detalle) ;;
+            [0-9][0-9][0-9][0-9]-*)
+              if [[ " ${_args[*]:-} " == *" --desde "* ]]; then _args+=(--hasta "$_a")
+              else _args+=(--desde "$_a"); fi ;;
+          esac
+        done
         ( set -a; [ -f "$REPO_DIR/.env" ] && . "$REPO_DIR/.env"; set +a; cd "$REPO_DIR"
           PYTHONPATH="$REPO_DIR" "$REPO_DIR/.venv/bin/python" -m signal_engine.subbots.orbit \
-            --probar $([ "${3:-}" = "discord" ] && echo --discord) );;
+            --probar ${_args[@]+"${_args[@]}"} );;
       status)
         launchctl print "$DOMAIN/$ORBIT_LABEL" 2>/dev/null | grep -E "state =|pid =|last exit code =" \
           || echo "ORBIT no está encendido";;
       logs)
         touch "$LOGDIR/orbit.out.log" "$LOGDIR/orbit.err.log"
         echo "(Ctrl-C para salir)"; tail -n 40 -f "$LOGDIR"/orbit.*.log;;
-      *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs|probar [discord]>";;
+      *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs|probar [discord] [DESDE [HASTA]] [detalle]>";;
     esac
     ;;
   *)

@@ -11,6 +11,7 @@ source GHOST uses) and hands them to the APERTURA rules
     .venv/bin/python -m signal_engine.subbots.orbit          # what launchd runs
     .venv/bin/python -m signal_engine.subbots.orbit --probar # replay the last days
     .venv/bin/python -m signal_engine.subbots.orbit --probar --discord   # ...and post them
+    .venv/bin/python -m signal_engine.subbots.orbit --probar --desde 2026-01-01  # Databento history
 
 Environment (.env):
     DISCORD_WEBHOOK_ORBIT   webhook of ORBIT's own channel (without it ORBIT
@@ -84,39 +85,101 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars) -> bool:
     return True
 
 
-def replay(bars: pd.DataFrame, publish, store_dir: Path, window: int = 600) -> OpeningRangeBot:
+def databento_bars(start: str, end: str | None = None) -> pd.DataFrame:
+    """NQ 1-minute history from the Databento file the lab uses
+    (market_data/NQ/DATABENTO_1m.csv, open-labeled, naive ET), turned into
+    what ORBIT sees live: CLOSE-labeled ET bars. Only 09:00-17:00 is kept —
+    ORBIT does nothing outside it — so years replay in minutes."""
+    csv = ROOT / "market_data" / "NQ" / "DATABENTO_1m.csv"
+    pq = csv.with_suffix(".parquet")
+    if pq.exists():
+        df = pd.read_parquet(pq)
+    elif csv.exists():
+        print("  (primera vez: leyendo el CSV grande, ~1 min)", flush=True)
+        df = pd.read_csv(csv, index_col="datetime", parse_dates=True)
+    else:
+        raise SystemExit(f"No encuentro {csv.relative_to(ROOT)}")
+    df = df[~df.index.duplicated(keep="last")].sort_index()
+    df = df.loc[start:end] if end else df.loc[start:]
+    df = df.between_time("09:00", "16:59")[["open", "high", "low", "close"]].astype(float)
+    df.index = (df.index + pd.Timedelta(minutes=1)).tz_localize("America/New_York")
+    return df
+
+
+def replay(bars: pd.DataFrame, publish, store_dir: Path, window: int = 600,
+           charts: bool = True) -> OpeningRangeBot:
     """Feed past bars one minute at a time to a fresh ORBIT in `store_dir`,
     exactly as the live loop would have seen them."""
     from ..output.trade_chart import render_trade_png
-    bot = OpeningRangeBot(store_dir, publish=publish, chart=render_trade_png, name=bot_name())
+    bot = OpeningRangeBot(store_dir, publish=publish, name=bot_name(),
+                          chart=render_trade_png if charts else None)
     for i in range(1, len(bars) + 1):
         bot.on_bars(bars.iloc[max(0, i - window):i])
     return bot
 
 
-def test_run(to_discord: bool) -> int:
-    """`--probar`: replay Yahoo's last days through ORBIT (in a temporary
-    folder, so the real record is untouched) and show what it would have
-    said and done."""
+def monthly(closed: list[dict]) -> str:
+    """One line per month: trades, wins and dollars (1 MNQ)."""
+    months: dict[str, list[float]] = {}
+    for t in closed:
+        months.setdefault(t["day"][:7], []).append(t["usd"])
+    lines = []
+    for m, usd in sorted(months.items()):
+        wins = sum(1 for u in usd if u > 0)
+        lines.append(f"  {m}: {len(usd):>3} trades · gana {wins / len(usd):>4.0%} · "
+                     f"{'+' if sum(usd) >= 0 else '−'}${abs(sum(usd)):,.0f}")
+    return "\n".join(lines)
+
+
+def test_run(to_discord: bool, desde: str | None = None, hasta: str | None = None,
+             detalle: bool = False) -> int:
+    """`--probar`: replay past bars through ORBIT (in a temporary folder, so
+    the real record is untouched) and show what it would have said and done.
+    Without --desde: Yahoo's last ~5 days. With --desde: the Databento
+    history (months or years); long periods show the monthly summary only."""
     import tempfile
-    print("Bajando las velas de 1 min de NQ de los últimos días (Yahoo)...", flush=True)
-    bars = yahoo_bars()
-    print(f"{len(bars):,} velas: {bars.index[0]:%d-%b %H:%M} → {bars.index[-1]:%d-%b %H:%M}\n",
-          flush=True)
+    if desde:
+        print(f"Leyendo el historial de Databento desde {desde}...", flush=True)
+        bars = databento_bars(desde, hasta)
+    else:
+        print("Bajando las velas de 1 min de NQ de los últimos días (Yahoo)...", flush=True)
+        bars = yahoo_bars()
+    if bars.empty:
+        print("No hay velas en ese rango.")
+        return 1
+    days = bars.index.normalize().nunique()
+    verbose = detalle or days <= 10
+    print(f"{len(bars):,} velas: {bars.index[0]:%d-%b-%Y %H:%M} → {bars.index[-1]:%d-%b-%Y %H:%M}"
+          f" ({days} días)\n", flush=True)
+    if to_discord and days > 10:
+        print("(con más de 10 días no mando nada a Discord, serían demasiados mensajes)\n")
+        to_discord = False
     real = make_publisher() if to_discord else None
 
     def show(*, title, text, color=0x3498DB, key="", image=None):
-        print(f"── {title}\n   " + text.replace("**", "").replace("\n", "\n   ") + "\n", flush=True)
+        if verbose:
+            print(f"── {title}\n   " + text.replace("**", "").replace("\n", "\n   ") + "\n",
+                  flush=True)
         if real is not None:
             real(title=f"🧪 PRUEBA · {title}", text=text, color=color, key=f"test:{key}",
                  image=image)
     with tempfile.TemporaryDirectory() as tmp:
-        bot = replay(bars, show, Path(tmp))
+        bot = replay(bars, show, Path(tmp), charts=to_discord)
         print("════ Resultado de la prueba ════")
         print(bot.record_text().replace("**", ""))
+        if days > 10 and bot.closed:
+            print("\nPor mes (1 MNQ, con costos):")
+            print(monthly(bot.closed))
     if to_discord and not os.environ.get(WEBHOOK_ENV, "").strip():
         print(f"\n(no se mandó nada a Discord: falta {WEBHOOK_ENV} en .env)")
     return 0
+
+
+def _arg(name: str) -> str | None:
+    if name in sys.argv:
+        i = sys.argv.index(name)
+        return sys.argv[i + 1] if i + 1 < len(sys.argv) else None
+    return None
 
 
 def main() -> int:
@@ -124,7 +187,8 @@ def main() -> int:
                         format="%(asctime)s %(levelname)s %(message)s")
     if "--probar" in sys.argv:
         logging.getLogger().setLevel(logging.WARNING)
-        return test_run(to_discord="--discord" in sys.argv)
+        return test_run(to_discord="--discord" in sys.argv, desde=_arg("--desde"),
+                        hasta=_arg("--hasta"), detalle="--detalle" in sys.argv)
     stop = {"now": False}
 
     def _quit(*_):

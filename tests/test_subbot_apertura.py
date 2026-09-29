@@ -239,3 +239,26 @@ def test_no_box_message_on_a_sunday_evening(tmp_path):
     bot, sent = _bot(tmp_path)
     _feed(bot, bars)
     assert sent == []
+
+
+def test_orbit_test_run_over_databento_history(tmp_path, monkeypatch, capsys):
+    """--probar --desde: the lab's Databento file (open-labeled, naive ET)
+    replayed through ORBIT's own code, with a monthly summary."""
+    from signal_engine.subbots import orbit
+    rng = np.random.default_rng(5)
+    frames = []
+    for day in pd.bdate_range("2025-01-06", periods=30):
+        idx = pd.date_range(f"{day.date()} 08:00", f"{day.date()} 17:30", freq="1min")
+        c = 20000 + np.cumsum(rng.normal(0, 6, len(idx)))
+        o = np.r_[c[0], c[:-1]]
+        frames.append(pd.DataFrame({"open": o, "high": np.maximum(o, c) + 2,
+                                    "low": np.minimum(o, c) - 2, "close": c, "volume": 1.0},
+                                   index=idx.rename("datetime")))
+    d = tmp_path / "market_data" / "NQ"
+    d.mkdir(parents=True)
+    pd.concat(frames).to_csv(d / "DATABENTO_1m.csv")
+    monkeypatch.setattr(orbit, "ROOT", tmp_path)
+    assert orbit.test_run(False, desde="2025-01-06") == 0
+    out = capsys.readouterr().out
+    assert "(30 días)" in out and "Por mes" in out and "2025-01:" in out and "2025-02:" in out
+    assert "── 📦" not in out                            # long runs: summary only
