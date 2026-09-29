@@ -153,10 +153,19 @@ def entry_open(ts, sessions: str) -> bool:
 
 def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
         be_at: float | None = None, be_plus: float = 2.0,
-        max_risk: float | None = None) -> list[tuple[str, float, float, int]]:
+        max_risk: float | None = None, steps: list[tuple[float, float]] | None = None,
+        partial: tuple[float, float] | None = None) -> list[tuple[str, float, float, int]]:
     """One position at a time. Returns [(entry date, net points, stop points,
     entry hour ET)].
-    `max_risk`: skip entries whose stop is farther than that (sizing limit)."""
+    `max_risk`: skip entries whose stop is farther than that (sizing limit).
+    Protecting a trade that goes well (each rule from the NEXT minute on):
+      be_at=0.7: at 70% of the way to the target, stop to entry + be_plus.
+      steps=[(0.5, 0.0), (0.7, 0.3)]: at 50% of the way, stop to entry +
+        be_plus; at 70%, stop to entry + 30% of the way (+ be_plus)...
+      partial=(0.7, 0.5): at 70% close half there; the rest runs with its
+        stop at entry + be_plus."""
+    if be_at is not None and steps is None:
+        steps = [(be_at, 0.0)]
     out, busy = [], 0
     for s in sorted(signals, key=lambda x: x.ready):
         i0 = int(np.searchsorted(mk.t, s.ready))
@@ -176,7 +185,7 @@ def run(mk: Market, signals: list[Signal], cost_pts: float, sessions: str,
             entry + s.k * risk if s.long else entry - s.k * risk)
         if (tgt - entry) * (1 if s.long else -1) <= TICK:
             continue
-        j, px = _exit(mk, i0, end, s.long, s.stop, tgt, entry, be_at, be_plus)
+        j, px = _exit(mk, i0, end, s.long, s.stop, tgt, entry, steps, be_plus, partial)
         pts = (px - entry) if s.long else (entry - px)
         when = pd.Timestamp(mk.t[i0])
         out.append((str(when.date()), pts - cost_pts, float(risk), when.hour))
@@ -191,9 +200,13 @@ def _first(mask: np.ndarray) -> int:
     return k if mask[k] else -1
 
 
-def _exit(mk, i0, end, long, stop, tgt, entry, be_at, be_plus):
+def _exit(mk, i0, end, long, stop, tgt, entry, steps=None, be_plus=2.0, partial=None):
+    """(exit index, exit price). With `partial` the price is the blend of
+    the part closed early and the rest."""
     h, l, o = mk.h[i0:end], mk.l[i0:end], mk.o[i0:end]
+    n = len(h)
     sgn = 1 if long else -1
+    dist = abs(tgt - entry)
 
     def scan(stop_px, start):
         hs = (l[start:] <= stop_px) if long else (h[start:] >= stop_px)
@@ -207,19 +220,32 @@ def _exit(mk, i0, end, long, stop, tgt, entry, be_at, be_plus):
             return k, fill
         return start + kt, tgt
 
-    if be_at is not None:
-        trig = entry + sgn * be_at * abs(tgt - entry)
-        hit = _first((h >= trig) if long else (l <= trig))
-        first = scan(stop, 0)
-        if hit >= 0 and (first is None or first[0] > hit):
-            res = scan(entry + sgn * be_plus, hit + 1)      # stop moves from the next minute
-            if res is None:
-                return end - 1, mk.c[end - 1]
-            return i0 + res[0], res[1]
-        if first is not None:
-            return i0 + first[0], first[1]
-        return end - 1, mk.c[end - 1]
-    res = scan(stop, 0)
+    def reached(frac, start):
+        trig = entry + sgn * frac * dist
+        k = _first((h[start:] >= trig) if long else (l[start:] <= trig))
+        return -1 if k < 0 else start + k
+
+    cur, start = stop, 0
+    rules = [(f, lock, False) for f, lock in (steps or [])]
+    if partial is not None:
+        rules.append((partial[0], 0.0, True))
+    for frac, lock, is_partial in sorted(rules):
+        if start >= n:
+            break
+        first = scan(cur, start)
+        hit = reached(frac, start)
+        if hit < 0 or (first is not None and first[0] <= hit):
+            break                                   # exits (or ends) before this step
+        new = entry + sgn * (lock * dist + be_plus)
+        cur = max(cur, new) if long else min(cur, new)
+        start = hit + 1                             # the stop moves from the next minute
+        if is_partial:
+            share = partial[1]
+            done = entry + sgn * frac * dist        # this part closed at the step price
+            rest = scan(cur, start) if start < n else None
+            j, px = (i0 + rest[0], rest[1]) if rest else (end - 1, mk.c[end - 1])
+            return j, share * done + (1 - share) * px
+    res = scan(cur, start) if start < n else None
     if res is None:
         return end - 1, mk.c[end - 1]                      # 16:55 flat
     return i0 + res[0], res[1]

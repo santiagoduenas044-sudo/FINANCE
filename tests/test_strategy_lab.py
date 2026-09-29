@@ -220,3 +220,18 @@ def test_ghost_like_stop_is_20_to_35_points():
     assert sigs
     for s in sigs:
         assert 20 - 1e-9 <= abs(close[s.ready] - s.stop) <= 35 + 1e-9
+
+
+def test_profit_locks_steps_and_partial():
+    from types import SimpleNamespace
+    L = lab
+    # long at 100, stop 90, target 130; runs to 127, then falls back to 95
+    m = SimpleNamespace(h=np.array([101, 110, 122, 125, 127, 120, 112.0]),
+                        l=np.array([99, 100, 108, 118, 119, 100, 95.0]),
+                        o=np.array([100, 101, 110, 122, 125, 120, 110.0]))
+    m.c = m.o
+    assert L._exit(m, 0, 7, True, 90, 130, 100)[1] == 110                   # flat at the end
+    assert L._exit(m, 0, 7, True, 90, 130, 100, [(0.7, 0.0)])[1] == 102     # BE+2
+    steps = [(0.5, 0.0), (0.7, 0.3), (0.9, 0.6)]
+    assert L._exit(m, 0, 7, True, 90, 130, 100, steps)[1] == 120            # 60% of the way + 2
+    assert L._exit(m, 0, 7, True, 90, 130, 100, None, 2.0, (0.7, 0.5))[1] == 111.5
