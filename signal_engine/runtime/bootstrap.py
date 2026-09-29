@@ -121,8 +121,15 @@ def build_runtime(
     signal_log_path: str | Path | None = DEFAULT_SIGNAL_LOG,
     logger=None,
     allow_simulated_fallback: bool = True,
+    data_dir: Path | None = None,
 ) -> tuple[BotRuntime, dict[str, FeedInfo]]:
-    """Wire a BotRuntime for `symbols`. Returns (runtime, feed_info_by_symbol)."""
+    """Wire a BotRuntime for `symbols`. Returns (runtime, feed_info_by_symbol).
+    `data_dir`: keep the paper trades, GHOST log and ideas there instead of
+    data_store/ (replays must never touch the real record)."""
+    paper_dir, ghost_log_file, ideas_file = (
+        (DEFAULT_PAPER_DIR, DEFAULT_GHOST_LOG, DEFAULT_IDEAS_FILE) if data_dir is None
+        else (Path(data_dir) / "paper", Path(data_dir) / "ghost_log.jsonl",
+              Path(data_dir) / "ideas.json"))
     # No explicit config -> what the live bot runs: default.yaml plus the
     # strategy overlay named by $BOT_STRATEGY (default "zones").
     data_engine = DataEngine(config if config is not None else EngineConfig.load_active())
@@ -149,9 +156,9 @@ def build_runtime(
         from ..ghost.brain import GhostBrain
         from ..paper.tracker import PaperTradeTracker
         ghost = GhostBrain(gcfg)
-        ghost_log = DEFAULT_GHOST_LOG
+        ghost_log = ghost_log_file
         if gcfg.paper_enabled:
-            paper_tracker = PaperTradeTracker.from_config(gcfg, store_dir=DEFAULT_PAPER_DIR)
+            paper_tracker = PaperTradeTracker.from_config(gcfg, store_dir=paper_dir)
 
     # Phase 16 Fix 1: Wire RiskEngine so the dashboard shows a real risk status
     # instead of "DISABLED". The CME require_verified() guard remains intact —
@@ -199,7 +206,7 @@ def build_runtime(
     zr = data_engine.cfg.setups.zone_retrace
     if zr.enabled and ghost is not None:
         from .ideas import IdeaBoard
-        runtime.idea_board = IdeaBoard(DEFAULT_IDEAS_FILE,
+        runtime.idea_board = IdeaBoard(ideas_file,
                                        timezone=data_engine.cfg.data.timezone)
 
     # Record each feed's real source on the runtime so status/chart can report

@@ -76,11 +76,17 @@ ghost:
   trade_micro: true
   # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
   # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
-  # Entry cut-off / 16:55 flat / one position / cooldown still apply.
+  # Entry cut-off / 16:55 flat / one position / daily loss limit still apply.
   min_confluence_score: null
+  # No "excessive volatility" veto and no pause after a stop: the lab test
+  # has neither. The veto fired whenever the 1-minute ATR was at its
+  # 40-minute high, which is exactly when a 15m confirmation candle closes
+  # (the reaction off the zone) and all through the first hour after 9:30,
+  # so live GHOST was turning down most of the trades the lab counted.
+  max_atr_percentile: 1.0
+  cooldown_bars: 0
   min_stop_atr_mult: 0.0
   max_stop_atr_mult: 0.0
-  cooldown_bars: 15                 # 15 minutes after a stop-out
   # No limit on the number of trades; the day still stops once it is down
   # $500 on the 5-MNQ position. Change the numbers here (null = off).
   max_trades_per_day: null

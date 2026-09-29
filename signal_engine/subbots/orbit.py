@@ -85,11 +85,13 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars) -> bool:
     return True
 
 
-def databento_bars(start: str, end: str | None = None) -> pd.DataFrame:
+def databento_bars(start: str, end: str | None = None,
+                   hours: tuple[str, str] | None = ("09:00", "16:59")) -> pd.DataFrame:
     """NQ 1-minute history from the Databento file the lab uses
     (market_data/NQ/DATABENTO_1m.csv, open-labeled, naive ET), turned into
-    what ORBIT sees live: CLOSE-labeled ET bars. Only 09:00-17:00 is kept —
-    ORBIT does nothing outside it — so years replay in minutes."""
+    what ORBIT sees live: CLOSE-labeled ET bars. Only 09:00-17:00 is kept by
+    default — ORBIT does nothing outside it — so years replay in minutes
+    (`hours=None` keeps the whole day)."""
     csv = ROOT / "market_data" / "NQ" / "DATABENTO_1m.csv"
     pq = csv.with_suffix(".parquet")
     if pq.exists():
@@ -101,7 +103,9 @@ def databento_bars(start: str, end: str | None = None) -> pd.DataFrame:
         raise SystemExit(f"No encuentro {csv.relative_to(ROOT)}")
     df = df[~df.index.duplicated(keep="last")].sort_index()
     df = df.loc[start:end] if end else df.loc[start:]
-    df = df.between_time("09:00", "16:59")[["open", "high", "low", "close"]].astype(float)
+    if hours is not None:
+        df = df.between_time(*hours)
+    df = df[["open", "high", "low", "close"]].astype(float)
     df.index = (df.index + pd.Timedelta(minutes=1)).tz_localize("America/New_York")
     return df
 

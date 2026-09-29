@@ -98,6 +98,25 @@ PYEOF
       *)   echo "current: $(_get BOT_AUTO_START)"; echo "usage: ctl.sh autostart <on|off>";;
     esac
     ;;
+  ghost)
+    # "ghost porque [DIAS]" = what the live GHOST did with each idea and why
+    # "ghost probar [DESDE [HASTA]]" = replay real days through today's rules
+    # (Yahoo's last days, or the Databento history), without touching the record
+    shift 1
+    _cmd="${1:-}"; [ $# -gt 0 ] && shift
+    _args=()
+    case "$_cmd" in
+      porque) _args=(--log "${1:-3}") ;;
+      probar)
+        for _a in "$@"; do
+          if [[ " ${_args[*]:-} " == *" --desde "* ]]; then _args+=(--hasta "$_a")
+          else _args+=(--desde "$_a"); fi
+        done ;;
+      *) echo "uso: bash deploy/macos/ctl.sh ghost <porque [DIAS]|probar [DESDE [HASTA]]>"; exit 2 ;;
+    esac
+    ( set -a; [ -f "$REPO_DIR/.env" ] && . "$REPO_DIR/.env"; set +a; cd "$REPO_DIR"
+      PYTHONPATH="$REPO_DIR" "$REPO_DIR/.venv/bin/python" -m signal_engine.runtime.probar \
+        ${_args[@]+"${_args[@]}"} );;
   orbit)
     # ORBIT: the separate paper bot (APERTURA strategy). Its own service,
     # its own log, its own Discord channel ($DISCORD_WEBHOOK_ORBIT in .env).
@@ -148,6 +167,6 @@ PYEOF
     esac
     ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|orbit on|off|status|logs>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|ghost porque|probar|orbit on|off|status|logs>" >&2
     exit 2;;
 esac
