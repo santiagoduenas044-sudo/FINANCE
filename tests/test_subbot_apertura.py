@@ -175,3 +175,20 @@ def test_discord_command(tmp_path):
     class RT:
         subbots = {"NQ": OpeningRangeBot(tmp_path)}
     assert "APERTURA" in build_reply("!apertura", RT())
+
+
+def test_apertura_can_use_its_own_discord_channel(monkeypatch):
+    from signal_engine.config.schema import EngineConfig
+    from signal_engine.runtime.bootstrap import subbot_publisher
+
+    class Dispatcher:
+        def publish_note(self, **kw):
+            pass
+    ghost = Dispatcher()
+    cfg = EngineConfig.load(strategy="zones")
+    monkeypatch.delenv("DISCORD_WEBHOOK_APERTURA", raising=False)
+    assert subbot_publisher(cfg, ghost) == ghost.publish_note        # same channel as GHOST
+    monkeypatch.setenv("DISCORD_WEBHOOK_APERTURA", "https://discord.invalid/x")
+    own = subbot_publisher(cfg, ghost)
+    adapter = own.__self__.adapters[0]
+    assert adapter.config.webhook_env == "DISCORD_WEBHOOK_APERTURA" and adapter.configured

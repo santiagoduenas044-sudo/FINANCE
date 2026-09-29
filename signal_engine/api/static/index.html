@@ -379,13 +379,15 @@ footer { color: var(--ink-3); font-size: 11px; text-align: center; padding: 0 0 
         <div class="ph"><span class="mn">LAB</span><h2>Laboratorio de estrategias</h2><div class="gap"></div>
           <span class="pill"><span class="v" id="lab-state">—</span></span></div>
         <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="lab-est" aria-label="Estudio"><option value="todo">Todas las ideas</option><option value="apertura">Ruptura de apertura a fondo</option></select>
+          <select id="lab-est" aria-label="Estudio"><option value="todo">Todas las ideas</option><option value="apertura">Ruptura de apertura a fondo</option><option value="zonas">Zonas en 1, 5 y 15 min</option></select>
+          <select id="lab-esc" aria-label="Escala"><option value="puntos">Puntos fijos</option><option value="precio">Escalado al precio</option></select>
           <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ fijos</option><option value="1nq">1 NQ fijo</option><option value="riesgo">Riesgo fijo $300</option></select>
           <select id="lab-ses" aria-label="Horario"><option value="rth">09:30–15:30</option><option value="all">día y noche</option></select>
           <button class="pbtn on" id="lab-go" type="button">Correr laboratorio (~3–5 min)</button></div>
         <p class="foot" style="padding:0 14px">Prueba ideas distintas (zonas en 1/5/15 min con stop fijo o dinámico, cajas y rupturas,
           rebotes en EMA, vuelta al VWAP, filtro de NQ y de las grandes) en 5 años de NQ con costos reales.
-          ✔ = gana en 2021–2023 Y en 2024–2026. "Riesgo fijo" usa los MNQ que caben en $300 de stop.</p>
+          ✔ = gana en 2021–2023 Y en 2024–2026. "Riesgo fijo" usa los MNQ que caben en $300 de stop.
+          "Escalado al precio": los límites en puntos crecen con el NQ (50 pts a 15,000 = 100 pts a 30,000).</p>
         <div class="pb" id="lab-wrap" hidden><pre class="report" id="lab-out"></pre></div>
       </div>
       <div class="panel mb">
@@ -1034,7 +1036,7 @@ async function labPoll() {
 }
 $("lab-go").onclick = async () => {
   try {
-    await api(`/api/lab/run?position=${$("lab-pos").value}&sessions=${$("lab-ses").value}&estudio=${$("lab-est").value}`, { method: "POST" });
+    await api(`/api/lab/run?position=${$("lab-pos").value}&sessions=${$("lab-ses").value}&estudio=${$("lab-est").value}&escala=${$("lab-esc").value}`, { method: "POST" });
     $("lab-wrap").hidden = false; $("lab-out").textContent = "Corriendo… la primera vez prepara los datos (1–2 min).";
     labPoll();
   } catch (e) { $("lab-state").textContent = "⚠ " + e.message; }

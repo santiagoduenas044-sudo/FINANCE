@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 _spec = importlib.util.spec_from_file_location("strategy_lab", ROOT / "scripts" / "strategy_lab.py")
@@ -198,3 +199,24 @@ def test_opening_range_stop_limits_and_one_side():
 
 def test_losing_streak():
     assert lab.streak([10, -1, -2, 5, -1, -1, -1, 3]) == (3, -3.0)
+
+
+def test_price_scaling_uses_the_previous_close():
+    idx = pd.date_range("2025-03-03 09:30", periods=3, freq="1min").append(
+        pd.date_range("2025-03-04 09:30", periods=3, freq="1min"))
+    df = pd.DataFrame({"open": 30000.0, "high": 30001.0, "low": 29999.0, "close": 30000.0,
+                       "volume": 1.0}, index=idx)
+    mk = lab.Market(df)
+    assert list(mk.scale_at(idx[-1:])) == [1.0]                   # points: no scaling
+    mk.scaled = True
+    assert mk.scale_at(idx[-1:])[0] == pytest.approx(2.0)         # 30,000 / 15,000
+
+
+def test_ghost_like_stop_is_20_to_35_points():
+    mk = _random_market()
+    b = mk.bars("1min")
+    close = dict(zip(b["end"].to_numpy(), b["close"].to_numpy()))
+    sigs = lab.zones(mk, "1min", 3.0, stop="ghost")
+    assert sigs
+    for s in sigs:
+        assert 20 - 1e-9 <= abs(close[s.ready] - s.stop) <= 35 + 1e-9

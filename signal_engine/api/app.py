@@ -366,9 +366,11 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         return lab.status()
 
     @app.post("/api/lab/run")
-    def lab_run(position: str = "5mnq", sessions: str = "rth", estudio: str = "todo") -> dict:
+    def lab_run(position: str = "5mnq", sessions: str = "rth", estudio: str = "todo",
+                escala: str = "puntos") -> dict:
         try:
-            return lab.start(position=position, sessions=sessions, estudio=estudio)
+            return lab.start(position=position, sessions=sessions, estudio=estudio,
+                             escala=escala)
         except LabError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 

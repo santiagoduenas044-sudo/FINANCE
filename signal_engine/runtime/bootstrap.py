@@ -117,6 +117,21 @@ def build_live_feed(symbol: str, data_engine: DataEngine, *, logger=None,
     return feed, FeedInfo(symbol, sim_adapter.name, False, True)
 
 
+APERTURA_WEBHOOK_ENV = "DISCORD_WEBHOOK_APERTURA"
+
+
+def subbot_publisher(config: EngineConfig, dispatcher):
+    """Where APERTURA's messages go: its own Discord channel when
+    $DISCORD_WEBHOOK_APERTURA is set in .env, else GHOST's channel."""
+    if os.environ.get(APERTURA_WEBHOOK_ENV, "").strip():
+        from ..output.discord import DiscordOutputAdapter
+        from ..output.dispatcher import OutputDispatcher
+        own = config.output.discord.model_copy(
+            update={"enabled": True, "webhook_env": APERTURA_WEBHOOK_ENV})
+        return OutputDispatcher([DiscordOutputAdapter(own)]).publish_note
+    return dispatcher.publish_note if dispatcher is not None else None
+
+
 def build_runtime(
     symbols: list[str],
     *,
@@ -212,8 +227,7 @@ def build_runtime(
         from ..output.trade_chart import render_trade_png
         from ..subbots.opening_range import OpeningRangeBot
         runtime.subbots["NQ"] = OpeningRangeBot(
-            DEFAULT_SUBBOTS_DIR,
-            publish=dispatcher.publish_note if dispatcher is not None else None,
+            DEFAULT_SUBBOTS_DIR, publish=subbot_publisher(data_engine.cfg, dispatcher),
             chart=render_trade_png)
 
     # Record each feed's real source on the runtime so status/chart can report

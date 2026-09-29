@@ -47,7 +47,8 @@ TICK = 0.25
 # "riesgo" is priced per MNQ and sized per trade (see sized_usd)
 POSITIONS = {"5mnq": ("5 MNQ", 10.0, 5 * 1.04), "1nq": ("1 NQ", 20.0, 3.10),
              "riesgo": ("riesgo fijo en MNQ", 2.0, 1.04)}
-MAX_MICROS = 15                      # never more than 1.5 NQ, however tight the stop
+REF_PRICE = 15_000.0                 # NQ around 2021-2022: what the point limits were set for
+MAX_MICROS = 15                     # never more than 1.5 NQ, however tight the stop
 # the largest Nasdaq-100 weights: their 1-minute bars feed the breadth filter
 MEGACAPS = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "GOOGL", "TSLA")
 
@@ -84,6 +85,20 @@ class Market:
         day = (m1.index + pd.Timedelta(hours=6)).normalize()
         self.eod = np.searchsorted(self.t, (day + pd.Timedelta(hours=16, minutes=55)).values)
         self._bars: dict[str, pd.DataFrame] = {}
+        # --escala precio: point limits are written for NQ at REF_PRICE and
+        # grow with the price (50 pts at 15,000 = 100 pts at 30,000). Uses the
+        # previous day's close, so it never peeks at today.
+        self.scaled = False
+        close = m1["close"].groupby(day).last()
+        self._day_scale = (close.shift(1) / REF_PRICE).bfill()
+
+    def scale_at(self, times) -> np.ndarray:
+        """Factor for point limits at each of `times` (1.0 without --escala)."""
+        times = pd.DatetimeIndex(times)
+        if not self.scaled:
+            return np.ones(len(times))
+        day = (times + pd.Timedelta(hours=6)).normalize()
+        return self._day_scale.reindex(day).ffill().bfill().fillna(1.0).to_numpy()
 
     def bars(self, tf: str) -> pd.DataFrame:
         if tf not in self._bars:
@@ -223,14 +238,20 @@ def zones(mk: Market, tf: str, k: float, stop: str = "origen", buffer: float = 3
     stop="dinamico": behind whichever is farther, the origin or the last
     hour's high/low (the resistance/support price just tested), plus
     `buffer` pts, and never closer than `atr_mult` average 5-minute candles
-    (a busy market gets more room)."""
+    (a busy market gets more room).
+    stop="ghost": like the live bot, behind the origin but kept 20-35 pts
+    from the entry.
+
+    Every limit in points (gap size, stop size, buffer) is multiplied by the
+    price factor with --escala precio (see Market.scale_at)."""
     b = mk.bars(tf)
     O, H, L, C = (b[c].to_numpy() for c in ("open", "high", "low", "close"))
     end = b["end"].to_numpy()
+    f = mk.scale_at(b.index)                   # 1.0, or price / REF_PRICE
     mins = int(pd.Timedelta(tf).total_seconds() // 60)
     life = max(3, 180 // mins)                 # zones live ~3 hours
     confirm = 5 if mins == 1 else 2            # bars allowed after the first touch
-    dyn = stop == "dinamico"
+    dyn, ghost = stop == "dinamico", stop == "ghost"
     max_risk = ({1: 100, 5: 150, 15: 200} if dyn else {1: 50, 5: 80, 15: 120}).get(mins, 150)
     back = max(3, lookback_min // mins)
     atr = mk.atr5() if dyn else None
@@ -251,14 +272,18 @@ def zones(mk: Market, tf: str, k: float, stop: str = "origen", buffer: float = 3
                 if (C[i] > mid and C[i] > O[i]) if bull else (C[i] < mid and C[i] < O[i]):
                     if dyn:
                         lo, hi = L[max(0, i - back):i + 1].min(), H[max(0, i - back):i + 1].max()
-                        px = min(z["origin"], lo) - buffer if bull else max(z["origin"], hi) + buffer
+                        buf = buffer * f[i]
+                        px = min(z["origin"], lo) - buf if bull else max(z["origin"], hi) + buf
                         room = atr_mult * mk.asof("5min", atr, end[i])
                         if np.isfinite(room):
                             px = min(px, C[i] - room) if bull else max(px, C[i] + room)
                     else:
-                        px = z["origin"] - 1 if bull else z["origin"] + 1
+                        px = z["origin"] - f[i] if bull else z["origin"] + f[i]
+                    if ghost:                          # the live bot: 20-35 pts of stop
+                        d = min(max(abs(C[i] - px), 20 * f[i]), 35 * f[i])
+                        px = C[i] - d if bull else C[i] + d
                     risk = (C[i] - px) if bull else (px - C[i])
-                    if 3 <= risk <= max_risk:
+                    if 3 * f[i] <= risk <= max_risk * f[i]:
                         out.append(Signal(end[i], bull, px, k=k))
                     continue                                   # one shot per zone
                 if i - z["touch"] >= confirm:
@@ -266,10 +291,11 @@ def zones(mk: Market, tf: str, k: float, stop: str = "origen", buffer: float = 3
             keep.append(z)
         zs = keep
         gap_up, gap_dn = L[i] - H[i - 2], L[i - 2] - H[i]
-        if 3 <= gap_up <= 60:
+        g_lo, g_hi = 3 * f[i], 60 * f[i]
+        if g_lo <= gap_up <= g_hi:
             zs.append({"bull": True, "top": L[i], "bot": H[i - 2], "born": i, "touch": None,
                        "origin": min(L[i - 2], L[i - 1])})
-        if 3 <= gap_dn <= 60:
+        if g_lo <= gap_dn <= g_hi:
             zs.append({"bull": False, "top": L[i - 2], "bot": H[i], "born": i, "touch": None,
                        "origin": max(H[i - 2], H[i - 1])})
     return out
@@ -296,17 +322,18 @@ def orb(mk: Market, minutes: int, k: float, stop_at: str, max_stop: float | None
         if len(rng) < minutes * 0.8:
             continue
         hi, lo = rng["high"].max(), rng["low"].min()
-        if hi - lo > 150:
+        f = float(mk.scale_at([cut])[0])             # 150 pts at 15,000 = 300 at 30,000
+        if hi - lo > 150 * f:
             continue
         after = b5[(b5.index >= cut) & (b5.index < pd.Timestamp(day) + pd.Timedelta(hours=h, minutes=mnt))]
         for t, row in after.iterrows():
             if row["close"] > hi or row["close"] < lo:
                 up = row["close"] > hi
                 stop = (lo if up else hi) if stop_at == "opuesto" else (hi + lo) / 2
-                if max_stop is not None and abs(row["close"] - stop) > max_stop:
+                if max_stop is not None and abs(row["close"] - stop) > max_stop * f:
                     if cap == "saltar":
                         break
-                    stop = row["close"] - max_stop if up else row["close"] + max_stop
+                    stop = row["close"] - max_stop * f if up else row["close"] + max_stop * f
                 if side is None or (side == "compra") == up:
                     out.append(Signal(row["end"].to_datetime64(), up, stop, k=k, until=until))
                 break
@@ -496,7 +523,24 @@ def only_with(signals: list[Signal], side_fn) -> list[Signal]:
     return [s for s in signals if side_fn(s.ready) == (1.0 if s.long else -1.0)]
 
 
-BOT_LIKE = "Zonas 1 min · TP 3× stop · BE+2 al 70%"     # the closest row to the live bot
+# the rows closest to the live bot (general grid / zones study)
+BOT_LIKE = ("Zonas 1 min · TP 3× stop · BE+2 al 70%",
+            "Zonas 1 min · stop 20–35 pts (como GHOST) · TP 3× · BE+2")
+
+
+def variants_zonas(mk: Market):
+    """GHOST's zone strategy on 1-, 5- and 15-minute candles, with its own
+    20-35 pt stop, the stop behind the origin, or the dynamic stop. With
+    --escala precio every point limit grows with the price."""
+    names = {"ghost": "stop 20–35 pts (como GHOST)", "origen": "stop detrás del origen",
+             "dinamico": "stop dinámico +3"}
+    for tf, lab in (("1min", "1 min"), ("5min", "5 min"), ("15min", "15 min")):
+        for stop in ("ghost", "origen", "dinamico"):
+            for k in (2.0, 3.0):
+                sig = zones(mk, tf, k, stop=stop)
+                yield f"Zonas {lab} · {names[stop]} · TP {k:g}× · BE+2", sig, 0.7
+                if stop == "ghost" and k == 3.0:
+                    yield f"Zonas {lab} · {names[stop]} · TP {k:g}×", sig, None
 
 
 def variants(mk: Market, big: pd.DataFrame | None = None):
@@ -677,8 +721,12 @@ def main() -> int:
     ap.add_argument("--slip-ticks", type=float, default=1.0, help="deslizamiento por lado")
     ap.add_argument("--sessions", choices=("rth", "all"), default="rth")
     ap.add_argument("--min-n", type=int, default=60, help="trades mínimos en TRAIN y en TEST")
-    ap.add_argument("--estudio", choices=("todo", "apertura"), default="todo",
-                    help="apertura: solo la ruptura de apertura, a fondo")
+    ap.add_argument("--estudio", choices=("todo", "apertura", "zonas"), default="todo",
+                    help="apertura: la ruptura de apertura a fondo · zonas: la estrategia de "
+                         "GHOST en velas de 1, 5 y 15 min")
+    ap.add_argument("--escala", choices=("puntos", "precio"), default="puntos",
+                    help="precio: los límites en puntos crecen con el precio del NQ "
+                         f"(escritos para {REF_PRICE:,.0f}; a 30,000 valen el doble)")
     ap.add_argument("--apex-dd", type=float, default=2500.0,
                     help="caída máxima que permite la cuenta (Apex 50K ≈ $2,500)")
     ap.add_argument("--json-out")
@@ -691,10 +739,13 @@ def main() -> int:
         label = f"riesgo fijo ${a.risk_usd:,.0f} por trade (1 a {MAX_MICROS} MNQ)"
     t0 = time.time()
     mk = Market(load_1m(a.symbol, a.data, a.start, a.end))
+    mk.scaled = a.escala == "precio"
     big = load_megacaps(a.start, a.end) if a.estudio == "todo" else None
     print(f"== Laboratorio · {a.symbol} {a.start} → {a.end} · {label} · costo "
           f"{cost:.2f} pts/trade ({'por MNQ ' if riesgo else ''}${cost * pv:,.2f}) · entradas "
           f"{'09:30-15:30' if a.sessions == 'rth' else 'día y noche'} · TRAIN < {a.split} ≤ TEST")
+    print("   límites en puntos " + (f"ESCALADOS al precio (escritos para NQ a {REF_PRICE:,.0f})"
+                                     if mk.scaled else "fijos"))
     print("   prom = dólares por trade después de costos · conf = qué tan lejos del azar"
           " (≥ 2 ≈ poco probable por suerte)")
     if big is None and a.estudio == "todo":
@@ -705,7 +756,8 @@ def main() -> int:
     alt = "5mnq" if riesgo else "riesgo"
     alt_pv, alt_label = POSITIONS[alt][1], ("5 MNQ fijos" if riesgo else f"riesgo fijo ${a.risk_usd:,.0f}")
     rows, raws = [], {}
-    grid = variants_orb(mk) if a.estudio == "apertura" else variants(mk, big)
+    grid = {"apertura": lambda: variants_orb(mk),
+            "zonas": lambda: variants_zonas(mk)}.get(a.estudio, lambda: variants(mk, big))()
     for name, sig, be in grid:
         raw = run(mk, sig, cost, a.sessions, be_at=be,
                   max_risk=a.risk_usd / pv if riesgo else None)
@@ -740,7 +792,7 @@ def main() -> int:
             print(f"    {y}: {ys['n']:>4} trades  neto {usd(ys['net'], 1):>9}  gana {ys['wr']:.0%}")
 
     # by hour: the bot's own idea, the ✔ ones (or the best in TEST if none)
-    bot = [r for r in rows if r["name"] == BOT_LIKE]
+    bot = [r for r in rows if r["name"] in BOT_LIKE]
     picks = bot + (sorted(good, key=lambda r: -r["test"]["conf"])[:5] or
                    sorted((r for r in rows if r["test"]["n"]), key=lambda r: -r["test"]["conf"])[:3])
     print("\n== Por hora de entrada (todo el periodo): cuánto deja cada hora y qué tan grande es el stop ==")
@@ -749,7 +801,7 @@ def main() -> int:
         if r["name"] in seen or not r["hours"]:
             continue
         seen.add(r["name"])
-        print(f"\n  {r['name']}{'  (lo más parecido al bot)' if r['name'] == BOT_LIKE else ''}")
+        print(f"\n  {r['name']}{'  (lo más parecido al bot)' if r['name'] in BOT_LIKE else ''}")
         for h, hs in r["hours"].items():
             print(f"    {h:02d}h  {hs['n']:>5} trades  gana {hs['wr']:>4.0%}  neto {usd(hs['net'], 1):>9}"
                   f"  prom {usd(hs['avg'], 1):>6}  stop prom {hs['stop']:5.1f} pts")
