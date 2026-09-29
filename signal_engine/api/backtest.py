@@ -23,12 +23,13 @@ _SYMBOLS = ("NQ", "ES")
 
 # What each strategy does, in the operator's words, for the backtest screen.
 STRATEGY_INFO = {
-    "zones": ("Zonas (estilo TradingMind) — la que usa el bot en vivo",
-              "Marca huecos de precio (FVG) frescos en velas de 5 min. Avisa 🟡 cuando el "
+    "zones": ("Zonas de 15 min — la que usa GHOST en vivo",
+              "Marca huecos de precio (FVG) frescos en velas de 15 min. Avisa 🟡 cuando el "
               "precio se acerca y solo entra en el PRIMER regreso a la zona si una vela de "
-              "1 min reacciona ahí. Stop 20–35 pts detrás del origen del movimiento; un solo "
-              "objetivo a 3R con toda la posición, sin parcial ni breakeven. Opera día y noche (desde las 18:00 ET); sin entradas nuevas de 16:15 a 18:00 y todo cerrado a las 16:55. "
-              "Una operación a la vez."),
+              "15 min reacciona ahí (cierra pasando la mitad de la zona). Stop de 20–35 pts "
+              "desde la entrada, detrás del origen del movimiento; un solo objetivo a 3× el "
+              "stop con toda la posición. Solo de día: entradas de 9:30 a 15:30 ET y todo "
+              "cerrado a las 16:55. Una operación a la vez, sin límites diarios."),
     "legacy": ("Setups antiguos (5 min) — la estrategia anterior del bot",
                "Tres setups en velas de 5 min: ruptura del rango de apertura (ORB), barrida "
                "de liquidez (toma los stops de un máximo/mínimo y rechaza) y recuperación "

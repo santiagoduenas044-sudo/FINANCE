@@ -13,8 +13,8 @@ import time
 from pathlib import Path
 
 POSITIONS = ("5mnq", "1nq", "riesgo")
-SESSIONS = ("rth", "all")
-STUDIES = ("todo", "apertura", "zonas")
+SESSIONS = ("rth", "noche", "all")
+STUDIES = ("todo", "apertura", "zonas", "proteccion")
 SCALES = ("puntos", "precio")
 
 
