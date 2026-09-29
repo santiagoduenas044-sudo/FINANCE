@@ -68,6 +68,10 @@ ghost:
   # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
   be_at_progress: null
   be_offset_points: 2.0
+  # Profit locks, waiting for the lab (--estudio proteccion) to pick one:
+  #   [[0.7, 0.0]]                         = BE+2 at 70% of the way
+  #   [[0.5, 0.0], [0.7, 0.3], [0.9, 0.6]] = steps: BE+2, then keep 30%, then 60%
+  lock_steps: null
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
   # the account flat before 16:59.
   eod_close_time: "16:55"

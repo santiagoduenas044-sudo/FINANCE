@@ -144,3 +144,20 @@ def test_breakeven_plus_at_70_percent_of_the_way():
     # only +50 pts (67%): the stop stays where it was
     t = _walk(PaperTradeTracker.from_config(g), "LONG", [(150, 120, 148), (149, 70, 72)])
     assert t.pnl_points == -25.0
+
+
+def test_profit_lock_steps():
+    # entry 100, stop 25 pts, target 75 pts away; steps 50% BE+2 · 70% keep 30% · 90% keep 60%
+    g = EngineConfig.load(strategy="zones").ghost.model_copy(
+        update={"lock_steps": [[0.5, 0.0], [0.7, 0.3], [0.9, 0.6]], "be_offset_points": 2.0})
+    # runs to +70 (93%), falls back: out at entry + 60% of 75 + 2 = +47
+    t = _walk(PaperTradeTracker.from_config(g), "LONG", [(170, 120, 165), (166, 140, 141)])
+    assert t.exit_reason.value == "STOP" and t.pnl_points == 47.0
+    t = _walk(PaperTradeTracker.from_config(g), "SHORT", [(80, 30, 35), (60, 34, 59)])
+    assert t.pnl_points == 47.0
+    # only +54 (72%): 30% of the way + 2 = +24.5
+    t = _walk(PaperTradeTracker.from_config(g), "LONG", [(154, 120, 150), (151, 110, 112)])
+    assert t.pnl_points == 24.5
+    # +40 (53%): BE+2
+    t = _walk(PaperTradeTracker.from_config(g), "LONG", [(140, 120, 138), (139, 90, 92)])
+    assert t.pnl_points == 2.0

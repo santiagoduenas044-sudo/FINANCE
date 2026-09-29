@@ -404,6 +404,11 @@ class GhostConfig(BaseModel):
     # entry to the final target (0.7 = 70%), with the same points offset.
     # Measured per trade, since the target distance changes with each stop.
     be_at_progress: Optional[float] = None
+    # Profit-lock steps, [[reached, locked], ...] as fractions of the way to
+    # the final target: [[0.5, 0], [0.7, 0.3]] = at 50% of the way, stop to
+    # entry + be_offset_points; at 70%, stop to entry + 30% of the way (+ the
+    # same offset). Same rule as the lab's "escalones" (strategy_lab.py).
+    lock_steps: Optional[list[list[float]]] = None
     # Trailing: after trail_start_r R in favour, the stop follows the best
     # price at trail_distance_r R behind it.
     trail_start_r: Optional[float] = None
