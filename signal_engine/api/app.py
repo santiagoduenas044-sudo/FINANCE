@@ -384,6 +384,17 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             return "El laboratorio está corriendo: reiniciar lo cortaría. Espera a que termine."
         return None
 
+    @app.get("/api/bots")
+    def get_bots() -> dict:
+        """The bot hub: GHOST and ORBIT side by side — state, what each one
+        is looking at now, record per version — and the strategy catalogue."""
+        from .bots import overview
+        try:
+            commit = maintenance.version(backtests.root)
+        except Exception:  # noqa: BLE001 - the hub never fails over git
+            commit = {}
+        return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None), commit=commit)
+
     @app.get("/api/system/version")
     def system_version() -> dict:
         return {**maintenance.version(backtests.root), "can_restart": _restart_block() is None,

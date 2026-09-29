@@ -25,6 +25,7 @@ from ..data.contracts import ContractRegistry
 from ..data.engine import DataEngine
 from ..features.analyzer import LazyAnalysis
 from ..ghost.brain import SESSION_REOPEN, entry_window_closed
+from ..versions import current_version
 from ..ghost.narrative import market_read, trade_thesis
 from ..output.dispatcher import OutputDispatcher
 from ..output.events import OutputEvent
@@ -670,6 +671,7 @@ class BotRuntime:
                                 eod_close_enabled=gcfg.eod_close_enabled,
                                 eod_close_time=gcfg.eod_close_time),
                             **idea_ctx,
+                            "bot_version": current_version("GHOST"),
                         },
                     )
                 if self.paper_tracker is not None and paper_trade is None:

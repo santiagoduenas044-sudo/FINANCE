@@ -86,8 +86,9 @@ def market_read(ms: MarketState) -> list[str]:
     status digest, and as the first half of a trade thesis."""
     mtf = ms.mtf
     lines = [
-        (f"1H {_BIAS[mtf.context.bias]}, 15m {_BIAS[mtf.structure.bias]}, "
-         f"5m {_BIAS[mtf.execution.bias]} — {_ALIGN[mtf.alignment]}."),
+        (f"{mtf.context.timeframe} {_BIAS[mtf.context.bias]}, "
+         f"{mtf.structure.timeframe} {_BIAS[mtf.structure.bias]}, "
+         f"{mtf.execution.timeframe} {_BIAS[mtf.execution.bias]} — {_ALIGN[mtf.alignment]}."),
         f"Régimen: {_REGIME.get(ms.regime.regime, ms.regime.regime.value)}.",
     ]
 

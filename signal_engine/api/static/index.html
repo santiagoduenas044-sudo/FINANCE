@@ -355,6 +355,75 @@ tr.best td { background: rgba(47, 208, 140, .06); }
   #v-practice .board { flex-direction: column; }   /* aquí la gráfica va primero */
   .prbadge { top: auto; bottom: 30px; }
 }
+
+/* ── central de bots ── */
+:root { --violet: #a78bfa; --violet-dim: rgba(167, 139, 250, .13); }
+.hubhead { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.hubhead h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.hubhead p { margin: 4px 0 0; color: var(--ink-3); font-size: 13px; }
+.hubhead .sum { margin-left: auto; display: flex; gap: 10px; flex-wrap: wrap; }
+.bots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-bottom: 18px; }
+.bot { position: relative; overflow: hidden; --c: var(--amber); --cd: var(--amber-dim); }
+.bot.violet { --c: var(--violet); --cd: var(--violet-dim); }
+.bot::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 120px; pointer-events: none;
+  background: radial-gradient(420px 120px at 0% 0%, var(--cd), transparent 70%); }
+.bot .hd { position: relative; display: flex; align-items: center; gap: 12px; padding: 18px 20px 14px; }
+.bot .av { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
+  font: 700 15px var(--sans); color: #0b0d12; background: var(--c);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 8px 20px -8px var(--c); }
+.bot .nm { font-weight: 700; letter-spacing: .16em; font-size: 14px; }
+.bot .st { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.bot .hd .r { margin-left: auto; text-align: right; }
+.state { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; font-size: 12px;
+  font-weight: 600; background: var(--panel-2); border: 1px solid var(--rule); color: var(--ink-2); white-space: nowrap; }
+.state.trading { color: var(--good); background: var(--good-dim); border-color: transparent; }
+.state.watching { color: var(--c); background: var(--cd); border-color: transparent; }
+.state.paused, .state.stale { color: var(--warning); background: rgba(242, 193, 78, .1); border-color: transparent; }
+.state.off { color: var(--critical); background: var(--critical-dim); border-color: transparent; }
+.beat { display: block; font: 11px var(--mono); color: var(--ink-3); margin-top: 6px; }
+.bot .kpis { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px;
+  margin: 0 20px; border-radius: 12px; overflow: hidden; background: var(--line); border: 1px solid var(--line); }
+.bot .kpis div { background: var(--panel); padding: 11px 13px; min-width: 0; }
+.bot .kpis .k { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .1em; font-weight: 600; }
+.bot .kpis .v { font: 600 19px var(--mono); margin-top: 5px; letter-spacing: -.02em; white-space: nowrap; }
+.bot .kpis .s { font: 11px var(--mono); color: var(--ink-3); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bot h4 { margin: 18px 20px 8px; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+.feed { list-style: none; margin: 0 20px; padding: 0; }
+.feed li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line);
+  font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.feed li:first-child { border-top: 0; }
+.feed .ico { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px;
+  background: var(--panel-2); color: var(--ink-3); }
+.feed li.trade { color: var(--ink-1); } .feed li.trade .ico { background: var(--good-dim); color: var(--good); }
+.feed li.watch .ico { background: var(--cd); color: var(--c); }
+.feed li.alert { color: var(--warning); } .feed li.alert .ico { background: rgba(242, 193, 78, .12); color: var(--warning); }
+.vers { margin: 0 8px 12px; }
+.vers table td, .vers table th { padding: 9px 12px; }
+.vers tr.cur td { background: var(--cd); }
+.vers tr.cur td:first-child { box-shadow: inset 2px 0 0 var(--c); }
+.vtag { font: 600 11px var(--mono); padding: 2px 7px; border-radius: 6px; background: var(--panel-3); color: var(--ink-1); }
+.vers .vt { color: var(--ink-1); font-weight: 500; white-space: normal; min-width: 150px; }
+.vers .vr { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 2px; white-space: normal; line-height: 1.45; }
+.strats { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.strat { padding: 14px 16px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line); }
+.strat .t1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.strat b { font-weight: 600; font-size: 14px; }
+.strat p { margin: 8px 0 0; color: var(--ink-2); font-size: 12.5px; line-height: 1.55; }
+.strat .lab { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); font: 12px var(--mono); color: var(--ink-3); line-height: 1.5; }
+.stag { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
+.stag.live { background: var(--good-dim); color: var(--good); }
+.stag.study { background: var(--amber-dim); color: var(--amber); }
+.stag.gone { background: var(--panel-3); color: var(--ink-3); }
+.btag { font: 600 10.5px var(--mono); padding: 2px 7px; border-radius: 6px; flex: none; }
+.strat .t1 b { flex: 1; min-width: 0; }
+.btag.gold { background: var(--amber-dim); color: var(--amber); } .btag.violet { background: var(--violet-dim); color: var(--violet); }
+.btag.lab { background: var(--panel-3); color: var(--ink-2); }
+@media (max-width: 1080px) { .bots { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .bot .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hubhead .sum { margin-left: 0; }
+  .vers .hide-s { display: none; }
+}
 footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align: center; padding: 0 0 28px; opacity: .8; }
 
 @media (max-width: 1080px) {
@@ -371,7 +440,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
   .today { order: 5; }
   .ctl { order: 6; width: 100%; } .ctl button { flex: 1; }
   .tabs { margin: 14px 16px 0; width: auto; max-width: none; justify-content: space-between; } .tabs kbd { display: none; }
-  .tabs button { padding: 8px 9px; font-size: 12.5px; gap: 6px; }
+  .tabs button { padding: 8px 7px; font-size: 12px; gap: 6px; }
   .tabs button[aria-current]::before { display: none; }
   .banner { width: calc(100% - 32px); }
   main { padding: 14px 16px 30px; }
@@ -405,10 +474,11 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
 </header>
 <nav class="tabs" aria-label="Pantallas">
   <button type="button" data-view="panel" aria-current="page"><kbd>1</kbd>Panel</button>
-  <button type="button" data-view="history"><kbd>2</kbd>Historial</button>
-  <button type="button" data-view="backtest"><kbd>3</kbd>Backtest</button>
-  <button type="button" data-view="practice"><kbd>4</kbd>Práctica</button>
-  <button type="button" data-view="system"><kbd>5</kbd>Sistema</button>
+  <button type="button" data-view="bots"><kbd>2</kbd>Bots</button>
+  <button type="button" data-view="history"><kbd>3</kbd>Historial</button>
+  <button type="button" data-view="backtest"><kbd>4</kbd>Backtest</button>
+  <button type="button" data-view="practice"><kbd>5</kbd>Práctica</button>
+  <button type="button" data-view="system"><kbd>6</kbd>Sistema</button>
 </nav>
 <div class="banner" id="sim-banner" hidden>⚠ Datos simulados: se está reproduciendo el histórico de muestra, no es el mercado real.</div>
 
@@ -435,6 +505,17 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
         <div class="card"><h3>Ideas de hoy <span class="r" id="ideas-n"></span></h3><div class="body"><ul class="ideas" id="ideas"></ul></div></div>
       </aside>
     </div>
+  </section>
+
+  <!-- ═════════ BOTS · central ═════════ -->
+  <section class="view" id="v-bots">
+    <div class="hubhead">
+      <div><h1>Central de bots</h1><p>Qué está haciendo cada bot ahora, cómo le va a cada versión y en qué quedó cada estrategia.</p></div>
+      <div class="sum" id="hub-sum"></div>
+    </div>
+    <div class="bots" id="hub-bots"><div class="card"><div class="empty">Cargando…</div></div></div>
+    <div class="card"><h3>Estrategias <span class="r">en vivo, en estudio y descartadas por el laboratorio</span></h3>
+      <div class="body"><div class="strats" id="hub-strats"></div></div></div>
   </section>
 
   <!-- ═════════ 2 · HISTORIAL ═════════ -->
@@ -651,7 +732,7 @@ function tile(lab, fig, sub, tone) {
 /* ───────────────────────── estado ───────────────────────── */
 const S = { view: "panel", symbol: null, symbols: [], status: null, chart: null,
   open: [], closed: [], ideas: { ideas: [] }, decisions: [], movers: null, tick: 0 };
-const VIEWS = ["panel", "history", "backtest", "practice", "system"];
+const VIEWS = ["panel", "bots", "history", "backtest", "practice", "system"];
 
 function setView(v) {
   if (!VIEWS.includes(v)) return;
@@ -666,7 +747,7 @@ function setView(v) {
 document.querySelectorAll(".tabs [data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 document.addEventListener("keydown", e => {
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "") || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[1-5]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
+  if (/^[1-6]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
   if (S.view === "practice") prKey(e);
 });
 
@@ -964,6 +1045,59 @@ function renderIdeas() {
       : `<span class="${cls(t.pnl_points)}">${sgn(t.pnl_points, 1)} pts</span>`;
     return `<li><span class="ic">${ic}</span><div><b>#${i.number} ${long ? "Compra" : "Venta"}</b> en ${num(i.mid)}
       <div class="t">${hm(i.announced_at)} · zona ${num(i.bottom)}–${num(i.top)}</div></div><span class="res">${res}</span></li>`;
+  }).join("");
+}
+
+/* ═══════════════════════════ BOTS · central ═══════════════════════════ */
+async function pollBots() { try { S.bots = await api("/api/bots"); } catch { S.bots = null; } }
+const STATE_ES = { trading: "Operando", watching: "Vigilando", scanning: "Buscando", closed: "Fuera de horario",
+  done: "Terminó por hoy", paused: "En pausa", off: "Apagado", stale: "Sin señal" };
+const ICO = { trade: "●", watch: "◎", read: "·", decision: "↳", alert: "!" };
+const usd0 = v => v == null || !isFinite(v) ? "—" : `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+const ago = iso => { const d = okDate(iso); if (!d) return "—"; const s = Math.max(0, (Date.now() - d) / 1000);
+  return s < 90 ? `hace ${Math.round(s)} s` : s < 5400 ? `hace ${Math.round(s / 60)} min` : `hace ${(s / 3600).toFixed(1)} h`; };
+function renderBots() {
+  const d = S.bots;
+  if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.</div></div>`; return; }
+  $("hub-sum").innerHTML = `<span class="pill"><span class="k">juntos</span><span class="v ${cls(d.combined_usd)}">${usd0(d.combined_usd)}</span></span>`
+    + (d.commit?.commit ? `<span class="pill"><span class="k">código</span><span class="v mono">${esc(d.commit.commit)}</span></span>` : "");
+  $("hub-bots").innerHTML = d.bots.map(b => {
+    const t = b.today, a = b.total, fee = b.fee_per_trade || 0;
+    const afterFees = a.n ? a.net_usd - fee * a.n : null;
+    const kv = (k, v, sub, c = "") => `<div><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`;
+    const rows = b.versions.map(v => `<tr class="${v.current ? "cur" : ""}">
+        <td><span class="vtag">${esc(v.version)}</span></td>
+        <td class="vt">${esc(v.title)}${v.current ? ' <span class="badge good">en uso</span>' : ""}<span class="vr">${esc(v.rules)}</span></td>
+        <td class="t hide-s">${esc(v.since.slice(5))}</td>
+        <td class="num" style="text-align:right">${v.n || "—"}</td>
+        <td class="num hide-s" style="text-align:right">${v.n ? Math.round(v.win_rate * 100) + "%" : "—"}</td>
+        <td class="num ${cls(v.net_usd)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}</td></tr>`).join("");
+    return `<div class="card bot ${b.color === "violet" ? "violet" : ""}">
+      <div class="hd"><span class="av">${esc(b.name[0])}</span>
+        <div><div class="nm">${esc(b.name)}</div><div class="st">${esc(b.strategy)} · ${esc(b.position)} · papel</div></div>
+        <div class="r"><span class="state ${esc(b.state)}"><span class="dot ${b.state === "trading" || b.state === "scanning" ? "ok" : b.state === "off" ? "bad" : b.state === "stale" || b.state === "paused" ? "warn" : ""}"></span>${STATE_ES[b.state] || esc(b.state)}</span>
+          <span class="beat">${b.heartbeat ? "latido " + ago(b.heartbeat) : ""}</span></div></div>
+      <div class="kpis">
+        ${kv("Hoy", t.n ? usd0(t.net_usd) : "—", `${t.n} ${t.n === 1 ? "trade" : "trades"}${b.open_usd != null ? " · abierto " + usd0(b.open_usd) : ""}`, cls(t.n ? t.net_usd : null))}
+        ${kv("Total", a.n ? usd0(a.net_usd) : "—", afterFees != null ? "real " + usd0(afterFees) : "sin trades aún", cls(a.n ? a.net_usd : null))}
+        ${kv("Trades", a.n || "0", a.n ? `${a.wins} ganados` : "—")}
+        ${kv("Acierto", a.n ? Math.round(a.win_rate * 100) + "%" : "—", a.n ? `prom. ${usd0(a.avg_usd)}` : "—")}
+      </div>
+      <h4>Ahora mismo</h4>
+      <ul class="feed">${b.now.map(l => `<li class="${esc(l.kind)}"><span class="ico">${ICO[l.kind] || "·"}</span><span>${esc(l.text)}</span></li>`).join("")}</ul>
+      <h4>Versiones</h4>
+      <div class="vers scroll"><table><thead><tr><th></th><th>Qué cambió</th><th class="hide-s">Desde</th>
+        <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+    </div>`;
+  }).join("");
+  const SK = { "en vivo": "live", "en estudio": "study" };
+  $("hub-strats").innerHTML = d.strategies.map(st => {
+    const bt = st.bot === "GHOST" ? "gold" : st.bot === "ORBIT" ? "violet" : "lab";
+    return `<div class="strat"><div class="t1"><span class="stag ${SK[st.status] || "gone"}">${esc(st.status)}</span>
+        <b>${esc(st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span></div>
+      <p>${esc(st.text)}</p>
+      <div class="lab">Laboratorio: ${esc(st.lab)}${st.live ? `<br>En papel: ${st.live.n} trades · <span class="${cls(st.live.net_usd)}">${usd0(st.live.net_usd)}</span>` : ""}</div></div>`;
   }).join("");
 }
 
@@ -1961,6 +2095,7 @@ function prLog() {
 function renderAll() {
   paintHeader();
   if (S.view === "panel") { renderChart(); renderNow(); renderToday(); renderMovers(); renderIdeas(); }
+  else if (S.view === "bots") renderBots();
   else if (S.view === "history") renderHistory();
   else if (S.view === "backtest") renderBacktest();
   else if (S.view === "system") renderSystem();
@@ -1974,6 +2109,7 @@ async function refresh(force = false) {
     if (force || S.tick % 12 === 0) jobs.push(pollMovers());
     if (force || S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     if (S.view === "system") jobs.push(pollDecisions());
+    if (S.view === "bots") jobs.push(pollBots());
     if (S.view === "backtest") jobs.push(btPoll());
     await Promise.all(jobs);
     renderAll();
