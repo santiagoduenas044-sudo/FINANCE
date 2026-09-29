@@ -181,6 +181,10 @@ class OpeningRangeBot:
             if hm == box_end:
                 self._box_ready(ts, bars, quiet)
             return
+        # the feed skipped the 09:45 bar (Yahoo sometimes has gaps): close
+        # the box on the first bar after it instead of staying silent all day
+        if not st.box_sent and box_end < hm <= "16:00":
+            self._box_ready(ts, bars, quiet)
 
         # 2) a breakout seen on the previous minute enters at this open
         if st.pending is not None:
@@ -225,21 +229,23 @@ class OpeningRangeBot:
     def _box_ready(self, ts, bars, quiet: bool) -> None:
         s, st = self.s, self.st
         st.box_sent = True
-        width = st.hi - st.lo
+        box_end = _add("09:30", s.range_minutes)
+        when = f"{ts:%d-%b}"
+        width = (st.hi - st.lo) if st.hi is not None else 0.0
         if st.bars < s.range_minutes * 0.8 or width <= 0:
             st.done = True
-            msg = (f"📦 {self.name} — hoy no opera",
-                   f"Faltan velas de 9:30 a {_hm(ts)} ({st.bars} de {s.range_minutes}); "
+            msg = (f"📦 {self.name} — hoy no opera ({when})",
+                   f"Faltan velas de 9:30 a {box_end} ({st.bars} de {s.range_minutes}); "
                    "sin caja completa no hay trade.")
         elif width > s.max_range:
             st.done = True
-            msg = (f"📦 {self.name} — hoy no opera",
+            msg = (f"📦 {self.name} — hoy no opera ({when})",
                    f"Caja de {width:.1f} pts ({_px(st.lo)} – {_px(st.hi)}): más de "
                    f"{s.max_range:.0f} pts, demasiado grande.")
         else:
             risk = (width + 5) * s.usd_per_point * s.contracts
-            msg = (f"📦 {self.name} — caja lista",
-                   f"**9:30–{_hm(ts)}:** máximo **{_px(st.hi)}** · mínimo **{_px(st.lo)}** "
+            msg = (f"📦 {self.name} — caja lista ({when})",
+                   f"**9:30–{box_end}:** máximo **{_px(st.hi)}** · mínimo **{_px(st.lo)}** "
                    f"· {width:.1f} pts\n"
                    f"🟢 **Compra** si una vela de 5 min cierra arriba de {_px(st.hi)}\n"
                    f"🔴 **Venta** si una vela de 5 min cierra abajo de {_px(st.lo)}\n"

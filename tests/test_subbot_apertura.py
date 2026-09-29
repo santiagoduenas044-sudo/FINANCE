@@ -219,3 +219,23 @@ def test_orbit_test_run_replays_without_touching_the_real_record(tmp_path, monke
     out = capsys.readouterr().out
     assert "caja lista" in out and "COMPRA NQ" in out and "Total: 2 trades" in out
     assert not (tmp_path / "real").exists()
+
+
+def test_box_still_closes_when_the_feed_skips_0945(tmp_path):
+    rows = _box()
+    rows["09:50"] = (100, 112, 100, 111)
+    rows["09:51"] = (111, 112, 110, 111)
+    bars = _day(rows)
+    bars = bars[bars.index.strftime("%H:%M") != "09:45"]          # Yahoo gap
+    bot, sent = _bot(tmp_path)
+    _feed(bot, bars)
+    assert sent[0]["title"].startswith("📦") and "caja lista" in sent[0]["title"]
+    assert bot.closed and bot.closed[-1]["entry"] == 111
+
+
+def test_no_box_message_on_a_sunday_evening(tmp_path):
+    idx = pd.date_range("2025-03-02 18:01", "2025-03-02 20:00", freq="1min", tz=TZ)
+    bars = pd.DataFrame({"open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0}, index=idx)
+    bot, sent = _bot(tmp_path)
+    _feed(bot, bars)
+    assert sent == []
