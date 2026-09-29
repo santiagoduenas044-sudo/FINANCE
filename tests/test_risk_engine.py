@@ -393,3 +393,12 @@ def test_risk_reward_carried_through_unchanged(registry):
     sig = _signal(instrument="NQ", risk_reward=[1.23, 4.56])
     decision = engine.evaluate(sig, AccountState(equity=100_000.0))
     assert decision.risk_reward == [1.23, 4.56]
+
+
+def test_daily_caps_off_when_none(registry):
+    cfg = RiskConfig(risk_mode="fixed", fixed_risk_dollar=800.0,
+                     max_trades_per_day=None, daily_loss_limit_dollar=None)
+    engine = RiskEngine(cfg, registry)
+    account = AccountState(equity=100_000.0, trades_today=50, daily_realized_pnl=-9000.0)
+    decision = engine.evaluate(_signal(instrument="NQ"), account)
+    assert decision.outcome is RiskOutcome.APPROVED

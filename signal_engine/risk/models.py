@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Optional
 
 
 class RiskOutcome(str, Enum):
@@ -65,9 +66,9 @@ class RiskDecision:
 
     # daily-state echo, for transparency/traceability
     daily_realized_pnl: float = 0.0
-    daily_loss_limit_dollar: float = 0.0
+    daily_loss_limit_dollar: Optional[float] = 0.0
     trades_today: int = 0
-    max_trades_per_day: int = 0
+    max_trades_per_day: Optional[int] = 0
 
     @property
     def approved(self) -> bool:

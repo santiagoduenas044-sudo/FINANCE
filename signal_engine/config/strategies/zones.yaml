@@ -49,6 +49,11 @@ setups:
     single_target: true
     expiration_bars: 2
 
+risk:
+  # the risk gate's own daily caps are off too (GHOST's limits are above)
+  daily_loss_limit_dollar: null
+  max_trades_per_day: null
+
 signals:
   # R:R is judged on the plan (midpoint entry); from a fill taken a few points
   # past the midpoint, TP1 at 1R is ~0.5-0.8R — TradingMind's own direct short
@@ -87,10 +92,11 @@ ghost:
   cooldown_bars: 0
   min_stop_atr_mult: 0.0
   max_stop_atr_mult: 0.0
-  # No limit on the number of trades; the day still stops once it is down
-  # $500 on the 5-MNQ position. Change the numbers here (null = off).
+  # No daily limits (operator's call, 2026-09-29): no cap on the number of
+  # trades and no daily loss stop, like the lab test. A number here turns
+  # one back on (e.g. daily_loss_limit_usd: 500 = stop for the day at -$500).
   max_trades_per_day: null
-  daily_loss_limit_usd: 500
+  daily_loss_limit_usd: null
 
 output:
   notifications:

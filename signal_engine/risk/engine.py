@@ -112,7 +112,8 @@ class RiskEngine:
         # ------------------------------------------------------------------ #
         # 6) Daily trade-count and loss-limit checks (simple, not trailing).
         # ------------------------------------------------------------------ #
-        if account.trades_today >= self.cfg.max_trades_per_day:
+        if self.cfg.max_trades_per_day is not None and \
+                account.trades_today >= self.cfg.max_trades_per_day:
             codes.append(RiskReasonCode.MAX_TRADES_PER_DAY)
             reasons.append(
                 f"Max trades per day reached ({account.trades_today}/"
@@ -120,7 +121,9 @@ class RiskEngine:
             )
 
         loss_limit = self.cfg.daily_loss_limit_dollar
-        if account.daily_realized_pnl <= -loss_limit:
+        if loss_limit is None:
+            pass                                    # no daily loss limit
+        elif account.daily_realized_pnl <= -loss_limit:
             codes.append(RiskReasonCode.DAILY_LOSS_LIMIT_REACHED)
             reasons.append(
                 f"Daily loss limit already reached (realized P&L "

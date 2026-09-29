@@ -100,9 +100,11 @@ def test_limits_off_when_not_configured():
     assert rt._day_block(day + pd.Timedelta(hours=3)) is None
 
 
-def test_live_strategy_has_daily_limits():
-    g = EngineConfig.load(strategy="zones").ghost
-    assert (g.max_trades_per_day, g.daily_loss_limit_usd) == (None, 500)
+def test_live_strategy_has_no_daily_limits():
+    cfg = EngineConfig.load(strategy="zones")
+    g = cfg.ghost
+    assert (g.max_trades_per_day, g.daily_loss_limit_usd) == (None, None)
+    assert (cfg.risk.max_trades_per_day, cfg.risk.daily_loss_limit_dollar) == (None, None)
 
 
 def test_messages_speak_in_contracts():

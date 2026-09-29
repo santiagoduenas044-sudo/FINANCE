@@ -210,8 +210,8 @@ class RiskConfig(BaseModel):
     fixed_risk_dollar: float = 500.0        # used when risk_mode == "fixed"
     risk_pct: float = 0.01                  # 1% of account equity (percent mode)
     max_risk_per_trade_dollar: Optional[float] = None  # optional extra hard ceiling
-    daily_loss_limit_dollar: float = 1000.0
-    max_trades_per_day: int = 5
+    daily_loss_limit_dollar: Optional[float] = 1000.0    # None = no daily loss limit
+    max_trades_per_day: Optional[int] = 5                # None = no trade-count limit
     max_contracts: int = 10
 
 
