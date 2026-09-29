@@ -23,7 +23,8 @@ Rules shared by every strategy (so they compare fairly):
     1-minute bars (if both fall inside the same minute, the stop counts);
     a stop that the market gaps through fills at the worse open;
   * everything flat at 16:55 ET (Apex); new entries 09:30-15:30 ET
-    (--sessions all: any time except 16:15-18:00);
+    (--sessions all: any time except 16:15-18:00; noche: only outside the
+    day session);
   * real costs: Tradovate commission + 1 tick of slippage per side.
 
 It only reads market_data/; it never touches the bot or data_store/.
@@ -146,8 +147,12 @@ def _minutes(ts) -> int:
 
 def entry_open(ts, sessions: str) -> bool:
     m = _minutes(ts)
+    day = 9 * 60 + 30 <= m <= 15 * 60 + 30
     if sessions == "rth":
-        return 9 * 60 + 30 <= m <= 15 * 60 + 30
+        return day
+    night = not (16 * 60 + 15 <= m < 18 * 60) and not (9 * 60 + 30 <= m < 16 * 60 + 15)
+    if sessions == "noche":
+        return night
     return not (16 * 60 + 15 <= m < 18 * 60)
 
 
@@ -549,9 +554,11 @@ def only_with(signals: list[Signal], side_fn) -> list[Signal]:
     return [s for s in signals if side_fn(s.ready) == (1.0 if s.long else -1.0)]
 
 
-# the rows closest to the live bot (general grid / zones study)
-BOT_LIKE = ("Zonas 1 min · TP 3× stop · BE+2 al 70%",
-            "Zonas 1 min · stop 20–35 pts (como GHOST) · TP 3× · BE+2")
+# the rows closest to the live bot (general grid / zones / protection study):
+# GHOST trades 15-minute zones, stop 20-35 pts, target 3x, day session
+BOT_LIKE = ("Zonas 15 min · TP 3× stop",
+            "Zonas 15 min · stop 20–35 pts (como GHOST) · TP 3×",
+            "Zonas 15 min · de día · sin protección")
 
 
 def variants_zonas(mk: Market):
@@ -567,6 +574,29 @@ def variants_zonas(mk: Market):
                 yield f"Zonas {lab} · {names[stop]} · TP {k:g}× · BE+2", sig, 0.7
                 if stop == "ghost" and k == 3.0:
                     yield f"Zonas {lab} · {names[stop]} · TP {k:g}×", sig, None
+
+
+PROTECTIONS = (
+    ("sin protección", {}),
+    ("BE+2 al 70%", {"steps": [(0.7, 0.0)]}),
+    ("BE+2 al 50%", {"steps": [(0.5, 0.0)]}),
+    ("al 70% asegura 40% del camino", {"steps": [(0.7, 0.4)]}),
+    ("escalones 50% BE+2 · 70% asegura 30% · 90% asegura 60%",
+     {"steps": [(0.5, 0.0), (0.7, 0.3), (0.9, 0.6)]}),
+    ("escalones suaves 60% BE+2 · 80% asegura 40%", {"steps": [(0.6, 0.0), (0.8, 0.4)]}),
+    ("cierra la mitad al 70% · resto con BE+2", {"partial": (0.7, 0.5)}),
+)
+
+
+def variants_proteccion(mk: Market):
+    """GHOST's live strategy (15-minute zones, stop 20-35 pts from the entry,
+    target 3x) with every way of protecting a trade that goes well, by day
+    and by night. "asegura 40%": the stop moves to entry + 40% of the way to
+    the target (+2 pts); "BE+2": to entry + 2."""
+    sig = zones(mk, "15min", 3.0, stop="ghost")
+    for sessions, when in (("rth", "de día"), ("noche", "de noche")):
+        for name, kw in PROTECTIONS:
+            yield f"Zonas 15 min · {when} · {name}", sig, {**kw, "sessions": sessions}
 
 
 def variants(mk: Market, big: pd.DataFrame | None = None):
@@ -693,6 +723,30 @@ def apex_table(rows, raws: dict, apex_dd: float, extra_cost: float = 0.0) -> Non
 # --------------------------------------------------------------------------- #
 # report
 # --------------------------------------------------------------------------- #
+def breakdown_table(rows, raws: dict, names: list[str], pv: float, comm_usd: float,
+                    slip_pts: float) -> None:
+    """Per strategy, over the whole period: what the trades made before costs,
+    what the commissions and the slippage took, and what is left. Tradovate
+    shows the first (blue) and the commission (red); the slippage is inside
+    the fill prices, so it never appears as a line of its own."""
+    print(f"\n== De dónde sale el resultado (todo el periodo) ==")
+    print(f"  costo por trade: comisión ${comm_usd:,.2f} + deslizamiento "
+          f"{slip_pts:.2f} pts (${slip_pts * pv:,.2f})")
+    print(f"  {'':<74} {'trades':>6} {'bruto':>10} {'comisiones':>11} "
+          f"{'deslizam.':>10} {'neto':>10} {'bruto/trade':>12} {'neto/trade':>11}")
+    per = comm_usd / pv + slip_pts
+    for name in names:
+        days = raws.get(name) or []
+        if not days:
+            continue
+        n = len(days)
+        net = sum(p for _, p, *_ in days) * pv
+        gross = net + n * per * pv
+        print(f"  {name[:74]:<74} {n:>6} {usd(gross, 1):>10} {usd(-n * comm_usd, 1):>11} "
+              f"{usd(-n * slip_pts * pv, 1):>10} {usd(net, 1):>10} {usd(gross / n, 1):>12} "
+              f"{usd(net / n, 1):>11}")
+
+
 def stats(p: list[float]) -> dict:
     a = np.asarray(p, float)
     if not len(a):
@@ -745,11 +799,13 @@ def main() -> int:
     ap.add_argument("--risk-usd", type=float, default=300.0,
                     help="con --position riesgo: dólares que arriesga cada stop")
     ap.add_argument("--slip-ticks", type=float, default=1.0, help="deslizamiento por lado")
-    ap.add_argument("--sessions", choices=("rth", "all"), default="rth")
+    ap.add_argument("--sessions", choices=("rth", "noche", "all"), default="rth")
     ap.add_argument("--min-n", type=int, default=60, help="trades mínimos en TRAIN y en TEST")
-    ap.add_argument("--estudio", choices=("todo", "apertura", "zonas"), default="todo",
+    ap.add_argument("--estudio", choices=("todo", "apertura", "zonas", "proteccion"),
+                    default="todo",
                     help="apertura: la ruptura de apertura a fondo · zonas: la estrategia de "
-                         "GHOST en velas de 1, 5 y 15 min")
+                         "GHOST en velas de 1, 5 y 15 min · proteccion: GHOST (zonas 15 min) "
+                         "con cada forma de asegurar ganancia, de día y de noche")
     ap.add_argument("--escala", choices=("puntos", "precio"), default="puntos",
                     help="precio: los límites en puntos crecen con el precio del NQ "
                          f"(escritos para {REF_PRICE:,.0f}; a 30,000 valen el doble)")
@@ -783,9 +839,12 @@ def main() -> int:
     alt_pv, alt_label = POSITIONS[alt][1], ("5 MNQ fijos" if riesgo else f"riesgo fijo ${a.risk_usd:,.0f}")
     rows, raws = [], {}
     grid = {"apertura": lambda: variants_orb(mk),
-            "zonas": lambda: variants_zonas(mk)}.get(a.estudio, lambda: variants(mk, big))()
+            "zonas": lambda: variants_zonas(mk),
+            "proteccion": lambda: variants_proteccion(mk)}.get(a.estudio, lambda: variants(mk, big))()
     for name, sig, be in grid:
-        raw = run(mk, sig, cost, a.sessions, be_at=be,
+        kw = dict(be) if isinstance(be, dict) else {"be_at": be}
+        sessions = kw.pop("sessions", a.sessions)
+        raw = run(mk, sig, cost, sessions, **kw,
                   max_risk=a.risk_usd / pv if riesgo else None)
         raws[name] = raw
         trades = sized_usd(raw, a.position, pv, a.risk_usd)
@@ -844,6 +903,11 @@ def main() -> int:
                           else f"{'—':>10} {'—':>11}")
         print(f"  {r['name']:<62} {cell(s)}   {cell(o)}")
     print(f"  (izquierda: {label} · derecha: {alt_label})")
+    if not riesgo:
+        names = ([r["name"] for r in rows] if a.estudio == "proteccion" else
+                 [r["name"] for r in bot] + [r["name"] for r in sorted(
+                     rows, key=lambda r: -r["all"].get("net", -1e18))[:10] if r not in bot])
+        breakdown_table(rows, raws, names, pv, comm, 2 * a.slip_ticks * TICK)
     mnq_cost = POSITIONS["riesgo"][2] / POSITIONS["riesgo"][1] + 2 * a.slip_ticks * TICK
     apex_table(rows, raws, a.apex_dd, extra_cost=mnq_cost - cost)
     print(f"\n({time.time() - t0:.0f} s)")

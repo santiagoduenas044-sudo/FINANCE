@@ -235,3 +235,14 @@ def test_profit_locks_steps_and_partial():
     steps = [(0.5, 0.0), (0.7, 0.3), (0.9, 0.6)]
     assert L._exit(m, 0, 7, True, 90, 130, 100, steps)[1] == 120            # 60% of the way + 2
     assert L._exit(m, 0, 7, True, 90, 130, 100, None, 2.0, (0.7, 0.5))[1] == 111.5
+
+
+def test_night_sessions_and_protection_study_names():
+    ts = lambda hm: pd.Timestamp(f"2026-06-10 {hm}")          # noqa: E731
+    assert lab.entry_open(ts("10:00"), "rth") and not lab.entry_open(ts("10:00"), "noche")
+    assert lab.entry_open(ts("20:00"), "noche") and not lab.entry_open(ts("20:00"), "rth")
+    assert not lab.entry_open(ts("16:30"), "noche") and not lab.entry_open(ts("15:45"), "noche")
+    assert lab.entry_open(ts("03:00"), "all")
+    names = [n for n, _ in lab.PROTECTIONS]
+    assert len(names) == 7 and names[0] == "sin protección"
+    assert "Zonas 15 min · de día · sin protección" in lab.BOT_LIKE
