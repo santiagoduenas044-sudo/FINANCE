@@ -280,3 +280,18 @@ def test_early_close_holiday_exits_at_the_last_price(tmp_path):
     t = bot.closed[-1]
     assert t["exit"] == 104.0 and t["why"] == "cierre (el mercado cerró antes)"
     assert pd.Timestamp(t["closed_at"]).strftime("%H:%M") == "13:00"
+
+
+def test_orbit_trades_one_nq_by_default(monkeypatch):
+    from signal_engine.subbots import orbit
+    from signal_engine.subbots.opening_range import OrbSettings
+
+    monkeypatch.delenv("ORBIT_POSITION", raising=False)
+    s = orbit.settings()
+    # 1 NQ: $20/pt; costs $3.10 commission ($1.55 per side) + 1 tick per side
+    assert (s.position, s.usd_per_point, s.cost_points) == ("1 NQ", 20.0, 0.655)
+    # 1 MNQ keeps the lab's cost (1.02 pts)
+    monkeypatch.setenv("ORBIT_POSITION", "1 MNQ")
+    assert orbit.settings().cost_points == OrbSettings().cost_points == 1.02
+    monkeypatch.setenv("ORBIT_POSITION", "nonsense")
+    assert orbit.settings().position == "1 NQ"

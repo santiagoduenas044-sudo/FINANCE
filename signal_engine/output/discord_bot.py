@@ -146,11 +146,11 @@ def _why(runtime) -> str:
 
 def _orbit(_runtime) -> str:
     """ORBIT is a separate process: read its saved state and trades."""
-    from ..subbots.orbit import STORE_DIR, bot_name
+    from ..subbots.orbit import STORE_DIR, bot_name, settings
     from ..subbots.opening_range import OpeningRangeBot
     if not STORE_DIR.exists():
         return "ORBIT todavía no ha corrido en esta Mac (bash deploy/macos/ctl.sh orbit on)."
-    return OpeningRangeBot(STORE_DIR, name=bot_name()).record_text()
+    return OpeningRangeBot(STORE_DIR, settings=settings(), name=bot_name()).record_text()
 
 
 _HANDLERS = {"status": _status, "trades": _trades, "why": _why, "record": _record,

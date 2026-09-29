@@ -15,7 +15,8 @@ The rules are the ones the strategy lab validated on 5 years of NQ
      market gaps through fills at the worse open; flat at 16:55.
 
 It never touches GHOST, its trades or its limits. Paper only: results are
-in points and in dollars for `contracts` MNQ after commission + slippage.
+in points and in dollars for the position (settings.position) after
+commission + slippage.
 State lives in data_store/subbots/ so a restart resumes the day.
 """
 from __future__ import annotations
@@ -32,6 +33,8 @@ log = logging.getLogger("signal_engine.subbots.opening_range")
 
 TZ = "America/New_York"
 TICK = 0.25
+# $ per point, Tradovate round-trip commission per contract
+POSITION_SPECS = {"MNQ": (2.0, 1.04), "NQ": (20.0, 3.10)}
 
 
 @dataclass
@@ -43,10 +46,25 @@ class OrbSettings:
     last_entry: str = "15:30"          # the breakout candle must close by then
     flat_at: str = "16:55"
     max_range: float = 150.0
-    contracts: int = 1                 # MNQ
-    usd_per_point: float = 2.0         # per MNQ
+    contracts: int = 1
+    usd_per_point: float = 2.0         # per contract (MNQ $2, NQ $20)
     cost_points: float = 1.02          # commission + 1 tick of slippage per side
     stale_minutes: int = 15            # a breakout older than this is not chased
+    symbol: str = "MNQ"
+
+    @property
+    def position(self) -> str:
+        return f"{self.contracts} {self.symbol}"
+
+    @classmethod
+    def for_position(cls, position: str, **kw) -> "OrbSettings":
+        """'1 NQ', '2 MNQ'...: $ per point and costs (Tradovate round-trip
+        commission + 1 tick of slippage per side) for that position. The
+        costs in points are per contract, so they do not grow with the count."""
+        n, sym = position.split()
+        pv, commission = POSITION_SPECS[sym.upper()]
+        return cls(contracts=int(n), symbol=sym.upper(), usd_per_point=pv,
+                   cost_points=round(commission / pv + 2 * TICK, 4), **kw)
 
 
 @dataclass
@@ -261,7 +279,7 @@ class OpeningRangeBot:
                    f"🟢 **Compra** si una vela de 5 min cierra arriba de {_px(st.hi)}\n"
                    f"🔴 **Venta** si una vela de 5 min cierra abajo de {_px(st.lo)}\n"
                    f"Stop del otro lado de la caja (≈ {width:.0f} pts o algo más, "
-                   f"≈ {_usd(-risk)} con {s.contracts} MNQ) · objetivo 1.5× el stop · "
+                   f"≈ {_usd(-risk)} con {s.position}) · objetivo 1.5× el stop · "
                    f"hasta las {s.last_entry}.")
         if not quiet:
             self._note(*msg, 0x3498DB, f"box:{st.day}")
@@ -289,7 +307,7 @@ class OpeningRangeBot:
                 f"{_usd(-risk * pv)}) · **Objetivo** {_px(target)} "
                 f"({s.target_mult * risk:.1f} pts, {_usd(s.target_mult * risk * pv)})\n"
                 f"Al {s.be_at:.0%} del camino el stop sube a entrada +{s.be_plus:g}. "
-                f"Cierra a las {s.flat_at} si no toca nada. {s.contracts} MNQ, en papel.")
+                f"Cierra a las {s.flat_at} si no toca nada. {s.position}, en papel.")
         self._note(f"{'🟢' if long else '🔴'} {self.name} — {side} NQ", text,
                    0x00C851 if long else 0xFF4444, f"open:{t['id']}",
                    image=self._chart(bars, t, f"{self.name} · APERTURA · {side} {_px(entry)}"))
@@ -325,7 +343,7 @@ class OpeningRangeBot:
         usd = net * s.usd_per_point * s.contracts
         done = {**t, "exit": price, "closed_at": str(ts), "why": why,
                 "pts": round(pts, 2), "net_pts": round(net, 2), "usd": round(usd, 2),
-                "contracts": s.contracts}
+                "contracts": s.contracts, "symbol": s.symbol}
         self.st.trade = None
         self._append_trade(done)
         if quiet:
@@ -333,7 +351,7 @@ class OpeningRangeBot:
         mark = "✅" if usd > 0 else ("➖" if abs(net) < 0.5 else "🛑")
         side = "COMPRA" if t["long"] else "VENTA"
         text = (f"{side} {_px(t['entry'])} → {_px(price)} · **{why}**\n"
-                f"**{pts:+.2f} pts · {_usd(usd)}** con {s.contracts} MNQ "
+                f"**{pts:+.2f} pts · {_usd(usd)}** con {s.position} "
                 f"(ya descontados {s.cost_points:g} pts de comisión y deslizamiento)\n"
                 + self.summary_line())
         self._note(f"{mark} {self.name} — cerrado: {why}", text,
@@ -379,7 +397,7 @@ class OpeningRangeBot:
         """For the !apertura command: totals, worst drop and the last trades."""
         s = self.s
         lines = [f"🛰️ **{self.name}** — estrategia APERTURA (ruptura de la caja 9:30–9:45) "
-                 f"· {s.contracts} MNQ · en papel"]
+                 f"· {s.position} · en papel"]
         st, t = self.st, self.st.trade
         if t is not None:
             lines.append(f"🟡 Abierto: {'COMPRA' if t['long'] else 'VENTA'} {_px(t['entry'])} · "

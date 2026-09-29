@@ -17,6 +17,7 @@ Environment (.env):
     DISCORD_WEBHOOK_ORBIT   webhook of ORBIT's own channel (without it ORBIT
                             only writes to its log; it never uses GHOST's)
     ORBIT_NAME              name shown in the messages (default ORBIT)
+    ORBIT_POSITION          paper position (default "1 NQ"; "1 MNQ", "2 MNQ"...)
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ import pandas as pd
 
 from ..output.discord import DiscordOutputAdapter
 from ..output.dispatcher import OutputDispatcher
-from .opening_range import OpeningRangeBot
+from .opening_range import OpeningRangeBot, OrbSettings
 
 ROOT = Path(__file__).resolve().parents[2]
 STORE_DIR = ROOT / "data_store" / "orbit"
@@ -41,8 +42,21 @@ POLL_SECONDS = 30
 log = logging.getLogger("orbit")
 
 
+DEFAULT_POSITION = "1 NQ"     # was 1 MNQ until 2026-09-29
+
+
 def bot_name() -> str:
     return os.environ.get("ORBIT_NAME", "").strip() or "ORBIT"
+
+
+def settings() -> OrbSettings:
+    """APERTURA's rules for the position in $ORBIT_POSITION (default 1 NQ)."""
+    pos = os.environ.get("ORBIT_POSITION", "").strip() or DEFAULT_POSITION
+    try:
+        return OrbSettings.for_position(pos)
+    except (ValueError, KeyError):
+        log.warning("ORBIT_POSITION=%r no se entiende; uso %s", pos, DEFAULT_POSITION)
+        return OrbSettings.for_position(DEFAULT_POSITION)
 
 
 def make_publisher():
@@ -70,7 +84,7 @@ def yahoo_bars() -> pd.DataFrame:
 
 def build_bot(publish=None, store_dir: Path = STORE_DIR) -> OpeningRangeBot:
     from ..output.trade_chart import render_trade_png
-    return OpeningRangeBot(store_dir, publish=publish or make_publisher(),
+    return OpeningRangeBot(store_dir, settings=settings(), publish=publish or make_publisher(),
                            chart=render_trade_png, name=bot_name())
 
 
@@ -115,7 +129,7 @@ def replay(bars: pd.DataFrame, publish, store_dir: Path, window: int = 600,
     """Feed past bars one minute at a time to a fresh ORBIT in `store_dir`,
     exactly as the live loop would have seen them."""
     from ..output.trade_chart import render_trade_png
-    bot = OpeningRangeBot(store_dir, publish=publish, name=bot_name(),
+    bot = OpeningRangeBot(store_dir, settings=settings(), publish=publish, name=bot_name(),
                           chart=render_trade_png if charts else None)
     for i in range(1, len(bars) + 1):
         bot.on_bars(bars.iloc[max(0, i - window):i])
@@ -123,7 +137,7 @@ def replay(bars: pd.DataFrame, publish, store_dir: Path, window: int = 600,
 
 
 def monthly(closed: list[dict]) -> str:
-    """One line per month: trades, wins and dollars (1 MNQ)."""
+    """One line per month: trades, wins and dollars (ORBIT's position)."""
     months: dict[str, list[float]] = {}
     for t in closed:
         months.setdefault(t["day"][:7], []).append(t["usd"])
@@ -172,7 +186,7 @@ def test_run(to_discord: bool, desde: str | None = None, hasta: str | None = Non
         print("════ Resultado de la prueba ════")
         print(bot.record_text().replace("**", ""))
         if days > 10 and bot.closed:
-            print("\nPor mes (1 MNQ, con costos):")
+            print(f"\nPor mes ({bot.s.position}, con costos):")
             print(monthly(bot.closed))
     if to_discord and not os.environ.get(WEBHOOK_ENV, "").strip():
         print(f"\n(no se mandó nada a Discord: falta {WEBHOOK_ENV} en .env)")
@@ -203,12 +217,14 @@ def main() -> int:
     publish = make_publisher()
     bot = build_bot(publish)
     name = bot.name
-    log.info("%s en línea (estrategia APERTURA, 1 MNQ en papel, datos en %s)", name, STORE_DIR)
+    log.info("%s en línea (estrategia APERTURA, %s en papel, datos en %s)", name,
+             bot.s.position, STORE_DIR)
     try:
         publish(title=f"🛰️ {name} en línea",
                 text="Estrategia **APERTURA**: caja de 9:30 a 9:45, entra cuando una vela de "
                      "5 min cierra fuera, stop del otro lado, objetivo 1.5× el stop, BE+2 al 70 %, "
-                     "cierre 16:55. 1 MNQ, en papel. Aviso a las 9:45 con la caja del día.",
+                     f"cierre 16:55. {bot.s.position}, en papel. Aviso a las 9:45 con la caja "
+                     "del día.",
                 color=0x3498DB, key=f"online:{int(time.time())}")
     except Exception:  # noqa: BLE001
         pass
