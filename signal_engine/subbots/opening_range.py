@@ -60,6 +60,7 @@ class DayState:
     pending: dict | None = None        # breakout seen, enters on the next minute
     trade: dict | None = None
     last_ts: str | None = None
+    last_close: float | None = None
 
 
 def _hm(ts: pd.Timestamp) -> str:
@@ -163,6 +164,16 @@ class OpeningRangeBot:
               quiet: bool = False) -> None:
         s, st = self.s, self.st
         day = ts.date().isoformat()
+        hm = _hm(ts)
+        prev = pd.Timestamp(st.last_ts) if st.last_ts else None
+        # the market stopped before 16:55 (holiday early close at 13:00, or a
+        # data gap) and the next bar is already past the flat time or on
+        # another day: close at the last price seen, like the lab does
+        if (st.trade is not None and prev is not None and st.last_close is not None
+                and ts - prev > pd.Timedelta(minutes=30)
+                and (day != st.day or hm >= s.flat_at)):
+            self._close(st.trade, st.last_close, prev, "cierre (el mercado cerró antes)",
+                        bars, quiet)
         if day != st.day:
             if st.trade is not None:                # never carried overnight
                 self._close(st.trade, float(bar["open"]), ts, "cierre (sin datos al cierre)",
@@ -170,7 +181,7 @@ class OpeningRangeBot:
             self._new_day(day)
             st = self.st
         st.last_ts = str(ts)
-        hm = _hm(ts)
+        st.last_close = float(bar["close"])
         box_end = _add("09:30", s.range_minutes)
 
         # 1) the box: 1-minute bars closing in (09:30, 09:45]

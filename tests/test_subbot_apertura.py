@@ -262,3 +262,21 @@ def test_orbit_test_run_over_databento_history(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "(30 días)" in out and "Por mes" in out and "2025-01:" in out and "2025-02:" in out
     assert "── 📦" not in out                            # long runs: summary only
+
+
+def test_early_close_holiday_exits_at_the_last_price(tmp_path):
+    """Labor Day: the market stops at 13:00. The trade closes at the 13:00
+    price (as the lab does), not at the next session's open."""
+    rows = _box()
+    rows["09:50"] = (100, 112, 100, 111)
+    bars = _day(rows)
+    bars.loc[bars.index.strftime("%H:%M") == "13:00", "close"] = 104.0
+    bars = bars[bars.index.strftime("%H:%M") <= "13:00"]
+    evening = pd.date_range("2025-03-03 18:01", periods=30, freq="1min", tz=TZ)
+    bars = pd.concat([bars, pd.DataFrame({"open": 120.0, "high": 121.0, "low": 119.0,
+                                          "close": 120.0}, index=evening)])
+    bot, _ = _bot(tmp_path)
+    _feed(bot, bars)
+    t = bot.closed[-1]
+    assert t["exit"] == 104.0 and t["why"] == "cierre (el mercado cerró antes)"
+    assert pd.Timestamp(t["closed_at"]).strftime("%H:%M") == "13:00"
