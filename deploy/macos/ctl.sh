@@ -107,6 +107,11 @@ PYEOF
         sed -e "s|__REPO__|$REPO_DIR|g" -e "s|__LOGDIR__|$LOGDIR|g" \
             "$REPO_DIR/deploy/macos/com.finance.orbit.plist.template" > "$ORBIT_PLIST"
         launchctl bootout "$DOMAIN/$ORBIT_LABEL" 2>/dev/null || true
+        # bootout returns before launchd has let go; bootstrapping at once
+        # fails with "5: Input/output error" when ORBIT was already running
+        for _ in 1 2 3 4 5 6 7 8 9 10; do
+          launchctl print "$DOMAIN/$ORBIT_LABEL" >/dev/null 2>&1 || break; sleep 1
+        done
         launchctl bootstrap "$DOMAIN" "$ORBIT_PLIST"
         [ -n "$(_get DISCORD_WEBHOOK_ORBIT)" ] || echo "(aviso: falta DISCORD_WEBHOOK_ORBIT en .env — ORBIT solo escribirá en su log)"
         echo "ORBIT encendido (arranca solo con la Mac y se reinicia si falla)";;
