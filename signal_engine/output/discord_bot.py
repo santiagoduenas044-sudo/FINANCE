@@ -23,7 +23,8 @@ import threading
 
 import pandas as pd
 
-from .record import build_record, exit_label, trading_day, usd, won_lost
+from .record import (after_fees, build_record, commission_per_trade, exit_label,
+                     trading_day, usd, won_lost)
 
 log = logging.getLogger("signal_engine.output.discord_bot")
 
@@ -74,12 +75,15 @@ def _status(runtime) -> str:
     closed = [t for t in (tracker.closed_trades if tracker is not None else [])
               if t.closed_at is not None]
     if closed:
-        _label, pv = _position(runtime)
+        label, pv = _position(runtime)
+        fee = commission_per_trade(label)
         today = trading_day(pd.Timestamp.now(tz="America/New_York"))
         pts_today = [t.pnl_points for t in closed if trading_day(t.closed_at) == today]
+        pts_all = [t.pnl_points for t in closed]
         lines.append("")
-        lines.append("**Hoy:** " + (won_lost(pts_today, pv) if pts_today else "sin trades cerrados"))
-        lines.append("**Total:** " + won_lost([t.pnl_points for t in closed], pv))
+        lines.append("**Hoy:** " + (won_lost(pts_today, pv) + after_fees(pts_today, pv, fee)
+                                   if pts_today else "sin trades cerrados"))
+        lines.append("**Total:** " + won_lost(pts_all, pv) + after_fees(pts_all, pv, fee))
     return "\n".join(lines)
 
 

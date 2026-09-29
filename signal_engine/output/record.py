@@ -43,6 +43,27 @@ def _mark(pts: float) -> str:
     return "✅" if pts > 0.01 else ("➖" if pts >= -0.01 else "🛑")
 
 
+# Tradovate round-trip commission per contract (per side x 2): 1 NQ = $1.55 x 2.
+ROUND_TRIP_USD = {"MNQ": 1.04, "MES": 1.04, "NQ": 3.10, "ES": 3.10}
+
+
+def commission_per_trade(position: str) -> float:
+    """Commission of one trade (in and out) for a position label like
+    '5 MNQ' -> 5 x $1.04 = $5.20. 0 when the label is not a position."""
+    parts = str(position).split()
+    if len(parts) == 2 and parts[0].isdigit() and parts[1] in ROUND_TRIP_USD:
+        return int(parts[0]) * ROUND_TRIP_USD[parts[1]]
+    return 0.0
+
+
+def after_fees(pts: list[float], pv: float, fee: float) -> str:
+    """' · con comisiones +$874' (what Tradovate would show), or '' without a fee."""
+    if not fee or not pts:
+        return ""
+    net = sum(pts) * pv - fee * len(pts)
+    return f" · con comisiones {'+' if net >= 0 else '−'}${abs(net):,.0f}"
+
+
 def won_lost(pts: list[float], pv: float) -> str:
     """'ganado +$1,200 · perdido −$300 · neto +$900' in the position's dollars."""
     won = sum(p for p in pts if p > 0) * pv
@@ -52,14 +73,14 @@ def won_lost(pts: list[float], pv: float) -> str:
             f"**neto {'+' if net >= 0 else '−'}${abs(net):,.0f}**")
 
 
-def _line(label: str, trades: list, pv: float) -> str:
+def _line(label: str, trades: list, pv: float, fee: float = 0.0) -> str:
     if not trades:
         return f"**{label}:** sin trades"
     pts = [t.pnl_points for t in trades]
     w = sum(1 for p in pts if p > 0.01)
     flat = sum(1 for p in pts if abs(p) <= 0.01)
     return (f"**{label}:** {len(pts)} trades · {w} ✅ {flat} ➖ {len(pts) - w - flat} 🛑 · "
-            f"{won_lost(pts, pv)} ({sum(pts):+.1f} pts)")
+            f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)} ({sum(pts):+.1f} pts)")
 
 
 def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> str:
@@ -70,8 +91,10 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> 
     week0 = day - pd.Timedelta(days=day.dayofweek)
     today = [t for t in trades if trading_day(t.closed_at) == day]
     week = [t for t in trades if trading_day(t.closed_at) >= week0]
-    lines = [f"📒 **Récord · {position}** (${pv:g} por punto, simulado)",
-             _line(f"Hoy {day:%d-%b}", today, pv), _line("Esta semana", week, pv)]
+    fee = commission_per_trade(position)
+    lines = [f"📒 **Récord · {position}** (${pv:g} por punto, simulado"
+             + (f", comisión ${fee:,.2f} por trade" if fee else "") + ")",
+             _line(f"Hoy {day:%d-%b}", today, pv, fee), _line("Esta semana", week, pv, fee)]
     if trades:
         pts = [t.pnl_points for t in trades]
         eq = peak = dd = 0.0
@@ -82,7 +105,7 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> 
         wins = sum(1 for p in pts if p > 0.01)
         first = trading_day(trades[0].closed_at)
         lines.append(f"**Total desde {first:%d-%b}:** {len(pts)} trades · gana {wins / len(pts):.0%} · "
-                     f"{won_lost(pts, pv)} · peor caída {usd(-dd, pv)}")
+                     f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)} · peor caída {usd(-dd, pv)}")
         lines.append("")
         lines.append("**Últimos trades**")
         for t in trades[-last:][::-1]:

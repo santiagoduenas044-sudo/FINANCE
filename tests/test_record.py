@@ -79,3 +79,13 @@ def test_record_command_on_discord():
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
+
+
+def test_record_shows_net_after_commissions():
+    from signal_engine.output.record import after_fees, commission_per_trade
+    assert commission_per_trade("5 MNQ") == 5 * 1.04
+    assert commission_per_trade("1 NQ") == 3.10                  # Tradovate: $1.55 per side
+    assert commission_per_trade("1 punto NQ") == 0.0
+    # 3 trades, +12 pts on 5 MNQ = +$120 gross; 3 x $5.20 = $15.60 -> +$104
+    assert after_fees([10.0, -4.0, 6.0], 10.0, 5.2) == " · con comisiones +$104"
+    assert after_fees([], 10.0, 5.2) == ""
