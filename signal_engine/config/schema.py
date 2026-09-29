@@ -473,10 +473,12 @@ class EngineConfig(BaseModel):
 
     @classmethod
     def load(cls, path: Optional[str | Path] = None,
-             strategy: Optional[str] = None) -> "EngineConfig":
+             strategy: Optional[str] = None,
+             overrides: Optional[dict] = None) -> "EngineConfig":
         """Load default.yaml (or `path`), optionally overlaid with
         config/strategies/<strategy>.yaml. The overlay only lists what the
-        strategy changes; everything else keeps the base value."""
+        strategy changes; everything else keeps the base value. `overrides`
+        (same shape) goes on top of both, e.g. for a parallel variant."""
         path = Path(path) if path else CONFIG_DIR / "default.yaml"
         with open(path, "r") as fh:
             raw = yaml.safe_load(fh) or {}
@@ -488,6 +490,8 @@ class EngineConfig(BaseModel):
             with open(overlay_path, "r") as fh:
                 raw = _deep_merge(raw, yaml.safe_load(fh) or {})
             raw["strategy"] = strategy
+        if overrides:
+            raw = _deep_merge(raw, overrides)
         return cls(**raw)
 
     @classmethod

@@ -23,6 +23,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
+import os
 from pathlib import Path
 
 from ..config.schema import EngineConfig
@@ -203,6 +204,11 @@ def build_runtime(
         signal_log_path=signal_log_path,
         ghost=ghost, paper_tracker=paper_tracker, ghost_log_path=ghost_log,
     )
+    # parallel paper variants (config/shadows.yaml); BOT_SHADOWS=off disables
+    if ghost is not None and data_dir is None and \
+            os.environ.get("BOT_SHADOWS", "on").strip().lower() not in ("off", "0", "false"):
+        from .shadows import build_ghost_shadows
+        runtime.shadows = build_ghost_shadows(registry, risk_engine=risk_engine)
     zr = data_engine.cfg.setups.zone_retrace
     if zr.enabled and ghost is not None:
         from .ideas import IdeaBoard

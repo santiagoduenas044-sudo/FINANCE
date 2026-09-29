@@ -88,15 +88,37 @@ def build_bot(publish=None, store_dir: Path = STORE_DIR) -> OpeningRangeBot:
                            chart=render_trade_png, name=bot_name())
 
 
-def run_once(bot: OpeningRangeBot, fetch=yahoo_bars) -> bool:
-    """One poll. False when the data could not be read (retried next time)."""
+def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
+    """One poll. False when the data could not be read (retried next time).
+    `shadows`: parallel APERTURA variants fed the same bars (silent)."""
     try:
         bars = fetch()
     except Exception as exc:  # noqa: BLE001 - a bad poll must never stop the bot
         log.warning("sin datos de Yahoo (%s)", type(exc).__name__)
         return False
     bot.on_bars(bars)
+    for _spec, shadow in shadows:
+        try:
+            shadow.on_bars(bars)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("variante %s falló (%s)", _spec.id, type(exc).__name__)
     return True
+
+
+def build_shadows(base: Path | None = None) -> list:
+    """[(spec, OpeningRangeBot)] for the ORBIT variants in config/shadows.yaml:
+    ORBIT's own rules with the listed changes, their own folder, no messages."""
+    from dataclasses import replace
+    from ..runtime.shadows import SHADOWS_DIR, load_specs, store_dir
+    out = []
+    for spec in load_specs("orbit"):
+        try:
+            rules = replace(settings(), **(spec.settings or {}))
+            out.append((spec, OpeningRangeBot(store_dir("orbit", spec.id, base or SHADOWS_DIR),
+                                              settings=rules, name=spec.name)))
+        except (TypeError, ValueError) as exc:
+            log.warning("variante %s no arrancó (%s)", spec.id, exc)
+    return out
 
 
 def databento_bars(start: str, end: str | None = None,
@@ -228,8 +250,11 @@ def main() -> int:
                 color=0x3498DB, key=f"online:{int(time.time())}")
     except Exception:  # noqa: BLE001
         pass
+    shadows = build_shadows()
+    if shadows:
+        log.info("variantes en paralelo: %s", ", ".join(sp.name for sp, _ in shadows))
     while not stop["now"]:
-        run_once(bot)
+        run_once(bot, shadows=shadows)
         for _ in range(POLL_SECONDS):
             if stop["now"]:
                 break

@@ -65,3 +65,62 @@ def test_hub_flags_a_silent_orbit(tmp_path):
 def test_hub_without_orbit_installed(tmp_path):
     orbit = _client(tmp_path / "nothing").get("/api/bots").json()["bots"][1]
     assert orbit["state"] == "off" and "orbit on" in orbit["now"][0]["text"]
+
+
+# --------------------------------------------------------------------------- #
+# parallel variants (config/shadows.yaml)
+# --------------------------------------------------------------------------- #
+def test_shadow_specs_and_config_overrides():
+    from signal_engine.runtime.shadows import load_specs
+    ghost = {s.id: s for s in load_specs("ghost")}
+    assert ghost["zonas_1m"].strategy == "zones_1m"
+    cfg = EngineConfig.load(strategy="zones_1m", overrides=ghost["zonas_1m_noche"].overrides)
+    assert cfg.setups.zone_retrace.timeframe == "1m" and cfg.timeframe_roles.structure == "5m"
+    assert cfg.ghost.valid_sessions == ["RTH", "ETH"] and cfg.ghost.daily_loss_limit_usd is None
+    assert {s.id for s in load_specs("orbit")} == {"apertura_30m", "apertura_tp2"}
+
+
+def test_ghost_shadows_get_the_live_bars(tmp_path):
+    from signal_engine.data.contracts import ContractRegistry
+    from signal_engine.runtime.shadows import build_ghost_shadows
+    from tests.test_bot_runtime import _pipeline
+
+    shadows = build_ghost_shadows(ContractRegistry.load(), base=tmp_path)
+    assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche"]
+    engine = DataEngine(EngineConfig.load(strategy="zones"))
+    rt = _runtime(engine)
+    rt.shadows = shadows
+    rt.start()
+    lc = _pipeline(engine)
+    for ts in lc.timeframes["1m"].index[400:460]:
+        rt.run_cycle("ES", {tf: df.loc[:ts] for tf, df in lc.timeframes.items()})
+    for _spec, srt in shadows:
+        assert srt.last_run_at is not None                     # each variant ran its own cycle
+        assert srt.output_dispatcher.adapters == []           # and never talks to Discord
+    assert (tmp_path / "ghost" / "zonas_1m").is_dir()
+
+
+def test_orbit_feeds_its_variants(tmp_path):
+    from signal_engine.subbots import orbit
+
+    seen = []
+
+    class Fake:
+        def __init__(self): self.bars = None
+        def on_bars(self, bars): seen.append(bars)
+
+    spec = type("S", (), {"id": "x"})()
+    assert orbit.run_once(Fake(), fetch=lambda: "bars", shadows=[(spec, Fake())])
+    assert seen == ["bars", "bars"]
+    variants = orbit.build_shadows(tmp_path)
+    assert {s.id: b.s.range_minutes for s, b in variants} == {"apertura_30m": 30, "apertura_tp2": 15}
+
+
+def test_hub_lists_the_variants(tmp_path):
+    app = create_app(_runtime(DataEngine(EngineConfig.load(strategy="zones"))))
+    app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
+    d = TestClient(app).get("/api/bots").json()
+    orbit = d["bots"][1]
+    assert [v["id"] for v in orbit["variants"]] == ["apertura_30m", "apertura_tp2"]
+    assert orbit["variants"][0]["now"].startswith("Todavía no ha corrido")
+    assert any(s["status"] == "en paralelo" for s in d["strategies"])

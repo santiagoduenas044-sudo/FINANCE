@@ -413,6 +413,12 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .stag { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; }
 .stag.live { background: var(--good-dim); color: var(--good); }
 .stag.study { background: var(--amber-dim); color: var(--amber); }
+.stag.par { background: rgba(123, 150, 255, .14); color: var(--info); }
+.par-t td { vertical-align: top; }
+.par-t .pn { color: var(--ink-1); font-weight: 500; white-space: normal; min-width: 140px; }
+.par-t .pa { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 2px; white-space: normal; line-height: 1.45; }
+.par-t tr.main td { background: var(--cd); }
+.par-t tr.main td:first-child { box-shadow: inset 2px 0 0 var(--c); }
 .stag.gone { background: var(--panel-3); color: var(--ink-3); }
 .btag { font: 600 10.5px var(--mono); padding: 2px 7px; border-radius: 6px; flex: none; }
 .strat .t1 b { flex: 1; min-width: 0; }
@@ -1085,20 +1091,40 @@ function renderBots() {
       </div>
       <h4>Ahora mismo</h4>
       <ul class="feed">${b.now.map(l => `<li class="${esc(l.kind)}"><span class="ico">${ICO[l.kind] || "·"}</span><span>${esc(l.text)}</span></li>`).join("")}</ul>
+      ${parTable(b)}
       <h4>Versiones</h4>
       <div class="vers scroll"><table><thead><tr><th></th><th>Qué cambió</th><th class="hide-s">Desde</th>
         <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
     </div>`;
   }).join("");
-  const SK = { "en vivo": "live", "en estudio": "study" };
+  const SK = { "en vivo": "live", "en estudio": "study", "en paralelo": "par" };
   $("hub-strats").innerHTML = d.strategies.map(st => {
     const bt = st.bot === "GHOST" ? "gold" : st.bot === "ORBIT" ? "violet" : "lab";
     return `<div class="strat"><div class="t1"><span class="stag ${SK[st.status] || "gone"}">${esc(st.status)}</span>
         <b>${esc(st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span></div>
       <p>${esc(st.text)}</p>
-      <div class="lab">Laboratorio: ${esc(st.lab)}${st.live ? `<br>En papel: ${st.live.n} trades · <span class="${cls(st.live.net_usd)}">${usd0(st.live.net_usd)}</span>` : ""}</div></div>`;
+      <div class="lab">Laboratorio: ${esc(st.lab)}${st.live ? `<br>En papel: ${st.live.n} trades · <span class="${cls(st.live.net_usd)}">${usd0(st.live.net_usd)}</span>` : ""}${
+        (st.live?.detail || []).length > 1 ? st.live.detail.map(v => `<br>· ${esc(v.name)}: ${v.n} trades · <span class="${cls(v.net_usd)}">${usd0(v.net_usd)}</span>`).join("") : ""}</div></div>`;
   }).join("");
+}
+
+function parTable(b) {
+  const vs = b.variants || [];
+  if (!vs.length) return "";
+  const R = 'style="text-align:right"';
+  const row = (name, about, now, t, a, open, main) => `<tr class="${main ? "main" : ""}">
+      <td class="pn">${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}</span></td>
+      <td class="num ${cls(t.n ? t.net_usd : null)}" ${R}>${t.n ? usd0(t.net_usd) : "—"}${open != null ? `<span class="pa">abierto ${usd0(open)}</span>` : ""}</td>
+      <td class="num ${cls(a.n ? a.net_usd : null)}" ${R} style="text-align:right;font-weight:600">${a.n ? usd0(a.net_usd) : "—"}</td>
+      <td class="num" ${R}>${a.n || "—"}</td>
+      <td class="num hide-s" ${R}>${a.n ? Math.round(a.win_rate * 100) + "%" : "—"}</td></tr>`;
+  const mainNow = (b.now.find(l => l.kind === "trade") || {}).text || "Sin trade abierto.";
+  return `<h4>En paralelo · mismo mercado, solo papel</h4>
+    <div class="vers scroll"><table class="par-t"><thead><tr><th>Versión</th><th style="text-align:right">Hoy</th>
+      <th style="text-align:right">Total</th><th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
+      <tbody>${row(b.strategy, "", mainNow, b.today, b.total, b.open_usd, true)}
+      ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false)).join("")}</tbody></table></div>`;
 }
 
 /* ═══════════════════════════ 2 · HISTORIAL ═══════════════════════════ */

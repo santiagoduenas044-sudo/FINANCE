@@ -108,6 +108,8 @@ class BotRuntime:
     # Plain-language market read per symbol (ghost/narrative.py), for the
     # status digest and the !why command.
     ghost_market_read: dict[str, list[str]] = field(default_factory=dict, init=False)
+    # parallel paper variants (runtime/shadows.py): fed this runtime's bars
+    shadows: list = field(default_factory=list, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -249,6 +251,10 @@ class BotRuntime:
                 no_trades_produced += rejected
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DEGRADED, "ghost", str(exc))
+
+        if self.shadows:
+            from .shadows import run_ghost_shadows
+            run_ghost_shadows(self.shadows, symbol, tf_bars, now)
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,

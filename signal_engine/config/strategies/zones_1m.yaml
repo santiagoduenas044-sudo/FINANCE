@@ -1,0 +1,94 @@
+# GHOST's 1-minute zone strategy exactly as it ran live until 2026-09-29 (v2):
+# fair-value-gap zones on 5m, entry when a 1-minute candle reacts in the zone,
+# stop 20-35 pts behind the origin, one target at 3x, stop to entry +2 at 70%
+# of the way, day session only. It now runs as a PARALLEL paper variant next
+# to the live 15-minute version (config/shadows.yaml), so both can be compared
+# on the same days. The only change: no daily loss limit (like the live bot).
+# Lab, 5 years, 5 MNQ: -$91,774 — kept running because the operator wants to
+# see it on today's market.
+
+timeframe_roles:
+  context: "1H"
+  structure: "5m"
+  execution: "1m"
+
+analysis:
+  max_bars: 1440                    # 24h of 1m: a whole trade date (VWAP), fast
+
+setups:
+  liquidity_sweep: {enabled: false}
+  vwap_reclaim: {enabled: false}
+  orb: {enabled: false}
+  zone_retrace:
+    enabled: true
+    timeframe: "1m"
+    zone_timeframe: "5m"
+    zone_lookback_bars: 36          # zones from the last 3 hours
+    min_zone_points: 3.0
+    max_zone_points: 40.0
+    min_stop_points: 20.0
+    max_stop_points: 35.0
+    stop_buffer_points: 1.0
+    max_risk_points: 50.0
+    arm_distance_points: 30.0
+    confirm_bars: 5
+    tp1_r: 1.0
+    tp1_max_r: 2.0
+    min_target_r: 2.0
+    max_target_r: 5.0
+    fallback_target_r: 3.0
+    # One target at 3R for the whole position: in the 5-year backtest
+    # (2021-09 -> 2026-09, 2,607 trades) it lost the least of every exit tried
+    # (-37.6R vs -74.0R for TP1 + BE + TP2). BE after TP1 kept closing trades
+    # that went on to the final target.
+    fixed_target_r: 3.0
+    single_target: true
+    expiration_bars: 5
+
+signals:
+  # R:R is judged on the plan (midpoint entry); from a fill taken a few points
+  # past the midpoint, TP1 at 1R is ~0.5-0.8R — TradingMind's own direct short
+  # was 0.55R from "price now". Only reject plans worse than that.
+  min_risk_reward: 0.5
+
+ghost:
+  min_rr: 0.5
+  partial_at_tp1: 0.0               # no partial: one target, whole position
+  breakeven_after_tp1: false
+  # Once price has covered 70% of the way to the target, the stop moves to
+  # the entry + 2 pts (pays the ~1 pt of commission and slippage), so a trade
+  # that almost reached the target never turns into a full loss.
+  be_at_progress: 0.7
+  be_offset_points: 2.0
+  # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
+  # the account flat before 16:59.
+  eod_close_time: "16:55"
+  # Day session only (09:30-15:30 entries). The 5-year lab run with the night
+  # included lost ~$167,000 on 5 MNQ: overnight stops of 15-18 pts are inside
+  # the noise, and almost every night hour lost money.
+  valid_sessions: ["RTH"]
+  last_entry_time: "15:30"
+  # The operator always trades 5 micros: every $ figure is for 5 MNQ ($10/pt).
+  contracts: 5
+  trade_micro: true
+  # The zone rules ARE the filter: no confluence gate, no ATR stop band (a
+  # fixed 20-pt stop is ~2 ATR on 1m, which the 5m-era band would reject).
+  # Entry cut-off / 16:55 flat / one position / cooldown still apply.
+  min_confluence_score: null
+  min_stop_atr_mult: 0.0
+  max_stop_atr_mult: 0.0
+  cooldown_bars: 15                 # 15 minutes after a stop-out
+  # No limit on the number of trades; the day still stops once it is down
+  # $500 on the 5-MNQ position. Change the numbers here (null = off).
+  max_trades_per_day: null
+  daily_loss_limit_usd: null
+
+output:
+  notifications:
+    trade_progress: false           # no R-milestone spam; TP1 + close only
+    trade_ideas: true
+    tp1_hit: true
+
+risk:
+  daily_loss_limit_dollar: null
+  max_trades_per_day: null

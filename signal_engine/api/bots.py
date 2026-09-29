@@ -132,7 +132,25 @@ def ghost_card(runtime, now: pd.Timestamp) -> dict:
     today = now.date()
     rows = [((t.context or {}).get("bot_version") or version_by_date("GHOST", t.opened_at),
              t.pnl_points * pv) for t in closed]
+    variants = []
+    for spec, srt in getattr(runtime, "shadows", None) or []:
+        tr = srt.paper_tracker
+        s_open = tr.active(sym) if tr is not None else []
+        s_closed = [t for t in (tr.closed_trades if tr is not None else [])
+                    if t.closed_at is not None and t.instrument == sym]
+        now_txt = "Sin trade abierto."
+        if s_open:
+            t = s_open[0]
+            now_txt = (f"{'Compra' if t.direction == 'LONG' else 'Venta'} abierta en {_px(t.entry)}"
+                       f" · va {t.pnl_points:+.2f} pts ({_usd(t.pnl_points * pv)})")
+        variants.append({
+            "id": spec.id, "name": spec.name, "about": spec.about, "now": now_txt,
+            "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2) if s_open else None,
+            "today": _record([t.pnl_points * pv for t in s_closed
+                              if _ny(t.closed_at).date() == today]),
+            "total": _record([t.pnl_points * pv for t in s_closed])})
     return {
+        "variants": variants,
         "name": "GHOST", "color": "gold", "strategy": f"Zonas {zr.timeframe}", "position": label,
         "status": status, "state": state, "symbol": sym,
         "heartbeat": _iso(getattr(runtime, "last_heartbeat_at", None)),
@@ -148,13 +166,51 @@ def ghost_card(runtime, now: pd.Timestamp) -> dict:
 # --------------------------------------------------------------------------- #
 # ORBIT
 # --------------------------------------------------------------------------- #
-def orbit_card(store_dir: Path | None, now: pd.Timestamp) -> dict:
+def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
+    """ORBIT's parallel APERTURA variants, read from their folders."""
+    from dataclasses import replace
+    from ..runtime.shadows import SHADOWS_DIR, load_specs, store_dir
+    from ..subbots.opening_range import OpeningRangeBot
+    from ..subbots.orbit import settings
+    today = now.date().isoformat()
+    out = []
+    for spec in load_specs("orbit"):
+        try:
+            rules = replace(settings(), **(spec.settings or {}))
+        except (TypeError, ValueError):
+            continue
+        d = store_dir("orbit", spec.id, shadows_dir or SHADOWS_DIR)
+        bot = OpeningRangeBot(d, settings=rules, name=spec.name)
+        t = bot.st.trade
+        now_txt, open_usd = "Sin trade abierto.", None
+        if t is not None:
+            px = bot.st.last_close
+            pts = None if px is None else (px - t["entry"]) if t["long"] else (t["entry"] - px)
+            if pts is not None:
+                open_usd = round(pts * rules.usd_per_point * rules.contracts, 2)
+            now_txt = (f"{'Compra' if t['long'] else 'Venta'} abierta en {_px(t['entry'])}"
+                       + (f" · va {pts:+.2f} pts ({_usd(open_usd)})" if pts is not None else ""))
+        elif bot.st.day == today and bot.st.done:
+            now_txt = "Terminó por hoy."
+        elif not (d / "apertura_state.json").exists():
+            now_txt = "Todavía no ha corrido (arranca con ORBIT)."
+        usd = [float(c.get("usd", 0)) for c in bot.closed]
+        out.append({"id": spec.id, "name": spec.name, "about": spec.about, "now": now_txt,
+                    "open_usd": open_usd,
+                    "today": _record([float(c.get("usd", 0)) for c in bot.closed
+                                      if c.get("day") == today]),
+                    "total": _record(usd)})
+    return out
+
+
+def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | None = None) -> dict:
     from ..subbots.opening_range import OpeningRangeBot
     from ..subbots.orbit import STORE_DIR, bot_name, settings
     store_dir = Path(store_dir or STORE_DIR)
     s = settings()
     base = {"name": bot_name(), "color": "violet", "strategy": "APERTURA",
-            "position": s.position, "fee_per_trade": commission_per_trade(s.position)}
+            "position": s.position, "fee_per_trade": commission_per_trade(s.position),
+            "variants": orbit_variants(shadows_dir, now)}
     state_file = store_dir / "apertura_state.json"
     if not state_file.exists():
         return {**base, "status": "OFFLINE", "state": "off", "heartbeat": None,
@@ -233,14 +289,25 @@ def _iso(v) -> str | None:
         return None
 
 
-def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | None = None) -> dict:
+def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | None = None,
+             shadows_dir: Path | None = None) -> dict:
     now = _ny(now if now is not None else pd.Timestamp.now(tz=NY))
-    bots = [ghost_card(runtime, now), orbit_card(orbit_dir, now)]
+    bots = [ghost_card(runtime, now), orbit_card(orbit_dir, now, shadows_dir)]
     totals = {b["name"]: b["total"]["net_usd"] for b in bots}
+    variants = {v["id"]: v for b in bots for v in b.get("variants", [])}
     strategies = []
     for st in STRATEGIES:
-        live = next((b for b in bots if st["status"] == "en vivo" and b["name"] == st["bot"]), None)
-        strategies.append({**st, "live": ({"n": live["total"]["n"], "net_usd": live["total"]["net_usd"]}
-                                          if live else None)})
+        live = None
+        main = next((b for b in bots if st["status"] == "en vivo" and b["name"] == st["bot"]), None)
+        if main is not None:
+            live = {"n": main["total"]["n"], "net_usd": main["total"]["net_usd"]}
+        elif st.get("shadows"):
+            runs = [variants[i] for i in st["shadows"] if i in variants]
+            if runs:
+                live = {"n": sum(v["total"]["n"] for v in runs),
+                        "net_usd": round(sum(v["total"]["net_usd"] for v in runs), 2),
+                        "detail": [{"name": v["name"], "n": v["total"]["n"],
+                                    "net_usd": v["total"]["net_usd"]} for v in runs]}
+        strategies.append({**st, "live": live})
     return {"now": now.isoformat(), "commit": commit or {}, "bots": bots,
             "strategies": strategies, "combined_usd": round(sum(totals.values()), 2)}

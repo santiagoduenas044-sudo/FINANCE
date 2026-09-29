@@ -393,7 +393,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             commit = maintenance.version(backtests.root)
         except Exception:  # noqa: BLE001 - the hub never fails over git
             commit = {}
-        return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None), commit=commit)
+        return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None), commit=commit,
+                        shadows_dir=getattr(app.state, "shadows_dir", None))
 
     @app.get("/api/system/version")
     def system_version() -> dict:
