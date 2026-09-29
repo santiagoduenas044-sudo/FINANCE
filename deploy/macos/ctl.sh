@@ -120,13 +120,19 @@ PYEOF
         rm -f "$ORBIT_PLIST"
         echo "ORBIT apagado (no vuelve a arrancar hasta 'ctl.sh orbit on'; su récord se conserva)";;
       restart) launchctl kickstart -k "$DOMAIN/$ORBIT_LABEL" && echo "ORBIT reiniciado";;
+      probar)
+        # replay the last days of Yahoo bars through ORBIT (temporary folder,
+        # the real record is untouched); "probar discord" also posts them
+        ( set -a; [ -f "$REPO_DIR/.env" ] && . "$REPO_DIR/.env"; set +a; cd "$REPO_DIR"
+          PYTHONPATH="$REPO_DIR" "$REPO_DIR/.venv/bin/python" -m signal_engine.subbots.orbit \
+            --probar $([ "${3:-}" = "discord" ] && echo --discord) );;
       status)
         launchctl print "$DOMAIN/$ORBIT_LABEL" 2>/dev/null | grep -E "state =|pid =|last exit code =" \
           || echo "ORBIT no está encendido";;
       logs)
         touch "$LOGDIR/orbit.out.log" "$LOGDIR/orbit.err.log"
         echo "(Ctrl-C para salir)"; tail -n 40 -f "$LOGDIR"/orbit.*.log;;
-      *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs>";;
+      *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs|probar [discord]>";;
     esac
     ;;
   *)

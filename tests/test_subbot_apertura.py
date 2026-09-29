@@ -206,3 +206,16 @@ def test_orbit_polls_and_survives_a_bad_poll(tmp_path):
         assert orbit.run_once(bot, fetch=lambda: bars.iloc[:i])
     assert bot.closed and bot.closed[-1]["why"] == "BE+2"          # reached 70%, came back
     assert all(m["title"].split(" ")[1] == "ORBIT" for m in sent)
+
+
+def test_orbit_test_run_replays_without_touching_the_real_record(tmp_path, monkeypatch, capsys):
+    from signal_engine.subbots import orbit
+    rows = _box()
+    rows["09:50"] = (100, 112, 100, 111)
+    bars = pd.concat([_day(rows, day="2025-03-03"), _day(rows, day="2025-03-04")])
+    monkeypatch.setattr(orbit, "yahoo_bars", lambda: bars)
+    monkeypatch.setattr(orbit, "STORE_DIR", tmp_path / "real")
+    assert orbit.test_run(to_discord=False) == 0
+    out = capsys.readouterr().out
+    assert "caja lista" in out and "COMPRA NQ" in out and "Total: 2 trades" in out
+    assert not (tmp_path / "real").exists()

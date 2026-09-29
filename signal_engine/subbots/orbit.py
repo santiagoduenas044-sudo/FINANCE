@@ -9,6 +9,8 @@ source GHOST uses) and hands them to the APERTURA rules
 (subbots/opening_range.py), which decide, notify and keep their own record.
 
     .venv/bin/python -m signal_engine.subbots.orbit          # what launchd runs
+    .venv/bin/python -m signal_engine.subbots.orbit --probar # replay the last days
+    .venv/bin/python -m signal_engine.subbots.orbit --probar --discord   # ...and post them
 
 Environment (.env):
     DISCORD_WEBHOOK_ORBIT   webhook of ORBIT's own channel (without it ORBIT
@@ -82,9 +84,47 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars) -> bool:
     return True
 
 
+def replay(bars: pd.DataFrame, publish, store_dir: Path, window: int = 600) -> OpeningRangeBot:
+    """Feed past bars one minute at a time to a fresh ORBIT in `store_dir`,
+    exactly as the live loop would have seen them."""
+    from ..output.trade_chart import render_trade_png
+    bot = OpeningRangeBot(store_dir, publish=publish, chart=render_trade_png, name=bot_name())
+    for i in range(1, len(bars) + 1):
+        bot.on_bars(bars.iloc[max(0, i - window):i])
+    return bot
+
+
+def test_run(to_discord: bool) -> int:
+    """`--probar`: replay Yahoo's last days through ORBIT (in a temporary
+    folder, so the real record is untouched) and show what it would have
+    said and done."""
+    import tempfile
+    print("Bajando las velas de 1 min de NQ de los últimos días (Yahoo)...", flush=True)
+    bars = yahoo_bars()
+    print(f"{len(bars):,} velas: {bars.index[0]:%d-%b %H:%M} → {bars.index[-1]:%d-%b %H:%M}\n",
+          flush=True)
+    real = make_publisher() if to_discord else None
+
+    def show(*, title, text, color=0x3498DB, key="", image=None):
+        print(f"── {title}\n   " + text.replace("**", "").replace("\n", "\n   ") + "\n", flush=True)
+        if real is not None:
+            real(title=f"🧪 PRUEBA · {title}", text=text, color=color, key=f"test:{key}",
+                 image=image)
+    with tempfile.TemporaryDirectory() as tmp:
+        bot = replay(bars, show, Path(tmp))
+        print("════ Resultado de la prueba ════")
+        print(bot.record_text().replace("**", ""))
+    if to_discord and not os.environ.get(WEBHOOK_ENV, "").strip():
+        print(f"\n(no se mandó nada a Discord: falta {WEBHOOK_ENV} en .env)")
+    return 0
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, stream=sys.stdout,
                         format="%(asctime)s %(levelname)s %(message)s")
+    if "--probar" in sys.argv:
+        logging.getLogger().setLevel(logging.WARNING)
+        return test_run(to_discord="--discord" in sys.argv)
     stop = {"now": False}
 
     def _quit(*_):
