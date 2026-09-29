@@ -64,7 +64,22 @@ def update(root: Path, python: str | None = None) -> dict:
         deps = "ok" if pip.returncode == 0 else (pip.stderr or pip.stdout)[-600:]
     return {"branch": branch, "before": before[:7], "after": after[:7],
             "updated": before != after, "commits": changes[:30], "files": len(files),
-            "dependencies": deps}
+            "dependencies": deps, "orbit": restart_orbit() if before != after else None}
+
+
+def restart_orbit() -> str:
+    """ORBIT (the separate APERTURA paper bot) runs as its own launchd
+    service: restart it too so it picks up the new code. Nothing to do when
+    it is not installed."""
+    label = f"gui/{os.getuid()}/com.finance.orbit" if hasattr(os, "getuid") else ""
+    try:
+        if not label or subprocess.run(["launchctl", "print", label], capture_output=True,
+                                       timeout=10).returncode != 0:
+            return "no está encendido"
+        subprocess.run(["launchctl", "kickstart", "-k", label], capture_output=True, timeout=20)
+        return "reiniciado"
+    except (OSError, subprocess.TimeoutExpired):
+        return "no está encendido"
 
 
 def schedule_restart(delay: float = 1.5, exit_fn=os._exit) -> None:

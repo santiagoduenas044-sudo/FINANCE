@@ -1,4 +1,5 @@
-"""APERTURA: the opening-range breakout, as a paper sub-bot next to GHOST.
+"""The APERTURA strategy (opening-range breakout), run bar by bar. ORBIT
+(subbots/orbit.py) is the separate paper bot that runs it next to GHOST.
 
 The rules are the ones the strategy lab validated on 5 years of NQ
 (scripts/strategy_lab.py --estudio apertura), applied bar by bar:
@@ -81,11 +82,11 @@ def _px(x: float) -> str:
 class OpeningRangeBot:
     """Feed it the live 1-minute bars (CLOSE-labeled, ET) every cycle."""
 
-    name = "APERTURA"
 
     def __init__(self, store_dir: str | Path, *, settings: OrbSettings | None = None,
                  publish: Callable[..., None] | None = None,
-                 chart: Callable[..., bytes | None] | None = None):
+                 chart: Callable[..., bytes | None] | None = None, name: str = "ORBIT"):
+        self.name = name
         self.s = settings or OrbSettings()
         self.dir = Path(store_dir)
         self.state_file = self.dir / "apertura_state.json"
@@ -189,7 +190,7 @@ class OpeningRangeBot:
             else:
                 st.done = True
                 if not quiet:
-                    self._note("⏭️ APERTURA — ruptura perdida",
+                    self._note(f"⏭️ {self.name} — ruptura perdida",
                                "La ruptura pasó mientras el bot no tenía datos al día; "
                                "no la persigo. Mañana otra vez.", 0x95A5A6, f"missed:{day}")
 
@@ -206,7 +207,7 @@ class OpeningRangeBot:
         if hm > s.last_entry:
             st.done = True
             if not quiet:
-                self._note("😴 APERTURA — hoy no hubo ruptura",
+                self._note(f"😴 {self.name} — hoy no hubo ruptura",
                            f"Ninguna vela de 5 min cerró fuera de la caja "
                            f"({_px(st.lo)} – {_px(st.hi)}) antes de las {s.last_entry}. "
                            "Sin trade hoy.", 0x95A5A6, f"none:{day}")
@@ -227,17 +228,17 @@ class OpeningRangeBot:
         width = st.hi - st.lo
         if st.bars < s.range_minutes * 0.8 or width <= 0:
             st.done = True
-            msg = ("📦 APERTURA — hoy no opera",
+            msg = (f"📦 {self.name} — hoy no opera",
                    f"Faltan velas de 9:30 a {_hm(ts)} ({st.bars} de {s.range_minutes}); "
                    "sin caja completa no hay trade.")
         elif width > s.max_range:
             st.done = True
-            msg = ("📦 APERTURA — hoy no opera",
+            msg = (f"📦 {self.name} — hoy no opera",
                    f"Caja de {width:.1f} pts ({_px(st.lo)} – {_px(st.hi)}): más de "
                    f"{s.max_range:.0f} pts, demasiado grande.")
         else:
             risk = (width + 5) * s.usd_per_point * s.contracts
-            msg = ("📦 APERTURA — caja lista",
+            msg = (f"📦 {self.name} — caja lista",
                    f"**9:30–{_hm(ts)}:** máximo **{_px(st.hi)}** · mínimo **{_px(st.lo)}** "
                    f"· {width:.1f} pts\n"
                    f"🟢 **Compra** si una vela de 5 min cierra arriba de {_px(st.hi)}\n"
@@ -272,9 +273,9 @@ class OpeningRangeBot:
                 f"({s.target_mult * risk:.1f} pts, {_usd(s.target_mult * risk * pv)})\n"
                 f"Al {s.be_at:.0%} del camino el stop sube a entrada +{s.be_plus:g}. "
                 f"Cierra a las {s.flat_at} si no toca nada. {s.contracts} MNQ, en papel.")
-        self._note(f"{'🟢' if long else '🔴'} APERTURA — {side} NQ", text,
+        self._note(f"{'🟢' if long else '🔴'} {self.name} — {side} NQ", text,
                    0x00C851 if long else 0xFF4444, f"open:{t['id']}",
-                   image=self._chart(bars, t, f"APERTURA · {side} {_px(entry)}"))
+                   image=self._chart(bars, t, f"{self.name} · APERTURA · {side} {_px(entry)}"))
 
     def _manage(self, t: dict, ts, bar, bars, quiet: bool) -> None:
         long = t["long"]
@@ -293,7 +294,7 @@ class OpeningRangeBot:
             t["be_done"] = True
             t["stop"] = t["entry"] + (self.s.be_plus if long else -self.s.be_plus)
             if not quiet:
-                self._note("🔒 APERTURA — stop a BE+2",
+                self._note(f"🔒 {self.name} — stop a BE+2",
                            f"El precio recorrió el {self.s.be_at:.0%} del camino al objetivo. "
                            f"Stop movido a {_px(t['stop'])}: este trade ya no puede perder. "
                            f"Objetivo {_px(tgt)}.", 0x2ECC71, f"be:{t['id']}")
@@ -316,9 +317,9 @@ class OpeningRangeBot:
                 f"**{pts:+.2f} pts · {_usd(usd)}** con {s.contracts} MNQ "
                 f"(ya descontados {s.cost_points:g} pts de comisión y deslizamiento)\n"
                 + self.summary_line())
-        self._note(f"{mark} APERTURA — cerrado: {why}", text,
+        self._note(f"{mark} {self.name} — cerrado: {why}", text,
                    0x2ECC71 if usd > 0 else 0xE74C3C, f"close:{t['id']}",
-                   image=self._chart(bars, done, f"APERTURA · {side} · {why} {pts:+.2f} pts"))
+                   image=self._chart(bars, done, f"{self.name} · {side} · {why} {pts:+.2f} pts"))
 
     # ------------------------------------------------------------------ #
     # messages
@@ -349,16 +350,17 @@ class OpeningRangeBot:
 
     def summary_line(self) -> str:
         if not self.closed:
-            return "Récord APERTURA: sin trades todavía."
+            return f"Récord {self.name}: sin trades todavía."
         usd = [t["usd"] for t in self.closed]
         wins = sum(1 for u in usd if u > 0)
-        return (f"Récord APERTURA: {len(usd)} trades · ganó {wins} ({wins / len(usd):.0%}) · "
+        return (f"Récord {self.name}: {len(usd)} trades · ganó {wins} ({wins / len(usd):.0%}) · "
                 f"total **{_usd(sum(usd))}**")
 
     def record_text(self, last: int = 10) -> str:
         """For the !apertura command: totals, worst drop and the last trades."""
         s = self.s
-        lines = [f"📦 **APERTURA** — ruptura de la caja 9:30–9:45 · {s.contracts} MNQ · en papel"]
+        lines = [f"🛰️ **{self.name}** — estrategia APERTURA (ruptura de la caja 9:30–9:45) "
+                 f"· {s.contracts} MNQ · en papel"]
         st, t = self.st, self.st.trade
         if t is not None:
             lines.append(f"🟡 Abierto: {'COMPRA' if t['long'] else 'VENTA'} {_px(t['entry'])} · "

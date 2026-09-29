@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd LaunchAgent for ORBIT, the separate paper bot (APERTURA strategy).
+  This is a TEMPLATE: ctl.sh orbit on renders __REPO__ / __LOGDIR__
+  and installs it to ~/Library/LaunchAgents/com.finance.orbit.plist.
+
+  Behaviour:
+    RunAtLoad + KeepAlive  -> starts at login and restarts automatically if it
+                              ever exits/crashes (single instance per Label, so
+                              no duplicate processes are possible).
+    ThrottleInterval       -> at least 10s between restarts (no tight crash loop).
+    ExitTimeOut            -> graceful-shutdown window: launchd sends SIGTERM,
+                              ORBIT saves its state and exits.
+    Standard*Path          -> persistent logs, easy to tail.
+  Secrets are NOT here — run.sh loads them from the repo's .env file.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.finance.orbit</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>__REPO__/deploy/macos/run.sh</string>
+    <string>orbit</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+
+  <key>ExitTimeOut</key>
+  <integer>25</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>__LOGDIR__/orbit.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>__LOGDIR__/orbit.err.log</string>
+</dict>
+</plist>

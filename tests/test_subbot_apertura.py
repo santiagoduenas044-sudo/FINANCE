@@ -169,26 +169,40 @@ def test_note_reaches_discord_as_an_embed():
     assert p["embeds"][0]["description"] == "texto"
 
 
-def test_discord_command(tmp_path):
+def test_orbit_command_reads_its_saved_record(tmp_path, monkeypatch):
     from signal_engine.output.discord_bot import build_reply
+    from signal_engine.subbots import orbit
+    monkeypatch.setattr(orbit, "STORE_DIR", tmp_path)
+    bot = OpeningRangeBot(tmp_path, name="ORBIT")
+    bot._append_trade({"day": "2025-03-03", "long": True, "entry": 100.0, "exit": 115.0,
+                       "why": "objetivo", "usd": 27.96})
+    reply = build_reply("!orbit", object())               # GHOST's runtime is not involved
+    assert "ORBIT" in reply and "+$28" in reply
 
-    class RT:
-        subbots = {"NQ": OpeningRangeBot(tmp_path)}
-    assert "APERTURA" in build_reply("!apertura", RT())
+
+def test_orbit_writes_only_to_its_own_channel(monkeypatch):
+    from signal_engine.subbots import orbit
+    monkeypatch.delenv("DISCORD_WEBHOOK_ORBIT", raising=False)
+    assert not hasattr(orbit.make_publisher(), "__self__")      # no webhook: only its log
+    monkeypatch.setenv("DISCORD_WEBHOOK_ORBIT", "https://discord.invalid/x")
+    adapter = orbit.make_publisher().__self__.adapters[0]
+    assert adapter.config.webhook_env == "DISCORD_WEBHOOK_ORBIT" and adapter.configured
 
 
-def test_apertura_can_use_its_own_discord_channel(monkeypatch):
-    from signal_engine.config.schema import EngineConfig
-    from signal_engine.runtime.bootstrap import subbot_publisher
+def test_orbit_polls_and_survives_a_bad_poll(tmp_path):
+    from signal_engine.subbots import orbit
+    rows = _box()
+    rows["09:50"] = (100, 112, 100, 111)
+    rows["09:51"] = (111, 112, 110, 111)
+    rows["10:05"] = (111, 142, 111, 140)
+    bars = _day(rows)
+    sent = []
+    bot = OpeningRangeBot(tmp_path, publish=lambda **m: sent.append(m), name="ORBIT")
 
-    class Dispatcher:
-        def publish_note(self, **kw):
-            pass
-    ghost = Dispatcher()
-    cfg = EngineConfig.load(strategy="zones")
-    monkeypatch.delenv("DISCORD_WEBHOOK_APERTURA", raising=False)
-    assert subbot_publisher(cfg, ghost) == ghost.publish_note        # same channel as GHOST
-    monkeypatch.setenv("DISCORD_WEBHOOK_APERTURA", "https://discord.invalid/x")
-    own = subbot_publisher(cfg, ghost)
-    adapter = own.__self__.adapters[0]
-    assert adapter.config.webhook_env == "DISCORD_WEBHOOK_APERTURA" and adapter.configured
+    def boom():
+        raise ConnectionError("yahoo down")
+    assert orbit.run_once(bot, fetch=boom) is False
+    for i in range(1, len(bars) + 1):                       # one poll per minute
+        assert orbit.run_once(bot, fetch=lambda: bars.iloc[:i])
+    assert bot.closed and bot.closed[-1]["why"] == "BE+2"          # reached 70%, came back
+    assert all(m["title"].split(" ")[1] == "ORBIT" for m in sent)

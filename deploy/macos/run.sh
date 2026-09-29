@@ -66,4 +66,8 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 
+# `run.sh orbit` starts ORBIT (the separate APERTURA paper bot) instead.
+if [ "${1:-}" = "orbit" ]; then
+  exec "$PY" -m signal_engine.subbots.orbit
+fi
 exec "$PY" scripts/run_dashboard.py

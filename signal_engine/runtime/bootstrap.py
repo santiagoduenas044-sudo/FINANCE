@@ -19,8 +19,6 @@ honest visual distinction between real delayed data and the sample fallback.
 """
 from __future__ import annotations
 
-import os
-
 import logging
 import sys
 from dataclasses import dataclass
@@ -46,7 +44,6 @@ DEFAULT_SIGNAL_LOG = ROOT / "data_store" / "signal_log.jsonl"
 DEFAULT_GHOST_LOG = ROOT / "data_store" / "ghost_log.jsonl"
 DEFAULT_PAPER_DIR = ROOT / "data_store" / "paper"
 DEFAULT_IDEAS_FILE = ROOT / "data_store" / "ideas.json"
-DEFAULT_SUBBOTS_DIR = ROOT / "data_store" / "subbots"
 BARS_PER_TICK = 5  # how many 1m bars the simulated fallback delivers per poll
 
 # Symbol -> bundled sample contract for the SimulatedLiveAdapter fallback.
@@ -115,21 +112,6 @@ def build_live_feed(symbol: str, data_engine: DataEngine, *, logger=None,
     _log(f"[{symbol}] using SimulatedLiveAdapter (replaying bundled sample data).")
     feed = LiveFeed(sim_adapter, symbol, data_engine.cfg)
     return feed, FeedInfo(symbol, sim_adapter.name, False, True)
-
-
-APERTURA_WEBHOOK_ENV = "DISCORD_WEBHOOK_APERTURA"
-
-
-def subbot_publisher(config: EngineConfig, dispatcher):
-    """Where APERTURA's messages go: its own Discord channel when
-    $DISCORD_WEBHOOK_APERTURA is set in .env, else GHOST's channel."""
-    if os.environ.get(APERTURA_WEBHOOK_ENV, "").strip():
-        from ..output.discord import DiscordOutputAdapter
-        from ..output.dispatcher import OutputDispatcher
-        own = config.output.discord.model_copy(
-            update={"enabled": True, "webhook_env": APERTURA_WEBHOOK_ENV})
-        return OutputDispatcher([DiscordOutputAdapter(own)]).publish_note
-    return dispatcher.publish_note if dispatcher is not None else None
 
 
 def build_runtime(
@@ -219,16 +201,6 @@ def build_runtime(
         from .ideas import IdeaBoard
         runtime.idea_board = IdeaBoard(DEFAULT_IDEAS_FILE,
                                        timezone=data_engine.cfg.data.timezone)
-
-    # Paper sub-bot APERTURA (opening-range breakout) on NQ, next to GHOST.
-    # BOT_SUBBOT_APERTURA=false turns it off.
-    if "NQ" in live_feeds and os.environ.get("BOT_SUBBOT_APERTURA", "true").strip().lower() \
-            not in {"0", "false", "no", "off"}:
-        from ..output.trade_chart import render_trade_png
-        from ..subbots.opening_range import OpeningRangeBot
-        runtime.subbots["NQ"] = OpeningRangeBot(
-            DEFAULT_SUBBOTS_DIR, publish=subbot_publisher(data_engine.cfg, dispatcher),
-            chart=render_trade_png)
 
     # Record each feed's real source on the runtime so status/chart can report
     # simulated-vs-delayed honestly (read-only metadata; no logic depends on it).

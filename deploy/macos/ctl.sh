@@ -7,6 +7,8 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)"
 LABEL="com.finance.signal"
 LOGDIR="$HOME/Library/Logs/finance-signal"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+ORBIT_LABEL="com.finance.orbit"
+ORBIT_PLIST="$HOME/Library/LaunchAgents/$ORBIT_LABEL.plist"
 UID_NUM="$(id -u)"
 DOMAIN="gui/$UID_NUM"
 
@@ -41,6 +43,9 @@ case "${1:-}" in
     echo "==> git pull"; git pull --ff-only
     echo "==> deps"; "$REPO_DIR/.venv/bin/python" -m pip install --quiet -r requirements.txt
     echo "==> restart"; launchctl kickstart -k "$DOMAIN/$LABEL"; echo "updated + restarted"
+    if launchctl print "$DOMAIN/$ORBIT_LABEL" >/dev/null 2>&1; then
+      launchctl kickstart -k "$DOMAIN/$ORBIT_LABEL"; echo "ORBIT restarted"
+    fi
     ;;
   discord)
     # Phase 15c: standalone diagnostic. Reports what the running process would
@@ -93,7 +98,33 @@ PYEOF
       *)   echo "current: $(_get BOT_AUTO_START)"; echo "usage: ctl.sh autostart <on|off>";;
     esac
     ;;
+  orbit)
+    # ORBIT: the separate paper bot (APERTURA strategy). Its own service,
+    # its own log, its own Discord channel ($DISCORD_WEBHOOK_ORBIT in .env).
+    case "${2:-}" in
+      on)
+        mkdir -p "$LOGDIR" "$HOME/Library/LaunchAgents"
+        sed -e "s|__REPO__|$REPO_DIR|g" -e "s|__LOGDIR__|$LOGDIR|g" \
+            "$REPO_DIR/deploy/macos/com.finance.orbit.plist.template" > "$ORBIT_PLIST"
+        launchctl bootout "$DOMAIN/$ORBIT_LABEL" 2>/dev/null || true
+        launchctl bootstrap "$DOMAIN" "$ORBIT_PLIST"
+        [ -n "$(_get DISCORD_WEBHOOK_ORBIT)" ] || echo "(aviso: falta DISCORD_WEBHOOK_ORBIT en .env — ORBIT solo escribirá en su log)"
+        echo "ORBIT encendido (arranca solo con la Mac y se reinicia si falla)";;
+      off)
+        launchctl bootout "$DOMAIN/$ORBIT_LABEL" 2>/dev/null || true
+        rm -f "$ORBIT_PLIST"
+        echo "ORBIT apagado (no vuelve a arrancar hasta 'ctl.sh orbit on'; su récord se conserva)";;
+      restart) launchctl kickstart -k "$DOMAIN/$ORBIT_LABEL" && echo "ORBIT reiniciado";;
+      status)
+        launchctl print "$DOMAIN/$ORBIT_LABEL" 2>/dev/null | grep -E "state =|pid =|last exit code =" \
+          || echo "ORBIT no está encendido";;
+      logs)
+        touch "$LOGDIR/orbit.out.log" "$LOGDIR/orbit.err.log"
+        echo "(Ctrl-C para salir)"; tail -n 40 -f "$LOGDIR"/orbit.*.log;;
+      *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs>";;
+    esac
+    ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|orbit on|off|status|logs>" >&2
     exit 2;;
 esac

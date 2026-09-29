@@ -81,9 +81,6 @@ class BotRuntime:
     # decide, and skipping the full structure scan is what makes years of
     # 1-minute bars replayable. Decisions are identical either way.
     track_market_state: bool = True
-    # Paper sub-bots (subbots/): own rules, own trades, fed the same 1-minute
-    # bars every cycle. They never read or change GHOST's decisions.
-    subbots: dict = field(default_factory=dict)
 
     status: BotStatus = field(default=BotStatus.OFFLINE, init=False)
     started_at: datetime | None = field(default=None, init=False)
@@ -251,14 +248,6 @@ class BotRuntime:
                 no_trades_produced += rejected
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DEGRADED, "ghost", str(exc))
-
-        for bot_symbol, bot in list(self.subbots.items()):
-            if bot_symbol != symbol:
-                continue
-            try:
-                bot.on_bars(tf_bars.get("1m"))
-            except Exception as exc:  # noqa: BLE001 - a sub-bot must never stop GHOST
-                self._set_component(ComponentStatus.DEGRADED, "subbots", str(exc)[:200])
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
