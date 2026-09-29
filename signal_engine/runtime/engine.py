@@ -369,7 +369,11 @@ class BotRuntime:
                     just_tp1 = (t.tp1_hit and before_tp1 is not None
                                 and t.signal_id not in before_tp1 and ncfg.tp1_hit)
                     if not just_tp1:
-                        self.output_dispatcher.publish_stop_moved(t.to_dict(), old)
+                        num = (t.context or {}).get("idea_number")
+                        self.output_dispatcher.publish_stop_moved(
+                            t.to_dict(), old, self._trade_chart(
+                                bars, t, (f"IDEA #{num} · " if num is not None else "")
+                                + f"{symbol} · stop movido a {t.stop:,.2f}"))
             self._update_discord_health()
         except Exception as exc:  # noqa: BLE001
             log.warning("trade notification failed (%s)", type(exc).__name__)
@@ -860,10 +864,11 @@ class BotRuntime:
         except Exception as exc:  # noqa: BLE001
             log.warning("daily record failed (%s)", type(exc).__name__)
 
-    def _close_chart(self, bars, trade, symbol: str) -> bytes | None:
-        """Chart of a closed trade — boxes with the ORIGINAL stop and target,
-        where the stop was moved (BE+ / trailing) and where it exited — or
-        None when charts are off or the bars do not cover the trade."""
+    def _trade_chart(self, bars, trade, title: str) -> bytes | None:
+        """Chart of a trade, open or closed: boxes with the ORIGINAL stop and
+        target, where the stop was moved and (if closed) where it exited.
+        None when charts are off or there are no bars. A trade longer than
+        four hours is drawn on 5-minute candles so its entry stays in view."""
         if not self.data_engine.cfg.output.notifications.charts or bars is None or bars.empty:
             return None
         try:
@@ -878,20 +883,61 @@ class BotRuntime:
             elif bars.index.tz is None and opened.tzinfo is not None:
                 opened = opened.tz_convert("America/New_York").tz_localize(None)
             i0 = max(0, int(bars.index.searchsorted(opened)) - 30)
-            window = bars.iloc[i0:].tail(240)
-            reason = (d.get("exit_reason") or "").upper()
-            pts = d.get("pnl_points") or 0.0
-            label = {"TP1": "objetivo", "TP2": "objetivo", "EOD": "cierre 16:55",
-                     "INVALIDATION": "invalidado"}.get(reason, "stop")
-            if reason == "STOP" and pts >= 0:
-                label = "BE+" if pts > 0.01 else "breakeven"
-            num = (d.get("context") or {}).get("idea_number")
-            title = (f"IDEA #{num} · " if num is not None else "") + \
-                f"{symbol} 1m · cerró en {label} · {pts:+.2f} pts"
-            return render_trade_png(window, d, title=title)
+            window = bars.iloc[i0:][["open", "high", "low", "close"]]
+            if len(window) > 240:
+                window = window.resample("5min", label="right", closed="right").agg(
+                    {"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+            return render_trade_png(window.tail(300), d, title=title)
         except Exception as exc:  # noqa: BLE001 - a chart is never worth a cycle
-            log.warning("close chart failed (%s)", type(exc).__name__)
+            log.warning("trade chart failed (%s)", type(exc).__name__)
             return None
+
+    def _close_chart(self, bars, trade, symbol: str) -> bytes | None:
+        """Chart of a closed trade, titled with how it closed."""
+        d = trade.to_dict()
+        reason = (d.get("exit_reason") or "").upper()
+        pts = d.get("pnl_points") or 0.0
+        label = {"TP1": "objetivo", "TP2": "objetivo", "EOD": "cierre 16:55",
+                 "INVALIDATION": "invalidado"}.get(reason, "stop")
+        if reason == "STOP" and pts >= 0:
+            label = "BE+" if pts > 0.01 else "breakeven"
+        num = (d.get("context") or {}).get("idea_number")
+        title = (f"IDEA #{num} · " if num is not None else "") + \
+            f"{symbol} · cerró en {label} · {pts:+.2f} pts"
+        return self._trade_chart(bars, trade, title)
+
+    def status_charts(self) -> list[bytes]:
+        """For !status: a chart of each open trade, or of the market right
+        now when there is none. Reads the live feed; never trades."""
+        out: list[bytes] = []
+        if not self.data_engine.cfg.output.notifications.charts:
+            return out
+        for sym, feed in (self.live_feeds or {}).items():
+            try:
+                bars = feed.get_tf_bars().get("1m")
+            except Exception:  # noqa: BLE001
+                continue
+            if bars is None or bars.empty:
+                continue
+            opens = [t for t in (self.paper_tracker.open_trades if self.paper_tracker else [])
+                     if t.is_open and t.instrument == sym]
+            for t in opens[:2]:
+                num = (t.context or {}).get("idea_number")
+                png = self._trade_chart(bars, t, (f"IDEA #{num} · " if num is not None else "")
+                                        + f"{sym} · abierto · {t.pnl_points:+.2f} pts ahora")
+                if png:
+                    out.append(png)
+            if not opens:
+                try:
+                    from ..output.trade_chart import render_trade_png
+                    last = bars[["open", "high", "low", "close"]].tail(240).resample(
+                        "5min", label="right", closed="right").agg(
+                        {"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+                    out.append(render_trade_png(last, {}, title=f"{sym} ahora · 5 min · "
+                                                            "sin posiciones abiertas"))
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("status chart failed (%s)", type(exc).__name__)
+        return out
 
     def _missed_chart(self, bars, ev: dict, symbol: str) -> bytes | None:
         """Chart for an idea that did not happen: the zone and the plan that

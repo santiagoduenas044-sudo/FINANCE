@@ -314,7 +314,9 @@ class OpeningRangeBot:
                 self._note(f"🔒 {self.name} — stop a BE+2",
                            f"El precio recorrió el {self.s.be_at:.0%} del camino al objetivo. "
                            f"Stop movido a {_px(t['stop'])}: este trade ya no puede perder. "
-                           f"Objetivo {_px(tgt)}.", 0x2ECC71, f"be:{t['id']}")
+                           f"Objetivo {_px(tgt)}.", 0x2ECC71, f"be:{t['id']}",
+                           image=self._chart(bars, t, f"{self.name} · stop a BE+2 "
+                                                      f"{_px(t['stop'])}"))
 
     def _close(self, t: dict, price: float, ts, why: str, bars, quiet: bool) -> None:
         s = self.s
@@ -394,8 +396,10 @@ class OpeningRangeBot:
             peak = max(peak, eq)
             dd = max(dd, peak - eq)
         wins = sum(1 for u in usd if u > 0)
+        won, lost = sum(u for u in usd if u > 0), sum(u for u in usd if u < 0)
         lines.append(f"**Total:** {len(usd)} trades · gana {wins / len(usd):.0%} · "
-                     f"**{_usd(sum(usd))}** · peor caída {_usd(-dd)}")
+                     f"ganado +${won:,.0f} · perdido −${abs(lost):,.0f} · "
+                     f"**neto {_usd(sum(usd))}** · peor caída {_usd(-dd)}")
         lines.append("")
         for x in self.closed[-last:][::-1]:
             mark = "✅" if x["usd"] > 0 else "🛑"

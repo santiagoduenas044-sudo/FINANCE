@@ -60,6 +60,7 @@ class Zone:
     top: float
     bottom: float
     stop: float                   # beyond the move's origin, clamped from the midpoint
+    origin: float | None = None   # the move's origin + buffer, before any clamp
 
     @property
     def mid(self) -> float:
@@ -102,7 +103,7 @@ def find_zones(bars: pd.DataFrame, symbol: str, p: ZoneRetraceParams) -> list[Zo
             origin = max(h[i - 2], h[i - 1]) + p.stop_buffer_points
         dist = min(max(abs(mid - origin), p.min_stop_points), p.max_stop_points)
         stop = mid - dist if d is Direction.BULLISH else mid + dist
-        out.append(Zone(zid, d, ts[i], top, bottom, round(stop, 4)))
+        out.append(Zone(zid, d, ts[i], top, bottom, round(stop, 4), round(float(origin), 4)))
     return out
 
 
@@ -219,6 +220,16 @@ class ZoneRetraceDetector(SetupDetector):
         stop = z.stop
         plan = self.plan_for(ctx, analysis, z)
         plan_r, tp1, final, basis = plan["plan_r"], plan["tp1"], plan["final"], plan["basis"]
+        if p.stop_from == "fill" and z.origin is not None:
+            # the stop behind the origin but 20-35 pts from the actual entry,
+            # the target a fixed multiple of that same distance (what the
+            # strategy lab measured for the 15-minute version)
+            d = min(max(abs(entry - z.origin), p.min_stop_points), p.max_stop_points)
+            stop = round(entry - d if bull else entry + d, 2)
+            k = p.fixed_target_r or p.fallback_target_r
+            final = round(entry + k * d if bull else entry - k * d, 2)
+            tp1 = final if p.single_target else tp1
+            plan_r, basis = d, f"{k:g}× el stop desde la entrada"
         risk = abs(entry - stop)
         beyond_tp1 = entry >= tp1 if bull else entry <= tp1
         if risk <= 0 or risk > p.max_risk_points or beyond_tp1 \
@@ -239,7 +250,9 @@ class ZoneRetraceDetector(SetupDetector):
                 f"Objetivo final: {basis}",
             ],
             invalidation_conditions=[f"Stop {stop:.2f}: {plan_r:g} pts "
-                                     f"{'bajo' if bull else 'sobre'} la mitad de la zona"],
+                                     f"{'bajo' if bull else 'sobre'} "
+                                     + ("la entrada" if p.stop_from == "fill"
+                                        else "la mitad de la zona")],
             invalidation_price=stop,
             valid_until=horizon(N, p.timeframe, p.expiration_bars),
             market_context={"session": ctx.session, "zone_id": z.zone_id,

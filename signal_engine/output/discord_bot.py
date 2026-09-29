@@ -16,13 +16,14 @@ The token is a secret — never logged, never echoed back.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
 import threading
 
 import pandas as pd
 
-from .record import build_record, exit_label, usd
+from .record import build_record, exit_label, trading_day, usd, won_lost
 
 log = logging.getLogger("signal_engine.output.discord_bot")
 
@@ -69,6 +70,16 @@ def _status(runtime) -> str:
         "**Posiciones abiertas**" + (f" · {open_pts:+.2f} pts en total" if open_pts is not None else ""),
     ]
     lines += p.get("open_trades") or ["_ninguna_"]
+    tracker = getattr(runtime, "paper_tracker", None)
+    closed = [t for t in (tracker.closed_trades if tracker is not None else [])
+              if t.closed_at is not None]
+    if closed:
+        _label, pv = _position(runtime)
+        today = trading_day(pd.Timestamp.now(tz="America/New_York"))
+        pts_today = [t.pnl_points for t in closed if trading_day(t.closed_at) == today]
+        lines.append("")
+        lines.append("**Hoy:** " + (won_lost(pts_today, pv) if pts_today else "sin trades cerrados"))
+        lines.append("**Total:** " + won_lost([t.pnl_points for t in closed], pv))
     return "\n".join(lines)
 
 
@@ -159,6 +170,19 @@ def build_reply(content: str, runtime) -> str | None:
         return "⚠️ No pude leer el estado del bot ahora mismo. Intenta de nuevo."
 
 
+def build_files(content: str, runtime) -> list[bytes]:
+    """Charts that go with a reply: !status shows each open trade (or the
+    market right now when flat)."""
+    words = (content or "").strip().split()
+    if not words or _ALIASES.get(words[0].lower()) != "status":
+        return []
+    try:
+        return list(runtime.status_charts())[:3]
+    except Exception as exc:  # noqa: BLE001 - a chart must not block the reply
+        log.warning("status chart failed (%s)", type(exc).__name__)
+        return []
+
+
 def _channel_filter() -> int | None:
     raw = os.environ.get(CHANNEL_ENV, "").strip()
     if not raw:
@@ -211,7 +235,13 @@ def start_command_bot(runtime, *, logger: logging.Logger | None = None
                 return
             reply = build_reply(message.content, runtime)
             if reply:
-                await message.channel.send(reply)
+                pngs = await asyncio.to_thread(build_files, message.content, runtime)
+                files = [discord.File(io.BytesIO(png), filename=f"grafica{i + 1}.png")
+                         for i, png in enumerate(pngs)]
+                if files:
+                    await message.channel.send(reply, files=files)
+                else:
+                    await message.channel.send(reply)
 
         async with client:
             await client.start(token)

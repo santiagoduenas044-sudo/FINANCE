@@ -117,9 +117,10 @@ class OutputDispatcher:
         """TP1 reached; stop moved to breakeven."""
         self._emit(OutputEvent.from_trade_tp1(paper_trade_dict))
 
-    def publish_stop_moved(self, paper_trade_dict: dict, old_stop: float) -> None:
-        """Breakeven / trailing moved the stop into profit."""
-        self._emit(OutputEvent.from_stop_moved(paper_trade_dict, old_stop))
+    def publish_stop_moved(self, paper_trade_dict: dict, old_stop: float,
+                           image_png: bytes | None = None) -> None:
+        """Breakeven / trailing moved the stop into profit (with a chart)."""
+        self._emit(OutputEvent.from_stop_moved(paper_trade_dict, old_stop, image_png))
 
     def publish_daily_record(self, text: str, day: str) -> None:
         """The record once the day is flat (today, week, total, last trades)."""

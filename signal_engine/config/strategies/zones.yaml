@@ -1,21 +1,17 @@
 # Zone-retrace strategy (the live bot's default; BOT_STRATEGY=zones).
 # Overlay on default.yaml: only what this strategy changes is listed here.
 #
-# Model: mark a fresh fair-value-gap zone on 5m, warn when price is coming back
-# to it ("get ready"), and only trade the FIRST retrace if price reacts there on
-# 1m. The plan is anchored at the zone midpoint (the "optimal" entry): stop
-# beyond the origin of the move, 20-35 pts; TP1 at 1R (or a swing up to 2R),
-# where the stop goes to breakeven; final target at the nearest untaken swing
-# (2R-5R) or 3R. The paper fill is the confirmation close — what "take the
-# entry now" really gets. Cut through without a reaction -> cancelled.
-#
-# NOT calibrated on real data yet: run scripts/audit_real_data.py on the Mac
-# (it uses this same strategy) before trusting the numbers.
+# Model: mark a fresh fair-value-gap zone on 15m, warn when price is coming
+# back to it ("get ready"), and only trade the FIRST retrace if a 15m candle
+# reacts there (closes back past the zone's middle). Stop behind the origin of
+# the move, 20-35 pts from the entry; one target at 3x that distance. Until
+# 2026-09 this was 5m zones + 1m confirmation, which lost in the 5-year lab
+# test (scripts/strategy_lab.py --estudio zonas).
 
 timeframe_roles:
   context: "1H"
-  structure: "5m"
-  execution: "1m"
+  structure: "15m"                  # the zones and their confirmation live here
+  execution: "1m"                   # the bot still checks every minute (stop/target)
 
 analysis:
   max_bars: 1440                    # 24h of 1m: a whole trade date (VWAP), fast
@@ -26,29 +22,32 @@ setups:
   orb: {enabled: false}
   zone_retrace:
     enabled: true
-    timeframe: "1m"
-    zone_timeframe: "5m"
-    zone_lookback_bars: 36          # zones from the last 3 hours
+    # 15-minute zones, confirmed on 15-minute candles (was 5m zones + 1m
+    # confirmation). Lab, 5 years of NQ, 5 MNQ: the 1-minute version lost
+    # $91,774 (-$12/trade in 2024-26); this one earned +$25/trade in 2021-23
+    # and +$12 in 2024-26. Positive in both periods but NOT a confirmed edge
+    # (confidence 1.3 / 0.7): a paper experiment while the lab looks for more.
+    # Same rules as the lab row "Zonas 15 min · stop 20-35 pts · TP 3x".
+    timeframe: "15m"
+    zone_timeframe: "15m"
+    zone_lookback_bars: 12          # zones from the last 3 hours
     min_zone_points: 3.0
-    max_zone_points: 40.0
+    max_zone_points: 60.0
     min_stop_points: 20.0
     max_stop_points: 35.0
     stop_buffer_points: 1.0
-    max_risk_points: 50.0
+    stop_from: "fill"               # stop 20-35 pts from the entry, behind the origin
+    max_risk_points: 120.0
     arm_distance_points: 30.0
-    confirm_bars: 5
+    confirm_bars: 2                 # the reaction within 2 candles (30 min) of the touch
     tp1_r: 1.0
     tp1_max_r: 2.0
     min_target_r: 2.0
     max_target_r: 5.0
     fallback_target_r: 3.0
-    # One target at 3R for the whole position: in the 5-year backtest
-    # (2021-09 -> 2026-09, 2,607 trades) it lost the least of every exit tried
-    # (-37.6R vs -74.0R for TP1 + BE + TP2). BE after TP1 kept closing trades
-    # that went on to the final target.
-    fixed_target_r: 3.0
+    fixed_target_r: 3.0             # one target at 3x the stop, whole position
     single_target: true
-    expiration_bars: 5
+    expiration_bars: 2
 
 signals:
   # R:R is judged on the plan (midpoint entry); from a fill taken a few points
@@ -60,10 +59,9 @@ ghost:
   min_rr: 0.5
   partial_at_tp1: 0.0               # no partial: one target, whole position
   breakeven_after_tp1: false
-  # Once price has covered 70% of the way to the target, the stop moves to
-  # the entry + 2 pts (pays the ~1 pt of commission and slippage), so a trade
-  # that almost reached the target never turns into a full loss.
-  be_at_progress: 0.7
+  # No breakeven: in the lab the BE+2 at 70% saved some trades and cost
+  # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
+  be_at_progress: null
   be_offset_points: 2.0
   # Flat by 16:55 ET, not 16:00: NQ trades until 17:00 and Apex only needs
   # the account flat before 16:59.

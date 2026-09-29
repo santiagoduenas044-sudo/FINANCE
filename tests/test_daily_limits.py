@@ -34,7 +34,8 @@ def test_live_strategy_is_one_3r_target_without_breakeven():
     z = cfg.setups.zone_retrace
     assert (z.fixed_target_r, z.single_target) == (3.0, True)
     assert cfg.ghost.partial_at_tp1 == 0.0 and cfg.ghost.breakeven_after_tp1 is False
-    assert (cfg.ghost.be_at_progress, cfg.ghost.be_offset_points) == (0.7, 2.0)
+    # no BE+2 at 70% any more: in the lab it took money away from the zones
+    assert cfg.ghost.be_at_progress is None
 
 
 def test_trading_day_rolls_at_six_pm_like_apex():
@@ -130,7 +131,8 @@ def _walk(tracker, direction, bars):
 
 
 def test_breakeven_plus_at_70_percent_of_the_way():
-    g = EngineConfig.load(strategy="zones").ghost
+    # the mechanism still works when a strategy turns it on
+    g = EngineConfig.load(strategy="zones").ghost.model_copy(update={"be_at_progress": 0.7})
     # long: target 75 pts away, 70% = +52.5 pts. Runs +55 then falls through the stop
     t = _walk(PaperTradeTracker.from_config(g), "LONG", [(155, 120, 150), (152, 99, 101), (102, 70, 72)])
     assert t.exit_reason.value == "STOP" and t.pnl_points == 2.0      # entry + 2 pts, not -25

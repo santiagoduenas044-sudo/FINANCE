@@ -220,7 +220,8 @@ class OutputEvent:
         )
 
     @classmethod
-    def from_stop_moved(cls, paper_trade_dict: dict, old_stop: float) -> "OutputEvent":
+    def from_stop_moved(cls, paper_trade_dict: dict, old_stop: float,
+                        image_png: bytes | None = None) -> "OutputEvent":
         stop = paper_trade_dict.get("stop") or 0.0
         return cls(
             kind="stop_moved",
@@ -228,4 +229,5 @@ class OutputEvent:
             title="STOP",
             disclaimer="Simulated paper trade — no real money, no broker connection.",
             status_payload={**paper_trade_dict, "old_stop": old_stop},
+            image_png=image_png,
         )

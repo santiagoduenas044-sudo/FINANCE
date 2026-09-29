@@ -40,8 +40,9 @@ def _tracker():
 
 def test_record_reads_in_dollars():
     text = build_record(_tracker().closed_trades, _t("2026-09-29 16:56"), 10.0, "5 MNQ")
-    assert "Hoy 29-Sep:** 2 trades · 1 ✅ 0 ➖ 1 🛑 · **−$230**" in text
-    assert "Esta semana:** 3 trades" in text and "**+$520**" in text
+    assert ("Hoy 29-Sep:** 2 trades · 1 ✅ 0 ➖ 1 🛑 · ganado +$20 · perdido −$250 · "
+            "**neto −$230**") in text
+    assert "Esta semana:** 3 trades" in text and "**neto +$520**" in text
     assert "BE+ · **+$20**" in text and "objetivo · **+$750**" in text
     assert not re.search(r"\d(\.\d+)?R\b", text)            # no multiples of the stop
 

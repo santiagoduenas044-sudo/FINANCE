@@ -149,6 +149,9 @@ class ZoneRetraceParams(BaseModel):
     # One target only (no TP1 / partial): the whole position rides to the
     # final target or the stop.
     single_target: bool = False
+    # "mid": stop and target measured from the zone midpoint (the plan).
+    # "fill": measured from the actual entry, the stop still behind the origin.
+    stop_from: str = "mid"
     expiration_bars: int = 5
     # The point values above are NQ points. Other symbols scale them: ES moves
     # roughly a quarter of NQ's points for the same % move.

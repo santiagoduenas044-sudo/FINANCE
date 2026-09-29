@@ -43,6 +43,15 @@ def _mark(pts: float) -> str:
     return "✅" if pts > 0.01 else ("➖" if pts >= -0.01 else "🛑")
 
 
+def won_lost(pts: list[float], pv: float) -> str:
+    """'ganado +$1,200 · perdido −$300 · neto +$900' in the position's dollars."""
+    won = sum(p for p in pts if p > 0) * pv
+    lost = sum(p for p in pts if p < 0) * pv
+    net = won + lost
+    return (f"ganado +${won:,.0f} · perdido −${abs(lost):,.0f} · "
+            f"**neto {'+' if net >= 0 else '−'}${abs(net):,.0f}**")
+
+
 def _line(label: str, trades: list, pv: float) -> str:
     if not trades:
         return f"**{label}:** sin trades"
@@ -50,7 +59,7 @@ def _line(label: str, trades: list, pv: float) -> str:
     w = sum(1 for p in pts if p > 0.01)
     flat = sum(1 for p in pts if abs(p) <= 0.01)
     return (f"**{label}:** {len(pts)} trades · {w} ✅ {flat} ➖ {len(pts) - w - flat} 🛑 · "
-            f"**{usd(sum(pts), pv)}** ({sum(pts):+.1f} pts)")
+            f"{won_lost(pts, pv)} ({sum(pts):+.1f} pts)")
 
 
 def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> str:
@@ -73,7 +82,7 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> 
         wins = sum(1 for p in pts if p > 0.01)
         first = trading_day(trades[0].closed_at)
         lines.append(f"**Total desde {first:%d-%b}:** {len(pts)} trades · gana {wins / len(pts):.0%} · "
-                     f"**{usd(sum(pts), pv)}** · peor caída {usd(-dd, pv)}")
+                     f"{won_lost(pts, pv)} · peor caída {usd(-dd, pv)}")
         lines.append("")
         lines.append("**Últimos trades**")
         for t in trades[-last:][::-1]:
