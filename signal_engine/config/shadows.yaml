@@ -36,6 +36,14 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
 
+  - id: zonas_15m_noticias
+    name: "Zonas 15 min · sin noticias"
+    about: "La versión principal, pero sin entrar de 10 min antes a 15 min después de una noticia fuerte de EE.UU. (CPI, empleo, FOMC…)."
+    strategy: zones
+    overrides:
+      ghost:
+        news_blackout: {before: 10, after: 15, impacts: ["High"]}
+
 orbit:
   - id: apertura_30m
     name: "APERTURA · caja 30 min"

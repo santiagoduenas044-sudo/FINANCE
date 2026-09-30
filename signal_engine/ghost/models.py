@@ -68,6 +68,7 @@ class NoTradeReason(str, Enum):
     TOO_LATE = "too_late_in_session"         # RTH entry after last_entry_time
     INVALID_TRADE_PLAN = "invalid_trade_plan"  # entry/stop/tp inconsistent
     DUPLICATE = "duplicate"                  # same signal_id already processed
+    NEWS = "news_event"                      # inside a high-impact news window
 
 
 def _iso(ts) -> str | None:

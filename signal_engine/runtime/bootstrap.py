@@ -204,6 +204,11 @@ def build_runtime(
         signal_log_path=signal_log_path,
         ghost=ghost, paper_tracker=paper_tracker, ghost_log_path=ghost_log,
     )
+    # economic calendar for the live bot (BOT_NEWS=off disables); replays do without
+    if ghost is not None and data_dir is None and \
+            os.environ.get("BOT_NEWS", "on").strip().lower() not in ("off", "0", "false"):
+        from ..news import NewsCalendar
+        runtime.news = NewsCalendar()
     # parallel paper variants (config/shadows.yaml); BOT_SHADOWS=off disables
     if ghost is not None and data_dir is None and \
             os.environ.get("BOT_SHADOWS", "on").strip().lower() not in ("off", "0", "false"):

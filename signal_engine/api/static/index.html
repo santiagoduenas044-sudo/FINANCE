@@ -363,6 +363,14 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 }
 
 /* ── central de bots ── */
+.newsbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 18px; padding: 11px 14px;
+  border-radius: 12px; background: var(--panel); border: 1px solid var(--rule); font-size: 13px; color: var(--ink-2); }
+.newsbar b { color: var(--ink-1); font-weight: 600; margin-right: 4px; }
+.newsbar .ev { display: inline-flex; gap: 6px; align-items: baseline; padding: 3px 10px; border-radius: 999px;
+  background: var(--critical-dim); color: var(--ink-1); }
+.newsbar .ev .hm { font: 600 12px var(--mono); color: var(--critical); }
+.newsbar .ev.hol { background: var(--amber-dim); } .newsbar .ev.hol .hm { color: var(--amber); }
+.newsbar .ev.past { opacity: .5; }
 :root { --violet: #a78bfa; --violet-dim: rgba(167, 139, 250, .13); }
 .hubhead { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
 .hubhead h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
@@ -549,6 +557,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
       <div><h1>Central de bots</h1><p>Qué está haciendo cada bot ahora, cómo le va a cada versión y en qué quedó cada estrategia.</p></div>
       <div class="sum" id="hub-sum"></div>
     </div>
+    <div class="newsbar" id="hub-news" hidden></div>
     <div class="bots" id="hub-bots"><div class="card"><div class="empty">Cargando…</div></div></div>
     <div class="card"><h3>Estrategias <span class="r">en vivo, en estudio y descartadas por el laboratorio</span></h3>
       <div class="body"><div class="strats" id="hub-strats"></div></div></div>
@@ -782,7 +791,8 @@ const REASON_ES = { active_trade: "ya había un trade abierto", cooldown: "pausa
   too_late_in_session: "muy tarde", invalid_session: "fuera de horario", excessive_volatility: "volatilidad excesiva",
   setup_incomplete: "setup incompleto", insufficient_rr: "objetivo muy corto para el stop", target_too_close: "objetivo muy cerca",
   stale_data: "datos atrasados", duplicate: "duplicada", conflicting_setups: "señales opuestas",
-  stop_too_tight: "stop muy ajustado", stop_too_wide: "stop muy ancho", risk_rejected: "riesgo" };
+  stop_too_tight: "stop muy ajustado", stop_too_wide: "stop muy ancho", risk_rejected: "riesgo",
+  news_event: "noticia fuerte" };
 function tile(lab, fig, sub, tone) {
   return `<div class="tile ${tone || ""}"><div class="lab">${esc(lab)}</div><div class="fig">${fig}</div><div class="sub">${sub || ""}</div></div>`;
 }
@@ -1120,6 +1130,14 @@ function renderBots() {
   const d = S.bots;
   if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.${
     S.botsErr ? `<br><span class="mono" style="font-size:12px">${esc(S.botsErr)}</span>` : ""}</div></div>`; return; }
+  const nw = d.news || {};
+  $("hub-news").hidden = false;
+  $("hub-news").innerHTML = !nw.available
+    ? `<b>Noticias de hoy</b><span class="zero">calendario no disponible todavía</span>`
+    : nw.events.length
+      ? `<b>Noticias fuertes de hoy (EE.UU.)</b>` + nw.events.map(e => `<span class="ev ${e.impact === "Holiday" ? "hol" : ""} ${
+          Date.parse(e.time) < Date.now() - 15 * 60e3 ? "past" : ""}"><span class="hm">${e.impact === "Holiday" ? "feriado" : esc(e.hm)}</span>${esc(e.title)}</span>`).join("")
+      : `<b>Noticias de hoy</b><span class="zero">ninguna noticia fuerte de EE.UU.</span>`;
   $("hub-sum").innerHTML = `<span class="pill"><span class="k">juntos</span><span class="v ${cls(d.combined_usd)}">${usd0(d.combined_usd)}</span></span>`
     + (d.commit?.commit ? `<span class="pill"><span class="k">código</span><span class="v mono">${esc(d.commit.commit)}</span></span>` : "");
   $("hub-bots").innerHTML = d.bots.map(b => {

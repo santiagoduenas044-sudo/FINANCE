@@ -89,7 +89,7 @@ def test_ghost_shadows_get_the_live_bars(tmp_path):
     from tests.test_bot_runtime import _pipeline
 
     shadows = build_ghost_shadows(ContractRegistry.load(), base=tmp_path)
-    assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche"]
+    assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche", "zonas_15m_noticias"]
     engine = DataEngine(EngineConfig.load(strategy="zones"))
     rt = _runtime(engine)
     rt.shadows = shadows

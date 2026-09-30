@@ -75,6 +75,7 @@ class GhostBrain:
                  has_active: Callable[[str, str, str], bool] | None = None,
                  cooldown_check: Callable[[str], tuple[bool, dict] | tuple[bool, None]] | None = None,
                  duplicate_check: Callable[[str], bool] | None = None,
+                 news_check: Callable | None = None,
                  ) -> tuple[MarketState, list[GhostDecision]]:
         """Return (market_state, decisions). `data_stale`, `has_active`,
         `cooldown_check` and `duplicate_check` are supplied by the runtime
@@ -101,14 +102,15 @@ class GhostBrain:
 
             decisions.append(self._decide_signal(res, ms, exec_ta, ctx,
                                                   data_stale, conflicting, has_active,
-                                                  cooldown_check, duplicate_check))
+                                                  cooldown_check, duplicate_check,
+                                                  news_check))
         return ms, decisions
 
     # ------------------------------------------------------------------ #
     def _decide_signal(self, sig: Signal, ms: MarketState, exec_ta,
                        ctx: AnalysisContext, data_stale: bool, conflicting: bool,
                        has_active, cooldown_check=None,
-                       duplicate_check=None) -> GhostDecision:
+                       duplicate_check=None, news_check=None) -> GhostDecision:
         cfg = self.cfg
         direction = sig.direction.value
         reasons: list[NoTradeReason] = []
@@ -126,6 +128,12 @@ class GhostBrain:
             reasons.append(NoTradeReason.TOO_LATE)
         if conflicting:
             reasons.append(NoTradeReason.CONFLICTING_SETUPS)
+        # high-impact news window (only when this strategy asks for it)
+        if cfg.news_blackout and news_check is not None:
+            ev = news_check(ctx.decision_time, cfg.news_blackout)
+            if ev is not None:
+                reasons.append(NoTradeReason.NEWS)
+                extra["news"] = f"{ev.when:%H:%M} {ev.title}"
         # Phase 15: max_open_per_symbol=1 => any open trade on the symbol blocks.
         if has_active is not None and has_active(sig.instrument, direction, sig.setup):
             reasons.append(NoTradeReason.ACTIVE_TRADE)
@@ -180,6 +188,8 @@ class GhostBrain:
         if extra.get("cooldown"):
             cd = extra["cooldown"]
             detail_extra += f" cooldown_until={cd.get('cooldown_until')}"
+        if extra.get("news"):
+            detail_extra += f" news={extra['news']}"
 
         if reasons:
             return GhostDecision(

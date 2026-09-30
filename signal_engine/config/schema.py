@@ -409,6 +409,9 @@ class GhostConfig(BaseModel):
     # entry + be_offset_points; at 70%, stop to entry + 30% of the way (+ the
     # same offset). Same rule as the lab's "escalones" (strategy_lab.py).
     lock_steps: Optional[list[list[float]]] = None
+    # No new entries around high-impact US news (signal_engine/news.py):
+    # {"before": 10, "after": 15, "impacts": ["High"]} minutes. None = off.
+    news_blackout: Optional[dict] = None
     # Trailing: after trail_start_r R in favour, the stop follows the best
     # price at trail_distance_r R behind it.
     trail_start_r: Optional[float] = None

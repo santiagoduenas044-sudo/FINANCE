@@ -29,6 +29,7 @@ _REASONS_ES = {
     "setup_incomplete": "la señal no estaba completa", "stop_too_tight": "stop muy corto",
     "stop_too_wide": "stop muy largo", "risk_rejected": "control de riesgo",
     "daily_limit": "límite del día", "insufficient_confluence": "poca confluencia",
+    "news_event": "noticia fuerte",
 }
 
 
@@ -385,4 +386,16 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
                                     "net_usd": v["total"]["net_usd"]} for v in runs]}
         strategies.append({**st, "live": live})
     return _clean({"now": now.isoformat(), "commit": commit or {}, "bots": bots,
-                   "strategies": strategies, "combined_usd": round(sum(totals.values()), 2)})
+                   "strategies": strategies, "combined_usd": round(sum(totals.values()), 2),
+                   "news": news_today(getattr(runtime, "news", None), now)})
+
+
+def news_today(calendar, now) -> dict:
+    """Today's high-impact US releases (and market holidays) for the hub."""
+    if calendar is None:
+        return {"available": False, "events": []}
+    try:
+        evs = calendar.on_day(now, impacts=("High", "Holiday"))
+    except Exception:  # noqa: BLE001
+        return {"available": False, "events": []}
+    return {"available": bool(calendar.events()), "events": [e.to_dict() for e in evs]}

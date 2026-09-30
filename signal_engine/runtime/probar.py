@@ -50,6 +50,7 @@ REASONS_ES = {
     "invalid_trade_plan": "plan de trade inválido",
     "risk_rejected": "el control de riesgo la bloqueó",
     "daily_limit": "ya se alcanzó el límite del día (pérdida máxima)",
+    "news_event": "había una noticia fuerte en ese momento",
 }
 
 

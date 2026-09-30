@@ -146,7 +146,8 @@ def switch_ghost_shadow(runtime, spec_id: str, on: bool, base: Path = SHADOWS_DI
     return True
 
 
-def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_time=None) -> None:
+def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_time=None,
+                      news=None) -> None:
     """Feed one closed bar's context to every shadow (the live runtime's
     own bars, so the variants judge the same market). Bars that close after
     `decision_time` (a still-forming 5m/15m candle) are cut, and a variant
@@ -163,6 +164,7 @@ def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_t
             if getattr(rt, "_shadow_last_bar", None) == last:
                 continue
             rt._shadow_last_bar = last
+            rt.news = news
             rt.now_fn = lambda _now=now: _now
             rt.run_cycle(symbol, tf_bars)
         except Exception as exc:  # noqa: BLE001

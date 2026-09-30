@@ -48,6 +48,11 @@ STRATEGIES: list[dict] = [
     {"name": "Asegurar ganancia (escalones)", "bot": "GHOST", "status": "en estudio",
      "text": "Subir el stop por escalones cuando el trade va bien (BE+2, 30 %, 60 %…).",
      "lab": "Pendiente: --estudio proteccion en la Mac."},
+    {"name": "Evitar noticias fuertes", "bot": "GHOST", "status": "en paralelo",
+     "shadows": ["zonas_15m_noticias"],
+     "text": "La de 15 min sin entrar de 10 min antes a 15 min después de CPI, empleo, "
+             "FOMC y otras noticias fuertes de EE.UU.",
+     "lab": "Sin prueba de 5 años (no hay calendario histórico); se mide en papel."},
     {"name": "Zonas 1 min", "bot": "GHOST", "status": "en paralelo", "shadows": ["zonas_1m"],
      "text": "La versión anterior de GHOST (zonas de 5 min confirmadas en 1 min), corriendo "
              "en papel al lado de la de 15 min para compararlas.",

@@ -110,6 +110,8 @@ class BotRuntime:
     ghost_market_read: dict[str, list[str]] = field(default_factory=dict, init=False)
     # parallel paper variants (runtime/shadows.py): fed this runtime's bars
     shadows: list = field(default_factory=list, init=False)
+    # economic calendar (signal_engine/news.py), shared with the shadows
+    news: object = field(default=None, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -252,9 +254,11 @@ class BotRuntime:
             except Exception as exc:  # noqa: BLE001
                 self._set_component(ComponentStatus.DEGRADED, "ghost", str(exc))
 
+        if self.news is not None:
+            self.news.refresh()                  # at most every few hours; never raises
         if self.shadows:
             from .shadows import run_ghost_shadows
-            run_ghost_shadows(self.shadows, symbol, tf_bars, now, decision_time)
+            run_ghost_shadows(self.shadows, symbol, tf_bars, now, decision_time, news=self.news)
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
@@ -524,11 +528,17 @@ class BotRuntime:
 
         decisions = []
         if base_results or self.track_market_state:
+            news_check = None
+            if self.news is not None and gcfg.news_blackout:
+                def news_check(ts, rule, _cal=self.news):
+                    return _cal.blackout(ts, rule.get("before", 10), rule.get("after", 15),
+                                         tuple(rule.get("impacts", ["High"])))
             ms, decisions = self.ghost.evaluate(ctx, analysis, base_results,
                                                 data_stale=data_stale,
                                                 has_active=has_active,
                                                 cooldown_check=cooldown_check,
-                                                duplicate_check=duplicate_check)
+                                                duplicate_check=duplicate_check,
+                                                news_check=news_check)
             self.ghost_market_state[symbol] = ms.to_dict()
             self.ghost_market_read[symbol] = market_read(ms)
         self._set_component(ComponentStatus.OK, "ghost")
@@ -1244,6 +1254,7 @@ _IDEA_REJECT_ES = {
     "excessive_volatility": "volatilidad excesiva en ese momento",
     "stale_data": "los datos llegaron atrasados",
     "daily_limit": "ya se alcanzó el límite del día",
+    "news_event": "había una noticia fuerte en ese momento",
 }
 
 
