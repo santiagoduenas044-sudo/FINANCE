@@ -363,6 +363,17 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 }
 
 /* ── central de bots ── */
+.sumt td { white-space: normal; vertical-align: top; }
+.sumt .who { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink-1); white-space: nowrap; }
+.sumt .who i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.sumt .sub { display: block; color: var(--ink-3); font-size: 11.5px; font-weight: 400; margin-top: 2px; }
+.sumt tr.child td:first-child { padding-left: 30px; }
+.sumt tr.child .who { font-weight: 500; color: var(--ink-2); }
+.sumt tr.off td { opacity: .5; }
+.sumt .lab { color: var(--ink-3); font-size: 12px; min-width: 200px; }
+@media (max-width: 640px) { .sumt .hide-s { display: none; }
+  .sumt td, .sumt th { padding: 10px 8px; } .sumt tr.child td:first-child { padding-left: 16px; }
+  .sumt td.t { white-space: nowrap; } }
 .newsbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: -4px 0 18px; padding: 11px 14px;
   border-radius: 12px; background: var(--panel); border: 1px solid var(--rule); font-size: 13px; color: var(--ink-2); }
 .newsbar b { color: var(--ink-1); font-weight: 600; margin-right: 4px; }
@@ -558,6 +569,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
       <div class="sum" id="hub-sum"></div>
     </div>
     <div class="newsbar" id="hub-news" hidden></div>
+    <div class="card mb" id="hub-sumcard" hidden><h3>Resumen <span class="r">cada bot y sus versiones en paralelo</span></h3>
+      <div class="scroll" style="max-height:none"><table class="sumt" id="hub-table"></table></div></div>
     <div class="bots" id="hub-bots"><div class="card"><div class="empty">Cargando…</div></div></div>
     <div class="card"><h3>Estrategias <span class="r">en vivo, en estudio y descartadas por el laboratorio</span></h3>
       <div class="body"><div class="strats" id="hub-strats"></div></div></div>
@@ -1130,6 +1143,26 @@ function renderBots() {
   const d = S.bots;
   if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.${
     S.botsErr ? `<br><span class="mono" style="font-size:12px">${esc(S.botsErr)}</span>` : ""}</div></div>`; return; }
+  // resumen: every bot, then its parallel variants
+  const labOf = (bot, id) => (d.strategies.find(st => id ? (st.shadows || []).includes(id)
+    : st.status === "en vivo" && st.bot === bot) || {}).lab || "—";
+  const paper = (rec, open) => (rec?.n ? `<b class="${cls(rec.net_usd)}">${usd0(rec.net_usd)}</b><span class="sub">${rec.n} ${rec.n === 1 ? "trade" : "trades"}</span>`
+    : `<span class="zero">sin trades</span>`) + (open != null ? `<span class="sub">abierto ${usd0(open)}</span>` : "");
+  const dotc = b => b.color === "violet" ? "var(--violet)" : "var(--amber)";
+  $("hub-sumcard").hidden = false;
+  $("hub-table").innerHTML = `<thead><tr><th>Bot</th><th>Estrategia</th><th class="hide-s">Tamaño</th><th class="hide-s">Estado</th>
+      <th class="hide-s">Laboratorio (5 años)</th><th>En papel</th></tr></thead><tbody>` + d.bots.map(b => {
+    const main = b.main || { title: b.strategy, total: b.total };
+    const row = `<tr><td><span class="who"><i style="background:${dotc(b)}"></i>${esc(b.name)}</span><span class="sub">principal · avisa en Discord</span></td>
+      <td>${esc(main.version ? main.version + " · " + main.title : main.title)}</td><td class="hide-s t">${esc(b.position)}</td>
+      <td class="hide-s">${esc(STATE_ES[b.state] || b.state)}</td><td class="lab hide-s">${esc(labOf(b.name))}</td>
+      <td class="t">${paper(main.total, b.open_usd)}</td></tr>`;
+    return row + (b.variants || []).map(v => `<tr class="child ${v.enabled ? "" : "off"}">
+      <td><span class="who"><i style="background:${dotc(b)};opacity:.5"></i>${esc(b.name)}</span><span class="sub">en paralelo · ${v.enabled ? "prendida" : "apagada"}</span></td>
+      <td>${esc(v.name)}</td><td class="hide-s t">${esc(b.position)}</td>
+      <td class="hide-s">${v.enabled ? (v.open_usd != null ? "Operando" : "Prendida") : "Apagada"}</td>
+      <td class="lab hide-s">${esc(labOf(b.name, v.id))}</td><td class="t">${paper(v.total, v.open_usd)}</td></tr>`).join("");
+  }).join("") + "</tbody>";
   const nw = d.news || {};
   $("hub-news").hidden = false;
   $("hub-news").innerHTML = !nw.available
