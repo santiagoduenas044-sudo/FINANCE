@@ -295,7 +295,11 @@ class OpeningRangeBot:
              "entry": entry, "stop": stop, "stop_initial": stop, "target": target,
              "risk": risk, "be_done": False, "opened_at": str(ts),
              "box_hi": p["box_hi"], "box_lo": p["box_lo"],
-             "signal_ts": p["signal_ts"]}
+             "signal_ts": p["signal_ts"],
+             # the size it was opened with: a restart with another size (or
+             # ORBIT_POSITION changed) must not change what this trade is worth
+             "contracts": s.contracts, "symbol": s.symbol,
+             "usd_per_point": s.usd_per_point, "cost_points": s.cost_points}
         self.st.trade = t
         if quiet:
             return
@@ -338,12 +342,15 @@ class OpeningRangeBot:
 
     def _close(self, t: dict, price: float, ts, why: str, bars, quiet: bool) -> None:
         s = self.s
+        n = t.get("contracts", s.contracts)
+        sym = t.get("symbol", s.symbol)
+        cost = t.get("cost_points", s.cost_points)
         pts = (price - t["entry"]) if t["long"] else (t["entry"] - price)
-        net = pts - s.cost_points
-        usd = net * s.usd_per_point * s.contracts
+        net = pts - cost
+        usd = net * t.get("usd_per_point", s.usd_per_point) * n
         done = {**t, "exit": price, "closed_at": str(ts), "why": why,
                 "pts": round(pts, 2), "net_pts": round(net, 2), "usd": round(usd, 2),
-                "contracts": s.contracts, "symbol": s.symbol}
+                "contracts": n, "symbol": sym}
         self.st.trade = None
         self._append_trade(done)
         if quiet:
@@ -351,8 +358,8 @@ class OpeningRangeBot:
         mark = "✅" if usd > 0 else ("➖" if abs(net) < 0.5 else "🛑")
         side = "COMPRA" if t["long"] else "VENTA"
         text = (f"{side} {_px(t['entry'])} → {_px(price)} · **{why}**\n"
-                f"**{pts:+.2f} pts · {_usd(usd)}** con {s.position} "
-                f"(ya descontados {s.cost_points:g} pts de comisión y deslizamiento)\n"
+                f"**{pts:+.2f} pts · {_usd(usd)}** con {n} {sym} "
+                f"(ya descontados {cost:g} pts de comisión y deslizamiento)\n"
                 + self.summary_line())
         self._note(f"{mark} {self.name} — cerrado: {why}", text,
                    0x2ECC71 if usd > 0 else 0xE74C3C, f"close:{t['id']}",

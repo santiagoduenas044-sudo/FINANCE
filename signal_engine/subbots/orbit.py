@@ -17,7 +17,7 @@ Environment (.env):
     DISCORD_WEBHOOK_ORBIT   webhook of ORBIT's own channel (without it ORBIT
                             only writes to its log; it never uses GHOST's)
     ORBIT_NAME              name shown in the messages (default ORBIT)
-    ORBIT_POSITION          paper position (default "1 NQ"; "1 MNQ", "2 MNQ"...)
+    ORBIT_POSITION          paper position (default "5 MNQ"; "1 NQ", "1 MNQ"...)
 """
 from __future__ import annotations
 
@@ -42,7 +42,8 @@ POLL_SECONDS = 30
 log = logging.getLogger("orbit")
 
 
-DEFAULT_POSITION = "1 NQ"     # was 1 MNQ until 2026-09-29
+DEFAULT_POSITION = "5 MNQ"    # 1 MNQ until 09-29, 1 NQ on 09-29/30 (one stop could pass
+                              # an Apex 50K's $2,500 limit), 5 MNQ like GHOST since 09-30
 
 
 def bot_name() -> str:
@@ -50,7 +51,7 @@ def bot_name() -> str:
 
 
 def settings() -> OrbSettings:
-    """APERTURA's rules for the position in $ORBIT_POSITION (default 1 NQ)."""
+    """APERTURA's rules for the position in $ORBIT_POSITION (default 5 MNQ)."""
     pos = os.environ.get("ORBIT_POSITION", "").strip() or DEFAULT_POSITION
     try:
         return OrbSettings.for_position(pos)

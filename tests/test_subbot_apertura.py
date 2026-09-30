@@ -282,16 +282,39 @@ def test_early_close_holiday_exits_at_the_last_price(tmp_path):
     assert pd.Timestamp(t["closed_at"]).strftime("%H:%M") == "13:00"
 
 
-def test_orbit_trades_one_nq_by_default(monkeypatch):
+
+
+def test_orbit_trades_five_micros_by_default(monkeypatch):
     from signal_engine.subbots import orbit
     from signal_engine.subbots.opening_range import OrbSettings
 
     monkeypatch.delenv("ORBIT_POSITION", raising=False)
     s = orbit.settings()
-    # 1 NQ: $20/pt; costs $3.10 commission ($1.55 per side) + 1 tick per side
-    assert (s.position, s.usd_per_point, s.cost_points) == ("1 NQ", 20.0, 0.655)
-    # 1 MNQ keeps the lab's cost (1.02 pts)
-    monkeypatch.setenv("ORBIT_POSITION", "1 MNQ")
-    assert orbit.settings().cost_points == OrbSettings().cost_points == 1.02
+    # 5 MNQ: $10/pt; costs per contract stay 1.02 pts ($1.04 commission + 1 tick per side)
+    assert (s.position, s.usd_per_point * s.contracts, s.cost_points) == ("5 MNQ", 10.0, 1.02)
+    monkeypatch.setenv("ORBIT_POSITION", "1 NQ")
+    assert (orbit.settings().usd_per_point, orbit.settings().cost_points) == (20.0, 0.655)
     monkeypatch.setenv("ORBIT_POSITION", "nonsense")
-    assert orbit.settings().position == "1 NQ"
+    assert orbit.settings().position == "5 MNQ"
+    assert OrbSettings().cost_points == 1.02
+
+
+def test_a_trade_keeps_the_size_it_opened_with(tmp_path):
+    from signal_engine.subbots.opening_range import OpeningRangeBot, OrbSettings
+    from signal_engine.versions import orbit_version_of
+
+    bot = OpeningRangeBot(tmp_path, settings=OrbSettings.for_position("1 NQ"))
+    bot.st.day = "2026-09-30"
+    bot._open({"long": True, "stop": 30683.0, "box_hi": 30810.0, "box_lo": 30683.0,
+               "signal_ts": "2026-09-30 10:05:00-04:00", "signal_close": 30841.0},
+              30841.25, "2026-09-30 10:06:00-04:00", None, quiet=True)
+    # ORBIT restarts with 5 MNQ while the trade is open: it still closes as 1 NQ
+    bot2 = OpeningRangeBot(tmp_path, settings=OrbSettings.for_position("5 MNQ"))
+    bot2.st.trade = bot.st.trade
+    bot2._close(bot2.st.trade, 30941.25, "2026-09-30 11:00:00-04:00", "prueba", None, quiet=True)
+    done = bot2.closed[-1]
+    assert (done["contracts"], done["symbol"]) == (1, "NQ")
+    assert done["usd"] == round((100 - 0.655) * 20, 2)
+    assert orbit_version_of(done) == "v2"
+    assert orbit_version_of({"symbol": "MNQ", "contracts": 5}) == "v3"
+    assert orbit_version_of({"usd": 10}) == "v1"

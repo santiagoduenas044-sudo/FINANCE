@@ -15,7 +15,8 @@ from pathlib import Path
 import pandas as pd
 
 from ..output.record import commission_per_trade
-from ..versions import BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of
+from ..versions import (BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of,
+                        orbit_version_of)
 
 NY = "America/New_York"
 log = logging.getLogger(__name__)
@@ -274,7 +275,8 @@ def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | No
         px = st.last_close
         pts = None if px is None else (px - t["entry"]) if long else (t["entry"] - px)
         if pts is not None:
-            open_usd = round(pts * s.usd_per_point * s.contracts, 2)
+            open_usd = round(pts * t.get("usd_per_point", s.usd_per_point)
+                             * t.get("contracts", s.contracts), 2)
         lines.append({"kind": "trade", "text":
                       f"{'Compra' if long else 'Venta'} abierta en {_px(t['entry'])} · stop "
                       f"{_px(t['stop'])} · objetivo {_px(t['target'])}"
@@ -313,7 +315,7 @@ def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | No
         lines.insert(0, {"kind": "alert", "text":
                          f"Sin señal de vida hace {age / 60:.0f} min: revisa con "
                          "bash deploy/macos/ctl.sh orbit status."})
-    rows = [(c.get("version") or ("v2" if c.get("symbol") == "NQ" else "v1"),
+    rows = [(orbit_version_of(c),
              float(c.get("usd", 0))) for c in bot.closed]
     return {**base, "status": "ONLINE" if alive else "STALE", "state": state,
             "heartbeat": pd.Timestamp(state_file.stat().st_mtime, unit="s", tz="UTC").isoformat(),

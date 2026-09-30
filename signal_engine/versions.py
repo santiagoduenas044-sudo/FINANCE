@@ -32,6 +32,9 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
          "lado, objetivo 1.5× el stop, entrada +2 al 70 %, cierre 16:55. 1 MNQ."),
         ("v2", "2026-09-29", "APERTURA · 1 NQ",
          "Las mismas reglas con 1 NQ ($20 por punto)."),
+        ("v3", "2026-09-30", "APERTURA · 5 MNQ",
+         "Las mismas reglas con 5 MNQ ($10 por punto), como GHOST: un stop grande de la "
+         "caja cuesta la mitad que con 1 NQ."),
     ],
 }
 
@@ -122,3 +125,14 @@ def ghost_version_of(trade) -> str:
     if night or "2026-09-27" <= ts.date().isoformat() <= "2026-09-28":
         return "v3"
     return "v2"
+
+
+def orbit_version_of(trade: dict) -> str:
+    """Which ORBIT version made a closed trade, from the size it traded."""
+    if trade.get("version"):
+        return trade["version"]
+    if trade.get("symbol") == "NQ":
+        return "v2"
+    if trade.get("symbol") == "MNQ" and int(trade.get("contracts") or 1) >= 5:
+        return "v3"
+    return "v1"
