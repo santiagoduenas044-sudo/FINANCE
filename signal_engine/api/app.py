@@ -27,7 +27,7 @@ from ..live.movers import MoversService
 from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .lab import LabError, LabManager
-from .practice import PracticeKey
+from .practice import PracticeKey, write_env_value
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
 
@@ -439,6 +439,22 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                 "El dashboard no tiene clave (DASHBOARD_TOKEN): cualquiera que llegue a él "
                 "lo vería todo. Ponle clave primero."))
         return {"active": True, "path": f"/practica?token={practice.new()}", "protected": True}
+
+    @app.post("/api/system/lock")
+    def system_lock() -> dict:
+        """Give the dashboard its own key when it has none (from the phone,
+        no Terminal): saved in .env for the next starts and active at once.
+        Once there is a key this answers only to it, and refuses to change it."""
+        if settings.auth_enabled:
+            raise HTTPException(status_code=409, detail="El dashboard ya tiene clave.")
+        import secrets
+        token = secrets.token_urlsafe(18)
+        try:
+            write_env_value(Path(backtests.root) / ".env", settings.auth_token_env, token)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"No pude guardar la clave ({exc}).")
+        os.environ[settings.auth_token_env] = token
+        return {"token": token}
 
     @app.post("/api/practice/revoke")
     def practice_revoke() -> dict:

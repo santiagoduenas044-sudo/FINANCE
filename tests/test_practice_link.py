@@ -49,3 +49,22 @@ def test_no_link_while_the_dashboard_has_no_key(tmp_path, monkeypatch):
     c = _client(tmp_path, monkeypatch, token=None)
     r = c.post("/api/practice/link")
     assert r.status_code == 409 and "DASHBOARD_TOKEN" in r.json()["detail"]
+
+
+def test_lock_the_dashboard_from_the_phone(tmp_path, monkeypatch):
+    monkeypatch.setenv("DASHBOARD_TOKEN", "")          # restored after the test
+    (tmp_path / ".env").write_text("BOT_PORT=8000\nDASHBOARD_TOKEN=\nBOT_MODE=local\n")
+    app = create_app(_runtime(DataEngine(EngineConfig.load(strategy="zones"))),
+                     settings=ServerSettings(), backtests=BacktestManager(tmp_path))
+    c = TestClient(app)
+    assert c.get("/api/status").status_code == 200                   # open, no key yet
+    token = c.post("/api/system/lock").json()["token"]
+    env = (tmp_path / ".env").read_text().splitlines()
+    assert env == ["BOT_PORT=8000", f"DASHBOARD_TOKEN={token}", "BOT_MODE=local"]
+    assert c.get("/api/status").status_code == 401                   # locked at once
+    assert c.get("/api/status", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    assert c.post("/api/system/lock",
+                  headers={"Authorization": f"Bearer {token}"}).status_code == 409
+    # and now the friend link can be made
+    assert c.post("/api/practice/link",
+                  headers={"Authorization": f"Bearer {token}"}).json()["active"]

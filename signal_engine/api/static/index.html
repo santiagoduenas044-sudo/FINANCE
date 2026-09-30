@@ -710,6 +710,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
           cuenta de papel). Con ese link no se ven los bots, sus trades ni los controles. Su cuenta de práctica se guarda
           en su propio navegador. Crear uno nuevo desactiva el anterior al instante.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="pbtn on" id="pl-lock" type="button" hidden>Ponerle clave al dashboard</button>
           <button class="pbtn on" id="pl-new" type="button">Crear link</button>
           <button class="pbtn" id="pl-off" type="button" hidden>Quitar acceso</button></div>
         <div class="plink" id="pl-box" hidden><input id="pl-url" readonly aria-label="Link de práctica">
@@ -728,8 +729,16 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
 <script>
 /* ───────────────────────── utilidades ───────────────────────── */
 const $ = id => document.getElementById(id);
-const TOKEN = new URLSearchParams(location.search).get("token") || "";
 const SOLO = location.pathname.replace(/\/+$/, "") === "/practica";
+// the owner's key: from the link, else the one this device remembers. A
+// practice link (/practica) never overwrites the remembered owner key.
+const TOKEN = (() => {
+  const t = new URLSearchParams(location.search).get("token") || "";
+  try {
+    if (t && !SOLO) localStorage.setItem("ghost.token", t);
+    return t || (SOLO ? "" : localStorage.getItem("ghost.token") || "");
+  } catch { return t; }
+})();
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
@@ -1257,6 +1266,9 @@ $("upd-restart").onclick = async () => {
 
 /* ── Práctica para un amigo (Sistema) ── */
 function plShow(r) {
+  const open = r && r.protected === false;
+  $("pl-lock").hidden = !open; $("pl-new").hidden = open;
+  if (open) $("pl-msg").textContent = "Primero el dashboard necesita su propia clave; si no, quien llegue a él lo vería todo.";
   const url = r?.path ? location.origin + r.path : "";
   $("pl-box").hidden = !url; $("pl-url").value = url;
   $("pl-off").hidden = !r?.active;
@@ -1268,6 +1280,16 @@ $("pl-new").onclick = async () => {
   if ($("pl-new").textContent === "Cambiar link" && !confirm("El link anterior dejará de funcionar. ¿Crear uno nuevo?")) return;
   try { plShow(await api("/api/practice/link", { method: "POST" })); $("pl-msg").textContent = "Listo: comparte este link."; }
   catch (e) { $("pl-msg").textContent = "⚠ " + e.message; }
+};
+$("pl-lock").onclick = async () => {
+  if (!confirm("Voy a ponerle una clave al dashboard. Este teléfono la recordará; en otro aparato tendrás que abrirlo con el link que te muestro. ¿Seguir?")) return;
+  try {
+    const r = await api("/api/system/lock", { method: "POST" });
+    try { localStorage.setItem("ghost.token", r.token); } catch {}
+    const link = location.origin + "/?token=" + r.token;
+    prompt("Listo. Guarda este link (ábrelo así en otros aparatos, o agrégalo a la pantalla de inicio):", link);
+    location.href = link;
+  } catch (e) { $("pl-msg").textContent = "⚠ " + e.message; }
 };
 $("pl-off").onclick = async () => {
   if (!confirm("¿Quitar el acceso de práctica? El link dejará de funcionar.")) return;

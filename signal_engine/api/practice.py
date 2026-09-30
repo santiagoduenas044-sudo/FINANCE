@@ -47,3 +47,27 @@ class PracticeKey:
         key = self.get()
         return bool(key) and bool(token) and secrets.compare_digest(token, key) \
             and method == "GET" and path in PRACTICE_PATHS
+
+
+def write_env_value(env_file: Path, key: str, value: str) -> None:
+    """Set KEY=value in the .env file run.sh loads at every start (replacing
+    an existing KEY= line, even an empty one), keeping every other line."""
+    env_file = Path(env_file)
+    lines = env_file.read_text().splitlines() if env_file.exists() else []
+    out, done = [], False
+    for line in lines:
+        bare = line.strip()
+        if bare.startswith("export "):
+            bare = bare[len("export "):]
+        if bare.split("=", 1)[0].strip() == key and "=" in bare:
+            if not done:
+                out.append(f"{key}={value}")
+                done = True
+            continue
+        out.append(line)
+    if not done:
+        out.append(f"{key}={value}")
+    tmp = env_file.with_suffix(".tmp")
+    tmp.write_text("\n".join(out) + "\n")
+    tmp.chmod(0o600)
+    tmp.replace(env_file)
