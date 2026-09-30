@@ -402,7 +402,12 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .feed li:first-child { border-top: 0; }
 .feed .ico { width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center; font-size: 11px;
   background: var(--panel-2); color: var(--ink-3); }
-.feed li.trade { color: var(--ink-1); } .feed li.trade .ico { background: var(--good-dim); color: var(--good); }
+.feed li.trade { color: var(--ink-1); font-weight: 500; margin: 2px -10px; padding: 10px; border-radius: 10px;
+  background: var(--good-dim); border-top: 0; }
+.feed li.trade + li { border-top: 0; }
+.feed li.trade .ico { background: var(--good); color: #04130a; }
+.vers .pa { display: block; font-size: 11px; font-weight: 500; margin-top: 2px; color: var(--ink-3); }
+.vers .pa.pos { color: var(--good); } .vers .pa.neg { color: var(--critical); }
 .feed li.watch .ico { background: var(--cd); color: var(--c); }
 .feed li.alert { color: var(--warning); } .feed li.alert .ico { background: rgba(242, 193, 78, .12); color: var(--warning); }
 .vers { margin: 0 8px 12px; }
@@ -1126,9 +1131,11 @@ function renderBots() {
         <td><span class="vtag">${esc(v.version)}</span></td>
         <td class="vt">${esc(v.title)}${v.current ? ' <span class="badge good">en uso</span>' : ""}<span class="vr">${esc(v.rules)}</span></td>
         <td class="t hide-s">${esc(v.since.slice(5))}</td>
-        <td class="num" style="text-align:right">${v.n || "—"}</td>
+        <td class="num" style="text-align:right">${v.n || (v.current && b.open_usd != null ? "0" : "—")}${
+          v.current && b.open_usd != null ? '<span class="pa">+1 abierto</span>' : ""}</td>
         <td class="num hide-s" style="text-align:right">${v.n ? Math.round(v.win_rate * 100) + "%" : "—"}</td>
-        <td class="num ${cls(v.net_usd)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}</td>
+        <td class="num ${cls(v.n ? v.net_usd : null)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}${
+          v.current && b.open_usd != null ? `<span class="pa ${cls(b.open_usd)}">abierto ${usd0(b.open_usd)}</span>` : ""}</td>
         <td style="text-align:center">${v.current ? '<span class="badge good">principal</span>'
           : v.variant ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.variant)}" aria-pressed="${v.variant_on}"
               aria-label="${v.variant_on ? "Apagar" : "Encender"} ${esc(v.version)} en paralelo"></button>` : '<span class="zero">—</span>'}</td></tr>`).join("");
@@ -1138,7 +1145,9 @@ function renderBots() {
         <div class="r"><span class="state ${esc(b.state)}"><span class="dot ${b.state === "trading" || b.state === "scanning" ? "ok" : b.state === "off" ? "bad" : b.state === "stale" || b.state === "paused" ? "warn" : ""}"></span>${STATE_ES[b.state] || esc(b.state)}</span>
           <span class="beat">${b.heartbeat ? "latido " + ago(b.heartbeat) : ""}</span></div></div>
       <div class="kpis">
-        ${kv("Hoy", t.n ? usd0(t.net_usd) : "—", `${t.n} ${t.n === 1 ? "trade" : "trades"}${b.open_usd != null ? " · abierto " + usd0(b.open_usd) : ""}`, cls(t.n ? t.net_usd : null))}
+        ${t.n || b.open_usd == null
+          ? kv("Hoy", t.n ? usd0(t.net_usd) : "—", `${t.n} ${t.n === 1 ? "trade" : "trades"}${b.open_usd != null ? " · abierto " + usd0(b.open_usd) : ""}`, cls(t.n ? t.net_usd : null))
+          : kv("Hoy · abierto", usd0(b.open_usd), "trade en curso", cls(b.open_usd))}
         ${kv("Total · todas", a.n ? usd0(a.net_usd) : "—", afterFees != null ? "real " + usd0(afterFees) : "sin trades aún", cls(a.n ? a.net_usd : null))}
         ${kv("Trades", a.n || "0", a.n ? `${a.wins} ganados` : "—")}
         ${kv("Acierto", a.n ? Math.round(a.win_rate * 100) + "%" : "—", a.n ? `prom. ${usd0(a.avg_usd)}` : "—")}
