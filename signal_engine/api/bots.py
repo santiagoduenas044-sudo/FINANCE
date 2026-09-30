@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..output.record import commission_per_trade
-from ..versions import BOT_VERSIONS, STRATEGIES, current_version, version_by_date
+from ..versions import BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of
 
 NY = "America/New_York"
 ORBIT_ALIVE_SECONDS = 180          # ORBIT saves its state every 30 s
@@ -180,8 +180,7 @@ def ghost_card(runtime, now: pd.Timestamp, shadows_dir: Path | None = None) -> d
     closed = [t for t in (tracker.closed_trades if tracker is not None else [])
               if t.closed_at is not None and t.instrument == sym]
     today = now.date()
-    rows = [((t.context or {}).get("bot_version") or version_by_date("GHOST", t.opened_at),
-             t.pnl_points * pv) for t in closed]
+    rows = [(ghost_version_of(t), t.pnl_points * pv) for t in closed]
     variants = ghost_variants(runtime, sym, pv, today, shadows_dir)
     return {
         "variants": variants,

@@ -16,11 +16,12 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("v1", "2026-09-15", "Setups clásicos",
          "Ruptura de apertura, barrida de liquidez y vuelta al VWAP en velas de 5 min, "
          "con un filtro de confluencia."),
-        ("v2", "2026-09-24", "Zonas 5 min · de día",
+        ("v2", "2026-09-24", "Zonas 1 min · de día",
          "Huecos de precio (FVG) de 5 min, entra si una vela de 1 min reacciona en la zona. "
          "Stop 20–35 pts, objetivo 3× el stop, de 9:30 a 15:30."),
-        ("v3", "2026-09-27", "Zonas 5 min · día y noche",
-         "Las mismas zonas, también de noche, con el stop a entrada +2 al 70 % del camino."),
+        ("v3", "2026-09-27", "Zonas 1 min · día y noche",
+         "La misma versión de 1 min, también de noche, con el stop a entrada +2 al 70 % "
+         "del camino."),
         ("v4", "2026-09-29", "Zonas 15 min · solo de día",
          "Huecos de 15 min confirmados por una vela de 15 min. Stop 20–35 pts desde la "
          "entrada, objetivo 3×, entradas 9:30–15:30, cierre 16:55, sin límites diarios."),
@@ -89,3 +90,30 @@ def version_by_date(bot: str, when) -> str:
         if start <= day:
             found = vid
     return found
+
+
+def ghost_version_of(trade) -> str:
+    """Which GHOST version made a paper trade. New trades carry the tag; for
+    older ones it is read from the trade itself rather than the calendar,
+    because the Mac did not always update the day the code changed:
+      * setups other than the zones (ORB, sweep, VWAP)      -> v1
+      * zones confirmed on a 15-minute candle              -> v4
+      * zones confirmed on a 1-minute candle: at night, or on 27-28 Sep
+        (when that version traded day and night)          -> v3, else v2."""
+    ctx = getattr(trade, "context", None) or {}
+    if ctx.get("bot_version"):
+        return ctx["bot_version"]
+    if getattr(trade, "setup", None) != "zone_retrace":
+        return "v1"
+    tf = getattr(trade, "timeframe", None)
+    if tf == "15m":
+        return "v4"
+    if tf not in (None, "1m"):
+        return version_by_date("GHOST", trade.opened_at)
+    ts = pd.Timestamp(trade.opened_at)
+    ts = ts.tz_localize("America/New_York") if ts.tzinfo is None else ts.tz_convert(
+        "America/New_York")
+    night = ctx.get("session") not in (None, "RTH") or not ("09:30" <= ts.strftime("%H:%M") < "16:00")
+    if night or "2026-09-27" <= ts.date().isoformat() <= "2026-09-28":
+        return "v3"
+    return "v2"

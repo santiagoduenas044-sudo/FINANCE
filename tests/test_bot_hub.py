@@ -198,3 +198,18 @@ def test_orbit_follows_the_switches(tmp_path):
     assert [s.id for s, _ in after] == ["apertura_tp2"]
     tp2 = next(b for s, b in running if s.id == "apertura_tp2")
     assert after[0][1] is tp2                                  # the running one is kept as is
+
+
+def test_old_trades_go_to_the_version_that_really_made_them():
+    from types import SimpleNamespace as T
+    from signal_engine.versions import ghost_version_of
+
+    def t(setup, tf, when, **ctx):
+        return T(setup=setup, timeframe=tf, opened_at=pd.Timestamp(when, tz="America/New_York"),
+                 context=ctx)
+    assert ghost_version_of(t("vwap_reclaim", "5m", "2026-09-28 10:00")) == "v1"
+    assert ghost_version_of(t("zone_retrace", "15m", "2026-09-29 14:45")) == "v4"
+    assert ghost_version_of(t("zone_retrace", "1m", "2026-09-25 10:05")) == "v2"
+    assert ghost_version_of(t("zone_retrace", "1m", "2026-09-28 10:22")) == "v3"   # 1 min, 27-28 sep
+    assert ghost_version_of(t("zone_retrace", "1m", "2026-09-30 21:00")) == "v3"   # 1 min at night
+    assert ghost_version_of(t("zone_retrace", "1m", "2026-09-28 10:22", bot_version="v9")) == "v9"
