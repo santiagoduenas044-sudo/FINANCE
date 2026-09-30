@@ -295,6 +295,7 @@ tr.best td { background: rgba(47, 208, 140, .06); }
   padding: 7px 12px; border-radius: 999px; font: 600 12px var(--sans); color: #1d1405;
   background: linear-gradient(180deg, var(--amber-2), var(--amber)); box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6); }
 .prnow:hover { background: linear-gradient(180deg, #fbe2a6, var(--amber-2)); }
+@media (max-width: 640px) { .prnow { top: 10px; bottom: auto; right: 68px; padding: 6px 10px; } }
 .prtoasts { position: absolute; top: 34px; right: 140px; z-index: 4; display: flex; flex-direction: column; gap: 6px;
   pointer-events: none; align-items: flex-end; }
 .prtoast { background: var(--panel-3); border: 1px solid var(--rule); border-left: 3px solid var(--info); border-radius: 10px;
@@ -448,6 +449,12 @@ tr.best td { background: rgba(47, 208, 140, .06); }
   .hubhead .sum { margin-left: 0; }
   .vers .hide-s { display: none; }
 }
+/* modo "solo práctica" (/practica, el link para un amigo) */
+body.solo .top > :not(.brand), body.solo .tabs, body.solo #sim-banner { display: none !important; }
+body.solo .brand .wm small { display: block; }
+.plink { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.plink input { flex: 1; min-width: 220px; background: var(--panel-2); color: var(--ink-1); border: 1px solid var(--rule);
+  border-radius: 10px; font: 12.5px var(--mono); padding: 8px 10px; }
 footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align: center; padding: 0 0 28px; opacity: .8; }
 
 @media (max-width: 1080px) {
@@ -697,6 +704,17 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
         <div class="upd-log" id="upd-log"></div>
         <p class="foot">Baja la última versión de GitHub y reinicia el bot solo (tarda ~20 s). No se puede
           reiniciar mientras corre un backtest, porque lo cortaría.</p></div></div>
+    <div class="card mb"><h3>Práctica para un amigo <span class="r" id="pl-state"></span></h3>
+      <div class="body">
+        <p class="foot" style="margin-top:0">Un link que abre <b>solo la pantalla de Práctica</b> (repetición de velas con
+          cuenta de papel). Con ese link no se ven los bots, sus trades ni los controles. Su cuenta de práctica se guarda
+          en su propio navegador. Crear uno nuevo desactiva el anterior al instante.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="pbtn on" id="pl-new" type="button">Crear link</button>
+          <button class="pbtn" id="pl-off" type="button" hidden>Quitar acceso</button></div>
+        <div class="plink" id="pl-box" hidden><input id="pl-url" readonly aria-label="Link de práctica">
+          <button class="pbtn" id="pl-copy" type="button">Copiar</button></div>
+        <p class="foot" id="pl-msg"></p></div></div>
     <div class="card mb"><h3>Salud del bot <span class="r" id="svc-cycles"></span></h3>
       <div class="body"><div class="comp" id="components"></div><p class="foot" id="errbox" hidden></p></div></div>
     <div class="card"><h3>Últimas decisiones del filtro <span class="r">aprobadas y descartadas</span></h3>
@@ -711,6 +729,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
 /* ───────────────────────── utilidades ───────────────────────── */
 const $ = id => document.getElementById(id);
 const TOKEN = new URLSearchParams(location.search).get("token") || "";
+const SOLO = location.pathname.replace(/\/+$/, "") === "/practica";
 async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
@@ -772,7 +791,7 @@ function setView(v) {
 document.querySelectorAll(".tabs [data-view]").forEach(b => b.onclick = () => setView(b.dataset.view));
 document.addEventListener("keydown", e => {
   if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || "") || e.ctrlKey || e.metaKey || e.altKey) return;
-  if (/^[1-6]$/.test(e.key)) { setView(VIEWS[Number(e.key) - 1]); return; }
+  if (/^[1-6]$/.test(e.key) && !SOLO) { setView(VIEWS[Number(e.key) - 1]); return; }
   if (S.view === "practice") prKey(e);
 });
 
@@ -1236,8 +1255,32 @@ $("upd-restart").onclick = async () => {
   catch (e) { $("upd-log").textContent = "⚠ " + e.message; }
 };
 
+/* ── Práctica para un amigo (Sistema) ── */
+function plShow(r) {
+  const url = r?.path ? location.origin + r.path : "";
+  $("pl-box").hidden = !url; $("pl-url").value = url;
+  $("pl-off").hidden = !r?.active;
+  $("pl-new").textContent = r?.active ? "Cambiar link" : "Crear link";
+  $("pl-state").textContent = r?.active ? "activo" : "sin acceso";
+}
+async function plLoad() { try { plShow(await api("/api/practice/link")); } catch {} }
+$("pl-new").onclick = async () => {
+  if ($("pl-new").textContent === "Cambiar link" && !confirm("El link anterior dejará de funcionar. ¿Crear uno nuevo?")) return;
+  try { plShow(await api("/api/practice/link", { method: "POST" })); $("pl-msg").textContent = "Listo: comparte este link."; }
+  catch (e) { $("pl-msg").textContent = "⚠ " + e.message; }
+};
+$("pl-off").onclick = async () => {
+  if (!confirm("¿Quitar el acceso de práctica? El link dejará de funcionar.")) return;
+  try { plShow(await api("/api/practice/revoke", { method: "POST" })); $("pl-msg").textContent = "Acceso quitado."; }
+  catch (e) { $("pl-msg").textContent = "⚠ " + e.message; }
+};
+$("pl-copy").onclick = async () => {
+  try { await navigator.clipboard.writeText($("pl-url").value); $("pl-msg").textContent = "Copiado."; }
+  catch { $("pl-url").select(); $("pl-msg").textContent = "Selecciónalo y cópialo."; }
+};
+
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";
@@ -1636,7 +1679,7 @@ async function prInit() {
   PR.init = true;
   PR.ind = lsGet("pr.ind", { ema9: true, ema20: true, vol: true });
   PR.log = lsGet("pr.log", []);
-  try { PR.ds = (await api("/api/backtest/options")).datasets || []; } catch { PR.ds = []; }
+  try { PR.ds = (await api("/api/practice/datasets")).datasets || []; } catch { PR.ds = []; }
   $("pr-data").innerHTML = PR.ds.length ? PR.ds.map((d, i) => `<option value="${i}" title="${esc(d.first)} → ${esc(d.last)}">${esc(d.symbol)} · ${esc(d.data)}</option>`).join("")
     : `<option>sin datos descargados</option>`;
   const best = PR.ds.findIndex(d => d.data === "DATABENTO");
@@ -2194,6 +2237,13 @@ async function refresh(force = false) {
   finally { busy = false; }
 }
 (async function boot() {
+  if (SOLO) {                      // /practica: only the practice screen, nothing else is polled
+    document.body.classList.add("solo");
+    document.title = "GHOST · Práctica";
+    document.querySelector(".brand .wm small").textContent = "Práctica · velas reales, cuenta de papel";
+    setView("practice");
+    return;
+  }
   initChart();
   await pollSymbols();
   await refresh(true);

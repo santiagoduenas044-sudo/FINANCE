@@ -27,6 +27,7 @@ from ..live.movers import MoversService
 from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .lab import LabError, LabManager
+from .practice import PracticeKey
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
 
@@ -38,7 +39,7 @@ _VALID_ACTIONS = {"start", "pause", "stop"}
 # health check (for load balancers / systemd / uptime probes) and the static
 # UI shell itself (the browser then sends the token on the /api/* calls).
 _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
-_AUTH_EXEMPT_EXACT = {"/"}
+_AUTH_EXEMPT_EXACT = {"/", "/practica"}
 
 
 def _is_auth_exempt(path: str) -> bool:
@@ -69,6 +70,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     movers = movers or MoversService()
     replay = ReplayData(backtests.root)
     lab = lab or LabManager(backtests.root, python=backtests.python)
+    practice = PracticeKey(Path(backtests.root) / "data_store" / "practice_key")
+    app.state.practice = practice
     restart_fn = restart_fn or maintenance.schedule_restart
     # launchd runs run.sh, which execs Python: the parent is launchd itself
     # (pid 1) and KeepAlive brings the bot back after it exits. Anything else
@@ -94,7 +97,9 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     async def _auth_gate(request: Request, call_next):
         if settings.auth_enabled and not _is_auth_exempt(request.url.path):
             token = _extract_token(request)
-            if token != settings.auth_token:
+            # the practice key (a friend) opens only the bar replay, read-only
+            if token != settings.auth_token and \
+                    not practice.allows(token, request.method, request.url.path):
                 return JSONResponse(status_code=401,
                                     content={"detail": "unauthorized: missing or invalid token"})
         return await call_next(request)
@@ -412,6 +417,34 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             sh.set_on("orbit", variant_id, on, base)
         return {"bot": bot, "id": variant_id, "on": on}
 
+    # -- Práctica para un amigo ---------------------------------------------- #
+    @app.get("/api/practice/datasets")
+    def practice_datasets() -> dict:
+        """Only what the practice screen needs to list (the practice key can
+        read this; the backtest options it would otherwise use cannot)."""
+        return {"datasets": backtests.datasets()}
+
+    @app.get("/api/practice/link")
+    def practice_link() -> dict:
+        key = practice.get()
+        return {"active": bool(key), "path": f"/practica?token={key}" if key else None,
+                "protected": settings.auth_enabled}
+
+    @app.post("/api/practice/link")
+    def practice_new_link() -> dict:
+        # without the owner's token the whole dashboard is open: a friend with
+        # network access would see everything, so no link until it is locked
+        if not settings.auth_enabled:
+            raise HTTPException(status_code=409, detail=(
+                "El dashboard no tiene clave (DASHBOARD_TOKEN): cualquiera que llegue a él "
+                "lo vería todo. Ponle clave primero."))
+        return {"active": True, "path": f"/practica?token={practice.new()}", "protected": True}
+
+    @app.post("/api/practice/revoke")
+    def practice_revoke() -> dict:
+        practice.revoke()
+        return {"active": False, "path": None, "protected": settings.auth_enabled}
+
     @app.get("/api/system/version")
     def system_version() -> dict:
         return {**maintenance.version(backtests.root), "can_restart": _restart_block() is None,
@@ -443,6 +476,11 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
 
         @app.get("/")
         def index() -> FileResponse:
+            return FileResponse(STATIC_DIR / "index.html")
+
+        @app.get("/practica")
+        def practice_page() -> FileResponse:
+            """The same page in practice-only mode (the link given to a friend)."""
             return FileResponse(STATIC_DIR / "index.html")
 
     return app
