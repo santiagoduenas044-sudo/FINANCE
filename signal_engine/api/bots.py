@@ -51,12 +51,18 @@ def _record(usd: list[float]) -> dict:
             "lost_usd": round(sum(u for u in usd if u < 0), 2)}
 
 
-def _versions(bot: str, rows: list[tuple[str, float]]) -> list[dict]:
-    """rows: (version, $) per closed trade -> one line per version, newest first."""
+def _versions(bot: str, rows: list[tuple[str, float]], variants: list[dict] = ()) -> list[dict]:
+    """rows: (version, $) per closed trade -> one line per version, newest first.
+    A version that has a parallel variant carries its id and switch."""
+    by_version = {v["version"]: v for v in variants if v.get("version")}
     out = []
     for vid, start, title, rules in BOT_VERSIONS[bot]:
-        out.append({"version": vid, "since": start, "title": title, "rules": rules,
-                    **_record([u for v, u in rows if v == vid])})
+        line = {"version": vid, "since": start, "title": title, "rules": rules,
+                **_record([u for v, u in rows if v == vid])}
+        if vid in by_version:
+            line["variant"] = by_version[vid]["id"]
+            line["variant_on"] = by_version[vid]["enabled"]
+        out.append(line)
     out[-1]["current"] = True
     return out[::-1]
 
@@ -64,7 +70,42 @@ def _versions(bot: str, rows: list[tuple[str, float]]) -> list[dict]:
 # --------------------------------------------------------------------------- #
 # GHOST
 # --------------------------------------------------------------------------- #
-def ghost_card(runtime, now: pd.Timestamp) -> dict:
+def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None) -> list[dict]:
+    """Every GHOST variant in config/shadows.yaml, on or off. A running one is
+    read from its live runtime; a switched-off one from its saved record."""
+    from ..paper.tracker import PaperTradeTracker
+    from ..runtime.shadows import SHADOWS_DIR, is_on, load_specs, store_dir
+    base = shadows_dir or SHADOWS_DIR
+    running = {sp.id: rt for sp, rt in (getattr(runtime, "shadows", None) or [])}
+    out = []
+    for spec in load_specs("ghost"):
+        rt = running.get(spec.id)
+        if rt is not None:
+            tr = rt.paper_tracker
+        else:
+            d = store_dir("ghost", spec.id, base) / "paper"
+            tr = PaperTradeTracker(store_dir=d) if d.exists() else None
+        s_open = tr.active(sym) if tr is not None else []
+        s_closed = [t for t in (tr.closed_trades if tr is not None else [])
+                    if t.closed_at is not None and t.instrument == sym]
+        on = is_on("ghost", spec, base)
+        now_txt = "Apagada." if not on else ("Encendiéndose…" if rt is None else "Sin trade abierto.")
+        if s_open and rt is not None:
+            t = s_open[0]
+            now_txt = (f"{'Compra' if t.direction == 'LONG' else 'Venta'} abierta en {_px(t.entry)}"
+                       f" · va {t.pnl_points:+.2f} pts ({_usd(t.pnl_points * pv)})")
+        out.append({
+            "id": spec.id, "name": spec.name, "about": spec.about, "version": spec.version,
+            "enabled": on, "running": rt is not None, "now": now_txt,
+            "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2)
+            if s_open and rt is not None else None,
+            "today": _record([t.pnl_points * pv for t in s_closed
+                              if _ny(t.closed_at).date() == today]),
+            "total": _record([t.pnl_points * pv for t in s_closed])})
+    return out
+
+
+def ghost_card(runtime, now: pd.Timestamp, shadows_dir: Path | None = None) -> dict:
     feeds = list(getattr(runtime, "live_feeds", None) or {}) or ["NQ"]
     sym = "NQ" if "NQ" in feeds else feeds[0]
     try:
@@ -132,23 +173,7 @@ def ghost_card(runtime, now: pd.Timestamp) -> dict:
     today = now.date()
     rows = [((t.context or {}).get("bot_version") or version_by_date("GHOST", t.opened_at),
              t.pnl_points * pv) for t in closed]
-    variants = []
-    for spec, srt in getattr(runtime, "shadows", None) or []:
-        tr = srt.paper_tracker
-        s_open = tr.active(sym) if tr is not None else []
-        s_closed = [t for t in (tr.closed_trades if tr is not None else [])
-                    if t.closed_at is not None and t.instrument == sym]
-        now_txt = "Sin trade abierto."
-        if s_open:
-            t = s_open[0]
-            now_txt = (f"{'Compra' if t.direction == 'LONG' else 'Venta'} abierta en {_px(t.entry)}"
-                       f" · va {t.pnl_points:+.2f} pts ({_usd(t.pnl_points * pv)})")
-        variants.append({
-            "id": spec.id, "name": spec.name, "about": spec.about, "now": now_txt,
-            "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2) if s_open else None,
-            "today": _record([t.pnl_points * pv for t in s_closed
-                              if _ny(t.closed_at).date() == today]),
-            "total": _record([t.pnl_points * pv for t in s_closed])})
+    variants = ghost_variants(runtime, sym, pv, today, shadows_dir)
     return {
         "variants": variants,
         "name": "GHOST", "color": "gold", "strategy": f"Zonas {zr.timeframe}", "position": label,
@@ -159,7 +184,7 @@ def ghost_card(runtime, now: pd.Timestamp) -> dict:
         "today": _record([t.pnl_points * pv for t in closed if _ny(t.closed_at).date() == today]),
         "total": _record([u for _, u in rows]),
         "open_usd": round(sum(t.pnl_points for t in open_t) * pv, 2) if open_t else None,
-        "versions": _versions("GHOST", rows),
+        "versions": _versions("GHOST", rows, variants),
     }
 
 
@@ -169,7 +194,7 @@ def ghost_card(runtime, now: pd.Timestamp) -> dict:
 def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
     """ORBIT's parallel APERTURA variants, read from their folders."""
     from dataclasses import replace
-    from ..runtime.shadows import SHADOWS_DIR, load_specs, store_dir
+    from ..runtime.shadows import SHADOWS_DIR, is_on, load_specs, store_dir
     from ..subbots.opening_range import OpeningRangeBot
     from ..subbots.orbit import settings
     today = now.date().isoformat()
@@ -194,8 +219,12 @@ def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
             now_txt = "Terminó por hoy."
         elif not (d / "apertura_state.json").exists():
             now_txt = "Todavía no ha corrido (arranca con ORBIT)."
+        on = is_on("orbit", spec, shadows_dir or SHADOWS_DIR)
+        if not on:
+            now_txt = "Apagada."
         usd = [float(c.get("usd", 0)) for c in bot.closed]
         out.append({"id": spec.id, "name": spec.name, "about": spec.about, "now": now_txt,
+                    "version": spec.version, "enabled": on,
                     "open_usd": open_usd,
                     "today": _record([float(c.get("usd", 0)) for c in bot.closed
                                       if c.get("day") == today]),
@@ -292,7 +321,7 @@ def _iso(v) -> str | None:
 def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | None = None,
              shadows_dir: Path | None = None) -> dict:
     now = _ny(now if now is not None else pd.Timestamp.now(tz=NY))
-    bots = [ghost_card(runtime, now), orbit_card(orbit_dir, now, shadows_dir)]
+    bots = [ghost_card(runtime, now, shadows_dir), orbit_card(orbit_dir, now, shadows_dir)]
     totals = {b["name"]: b["total"]["net_usd"] for b in bots}
     variants = {v["id"]: v for b in bots for v in b.get("variants", [])}
     strategies = []

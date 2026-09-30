@@ -396,6 +396,22 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None), commit=commit,
                         shadows_dir=getattr(app.state, "shadows_dir", None))
 
+    @app.post("/api/bots/{bot}/variants/{variant_id}")
+    def switch_variant(bot: str, variant_id: str, on: bool) -> dict:
+        """Turn a parallel variant on or off. GHOST's start/stop at once (they
+        run in this process); ORBIT's follow within its next poll (~30 s)."""
+        from ..runtime import shadows as sh
+        base = getattr(app.state, "shadows_dir", None) or sh.SHADOWS_DIR
+        bot = bot.lower()
+        if bot not in ("ghost", "orbit") or \
+                variant_id not in {sp.id for sp in sh.load_specs(bot)}:
+            raise HTTPException(status_code=404, detail="no existe esa variante")
+        if bot == "ghost":
+            sh.switch_ghost_shadow(runtime, variant_id, on, base)
+        else:
+            sh.set_on("orbit", variant_id, on, base)
+        return {"bot": bot, "id": variant_id, "on": on}
+
     @app.get("/api/system/version")
     def system_version() -> dict:
         return {**maintenance.version(backtests.root), "can_restart": _restart_block() is None,

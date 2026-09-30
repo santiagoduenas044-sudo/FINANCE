@@ -124,3 +124,74 @@ def test_hub_lists_the_variants(tmp_path):
     assert [v["id"] for v in orbit["variants"]] == ["apertura_30m", "apertura_tp2"]
     assert orbit["variants"][0]["now"].startswith("Todavía no ha corrido")
     assert any(s["status"] == "en paralelo" for s in d["strategies"])
+
+
+# --------------------------------------------------------------------------- #
+# the on/off switches
+# --------------------------------------------------------------------------- #
+def test_switches_default_and_persist(tmp_path):
+    from signal_engine.runtime.shadows import is_on, load_specs, set_on
+    spec = {s.id: s for s in load_specs("ghost")}
+    assert not is_on("ghost", spec["setups_clasicos"], tmp_path)      # off until switched on
+    assert is_on("ghost", spec["zonas_1m"], tmp_path)
+    set_on("ghost", "setups_clasicos", True, tmp_path)
+    set_on("ghost", "zonas_1m", False, tmp_path)
+    assert is_on("ghost", spec["setups_clasicos"], tmp_path)
+    assert not is_on("ghost", spec["zonas_1m"], tmp_path)
+
+
+def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
+    rt = _runtime(DataEngine(EngineConfig.load(strategy="zones")))
+    app = create_app(rt)
+    app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path
+    c = TestClient(app)
+    assert c.post("/api/bots/ghost/variants/setups_clasicos?on=true").json()["on"] is True
+    assert [s.id for s, _ in rt.shadows] == ["setups_clasicos"]
+    c.post("/api/bots/ghost/variants/zonas_1m?on=true")
+    assert {s.id for s, _ in rt.shadows} == {"setups_clasicos", "zonas_1m"}   # several at once
+    c.post("/api/bots/ghost/variants/setups_clasicos?on=false")
+    assert [s.id for s, _ in rt.shadows] == ["zonas_1m"]
+    ghost = c.get("/api/bots").json()["bots"][0]
+    v = {x["id"]: x for x in ghost["variants"]}
+    assert v["zonas_1m"]["enabled"] and v["zonas_1m"]["running"]
+    assert not v["setups_clasicos"]["enabled"] and v["setups_clasicos"]["now"] == "Apagada."
+    vers = {x["version"]: x for x in ghost["versions"]}
+    assert vers["v1"]["variant"] == "setups_clasicos" and vers["v1"]["variant_on"] is False
+    assert vers["v2"]["variant_on"] is True and vers["v4"]["current"]
+    # ORBIT runs elsewhere: the switch is saved for it to pick up
+    assert c.post("/api/bots/orbit/variants/apertura_tp2?on=false").status_code == 200
+    from signal_engine.runtime.shadows import switches
+    assert switches(tmp_path)["orbit"]["apertura_tp2"] is False
+    assert c.post("/api/bots/ghost/variants/nope?on=true").status_code == 404
+
+
+def test_five_minute_variant_never_sees_a_forming_candle(tmp_path):
+    from signal_engine.data.contracts import ContractRegistry
+    from signal_engine.runtime.shadows import (build_ghost_shadow, load_specs,
+                                               run_ghost_shadows)
+    from tests.test_bot_runtime import _pipeline
+
+    spec = next(s for s in load_specs("ghost") if s.id == "setups_clasicos")
+    srt = build_ghost_shadow(spec, ContractRegistry.load(), base=tmp_path)
+    assert srt.data_engine.cfg.timeframe_roles.execution == "5m"
+    engine = DataEngine(EngineConfig.load(strategy="zones"))
+    tf = _pipeline(engine).timeframes
+    seen = []
+    orig = srt.run_cycle
+    srt.run_cycle = lambda sym, bars: (seen.append(bars["5m"].index[-1]), orig(sym, bars))
+    for ts in tf["1m"].index[300:312]:
+        run_ghost_shadows([(spec, srt)], "ES", {k: df for k, df in tf.items()}, None, ts)
+        assert all(t <= ts for t in seen)                     # nothing that closes later
+    assert len(seen) == len(set(seen)) <= 3                   # once per 5-minute candle
+
+
+def test_orbit_follows_the_switches(tmp_path):
+    from signal_engine.runtime.shadows import set_on
+    from signal_engine.subbots import orbit
+    running = orbit.build_shadows(tmp_path)
+    assert {s.id for s, _ in running} == {"apertura_30m", "apertura_tp2"}
+    set_on("orbit", "apertura_30m", False, tmp_path)
+    after = orbit.build_shadows(tmp_path, current=running)
+    assert [s.id for s, _ in after] == ["apertura_tp2"]
+    tp2 = next(b for s, b in running if s.id == "apertura_tp2")
+    assert after[0][1] is tp2                                  # the running one is kept as is

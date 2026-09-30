@@ -105,19 +105,33 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
     return True
 
 
-def build_shadows(base: Path | None = None) -> list:
-    """[(spec, OpeningRangeBot)] for the ORBIT variants in config/shadows.yaml:
-    ORBIT's own rules with the listed changes, their own folder, no messages."""
+def build_shadows(base: Path | None = None, current: list | None = None) -> list:
+    """[(spec, OpeningRangeBot)] for the ORBIT variants in config/shadows.yaml
+    that are switched on (dashboard, Bots tab): ORBIT's own rules with the
+    listed changes, their own folder, no messages. `current`: the running
+    ones, kept as they are (their day state lives in memory too)."""
     from dataclasses import replace
-    from ..runtime.shadows import SHADOWS_DIR, load_specs, store_dir
+    from ..runtime.shadows import SHADOWS_DIR, is_on, load_specs, store_dir
+    base = base or SHADOWS_DIR
+    running = {sp.id: (sp, b) for sp, b in (current or [])}
     out = []
     for spec in load_specs("orbit"):
+        if not is_on("orbit", spec, base):
+            continue
+        if spec.id in running:
+            out.append(running[spec.id])
+            continue
         try:
             rules = replace(settings(), **(spec.settings or {}))
-            out.append((spec, OpeningRangeBot(store_dir("orbit", spec.id, base or SHADOWS_DIR),
+            out.append((spec, OpeningRangeBot(store_dir("orbit", spec.id, base),
                                               settings=rules, name=spec.name)))
+            if current is not None:
+                log.info("variante %s encendida", spec.name)
         except (TypeError, ValueError) as exc:
             log.warning("variante %s no arrancó (%s)", spec.id, exc)
+    for sid, (sp, _b) in running.items():
+        if sid not in {x.id for x, _ in out}:
+            log.info("variante %s apagada", sp.name)
     return out
 
 
@@ -254,6 +268,7 @@ def main() -> int:
     if shadows:
         log.info("variantes en paralelo: %s", ", ".join(sp.name for sp, _ in shadows))
     while not stop["now"]:
+        shadows = build_shadows(current=shadows)      # follows the dashboard switches
         run_once(bot, shadows=shadows)
         for _ in range(POLL_SECONDS):
             if stop["now"]:

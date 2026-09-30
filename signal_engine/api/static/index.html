@@ -417,6 +417,17 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .stag.live { background: var(--good-dim); color: var(--good); }
 .stag.study { background: var(--amber-dim); color: var(--amber); }
 .stag.par { background: rgba(123, 150, 255, .14); color: var(--info); }
+.tgl { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--panel-3);
+  border: 1px solid var(--rule-strong); flex: none; transition: background .2s, border-color .2s; vertical-align: middle; }
+.tgl::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--ink-3); transition: transform .2s, background .2s; }
+.tgl[aria-pressed="true"] { background: var(--c, var(--amber)); border-color: transparent; }
+.tgl[aria-pressed="true"]::after { transform: translateX(16px); background: #0b0d12; }
+.tgl:disabled { opacity: .5; cursor: wait; }
+.tglcell { display: flex; align-items: center; gap: 10px; }
+.par-t tr.off td, .vers tr.off td { opacity: .55; }
+.par-t tr.off td:first-child { opacity: 1; }
+.par-t tr.off .pn > span:not(.tglcell) { opacity: .55; }
 .par-t td { vertical-align: top; }
 .par-t .pn { color: var(--ink-1); font-weight: 500; white-space: normal; min-width: 140px; }
 .par-t .pa { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 2px; white-space: normal; line-height: 1.45; }
@@ -1074,13 +1085,17 @@ function renderBots() {
     const t = b.today, a = b.total, fee = b.fee_per_trade || 0;
     const afterFees = a.n ? a.net_usd - fee * a.n : null;
     const kv = (k, v, sub, c = "") => `<div><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`;
+    const bot = b.name === "GHOST" ? "ghost" : "orbit";
     const rows = b.versions.map(v => `<tr class="${v.current ? "cur" : ""}">
         <td><span class="vtag">${esc(v.version)}</span></td>
         <td class="vt">${esc(v.title)}${v.current ? ' <span class="badge good">en uso</span>' : ""}<span class="vr">${esc(v.rules)}</span></td>
         <td class="t hide-s">${esc(v.since.slice(5))}</td>
         <td class="num" style="text-align:right">${v.n || "—"}</td>
         <td class="num hide-s" style="text-align:right">${v.n ? Math.round(v.win_rate * 100) + "%" : "—"}</td>
-        <td class="num ${cls(v.net_usd)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}</td></tr>`).join("");
+        <td class="num ${cls(v.net_usd)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}</td>
+        <td style="text-align:center">${v.current ? '<span class="badge good">principal</span>'
+          : v.variant ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.variant)}" aria-pressed="${v.variant_on}"
+              aria-label="${v.variant_on ? "Apagar" : "Encender"} ${esc(v.version)} en paralelo"></button>` : '<span class="zero">—</span>'}</td></tr>`).join("");
     return `<div class="card bot ${b.color === "violet" ? "violet" : ""}">
       <div class="hd"><span class="av">${b.name === "GHOST" ? '<img src="/static/ghost.png" alt="">' : esc(b.name[0])}</span>
         <div><div class="nm">${esc(b.name)}</div><div class="st">${esc(b.strategy)} · ${esc(b.position)} · papel</div></div>
@@ -1097,7 +1112,8 @@ function renderBots() {
       ${parTable(b)}
       <h4>Versiones</h4>
       <div class="vers scroll"><table><thead><tr><th></th><th>Qué cambió</th><th class="hide-s">Desde</th>
-        <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th></tr></thead>
+        <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th>
+        <th style="text-align:center">En paralelo</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
     </div>`;
   }).join("");
@@ -1116,19 +1132,34 @@ function parTable(b) {
   const vs = b.variants || [];
   if (!vs.length) return "";
   const R = 'style="text-align:right"';
-  const row = (name, about, now, t, a, open, main) => `<tr class="${main ? "main" : ""}">
-      <td class="pn">${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}</span></td>
+  const bot = b.name === "GHOST" ? "ghost" : "orbit";
+  const row = (name, about, now, t, a, open, main, v) => `<tr class="${main ? "main" : v && !v.enabled ? "off" : ""}">
+      <td class="pn"><span class="tglcell">${v ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.id)}"
+          aria-pressed="${v.enabled}" aria-label="${v.enabled ? "Apagar" : "Encender"} ${esc(name)}" title="${esc(about)}"></button>` : ""}
+        <span>${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}</span></span></span></td>
       <td class="num ${cls(t.n ? t.net_usd : null)}" ${R}>${t.n ? usd0(t.net_usd) : "—"}${open != null ? `<span class="pa">abierto ${usd0(open)}</span>` : ""}</td>
       <td class="num ${cls(a.n ? a.net_usd : null)}" ${R} style="text-align:right;font-weight:600">${a.n ? usd0(a.net_usd) : "—"}</td>
       <td class="num" ${R}>${a.n || "—"}</td>
       <td class="num hide-s" ${R}>${a.n ? Math.round(a.win_rate * 100) + "%" : "—"}</td></tr>`;
   const mainNow = (b.now.find(l => l.kind === "trade") || {}).text || "Sin trade abierto.";
-  return `<h4>En paralelo · mismo mercado, solo papel</h4>
+  return `<h4>En paralelo · mismo mercado, solo papel · prende las que quieras</h4>
     <div class="vers scroll"><table class="par-t"><thead><tr><th>Versión</th><th style="text-align:right">Hoy</th>
       <th style="text-align:right">Total</th><th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
       <tbody>${row(b.strategy, "", mainNow, b.today, b.total, b.open_usd, true)}
-      ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false)).join("")}</tbody></table></div>`;
+      ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false, v)).join("")}</tbody></table></div>`;
 }
+
+// the version switches (Bots tab): one click turns a variant on/off
+$("hub-bots").addEventListener("click", async e => {
+  const b = e.target.closest(".tgl[data-variant]");
+  if (!b) return;
+  const on = b.getAttribute("aria-pressed") !== "true";
+  document.querySelectorAll(`.tgl[data-variant="${b.dataset.variant}"]`).forEach(x => { x.disabled = true; x.setAttribute("aria-pressed", on); });
+  try {
+    await api(`/api/bots/${b.dataset.bot}/variants/${encodeURIComponent(b.dataset.variant)}?on=${on}`, { method: "POST" });
+  } catch (err) { alert("No se pudo cambiar: " + err.message); }
+  await pollBots(); renderBots();
+});
 
 /* ═══════════════════════════ 2 · HISTORIAL ═══════════════════════════ */
 function renderHistory() {

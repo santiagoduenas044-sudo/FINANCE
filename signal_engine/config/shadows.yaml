@@ -3,23 +3,34 @@
 # another version of a strategy would have done next to the one the bot
 # really trades. Their results show in the dashboard (Bots tab).
 #
-# To add one, copy a block and change it; to stop one, delete its block (its
-# record stays in data_store/shadows/). Restart the bot to apply
-# (bash deploy/macos/ctl.sh restart; ORBIT: ctl.sh orbit restart).
+# Each one can be switched on and off from the dashboard (Bots tab), without
+# restarting anything; `enabled` is only the default before the first switch.
+# To add one, copy a block and change it (then update the bot). Its record
+# stays in data_store/shadows/ even while it is off.
 #
-# ghost: strategy = a file in config/strategies/, overrides = changes on top.
+# ghost: strategy = a file in config/strategies/ ("legacy" = default.yaml),
+#        overrides = changes on top, version = the GHOST version it replays.
 # orbit: settings = changes to APERTURA's rules (opening_range.OrbSettings).
 
 ghost:
+  - id: setups_clasicos
+    name: "Setups clásicos"
+    about: "La primera versión (v1): ruptura de apertura, barrida de liquidez y VWAP en velas de 5 min."
+    strategy: legacy
+    version: v1
+    enabled: false
+
   - id: zonas_1m
     name: "Zonas 1 min · de día"
     about: "La versión de 1 min tal cual corría (v2): zonas de 5 min, entrada con vela de 1 min, BE+2 al 70 %, 9:30–15:30."
     strategy: zones_1m
+    version: v2
 
   - id: zonas_1m_noche
     name: "Zonas 1 min · día y noche"
     about: "La misma versión de 1 min, también de noche (como v3)."
     strategy: zones_1m
+    version: v3
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]

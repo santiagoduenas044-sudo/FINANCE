@@ -254,7 +254,7 @@ class BotRuntime:
 
         if self.shadows:
             from .shadows import run_ghost_shadows
-            run_ghost_shadows(self.shadows, symbol, tf_bars, now)
+            run_ghost_shadows(self.shadows, symbol, tf_bars, now, decision_time)
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
