@@ -291,6 +291,10 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .prbadge b { color: var(--amber); letter-spacing: .08em; }
 #pr-chart:hover .prbadge { opacity: 0; }   /* al pasar el mouse manda la leyenda de la vela */
 .prbadge:empty { display: none; }
+.prnow { position: absolute; right: 84px; bottom: 40px; z-index: 3; display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: 999px; font: 600 12px var(--sans); color: #1d1405;
+  background: linear-gradient(180deg, var(--amber-2), var(--amber)); box-shadow: 0 6px 18px -6px rgba(0, 0, 0, .6); }
+.prnow:hover { background: linear-gradient(180deg, #fbe2a6, var(--amber-2)); }
 .prtoasts { position: absolute; top: 34px; right: 140px; z-index: 4; display: flex; flex-direction: column; gap: 6px;
   pointer-events: none; align-items: flex-end; }
 .prtoast { background: var(--panel-3); border: 1px solid var(--rule); border-left: 3px solid var(--info); border-radius: 10px;
@@ -642,7 +646,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
         <div class="pop"><button class="pbtn" id="pr-help-btn" type="button" title="Atajos" aria-label="Atajos" aria-expanded="false">?</button>
           <div class="popbox keys-help" id="pr-help" hidden>
             <kbd>Espacio</kbd> play/pausa · <kbd>→</kbd> siguiente vela<br><kbd>B</kbd> comprar · <kbd>S</kbd> vender ·
-            <kbd>C</kbd> cerrar<br><kbd>R</kbd> día al azar · <kbd>Esc</kbd> cancelar dibujo<br><kbd>Supr</kbd> borrar el dibujo
+            <kbd>C</kbd> cerrar<br><kbd>R</kbd> día al azar · <kbd>N</kbd> ir al precio actual · <kbd>Esc</kbd> cancelar dibujo<br><kbd>Supr</kbd> borrar el dibujo
             seleccionado<br><b>Clic derecho</b> en la gráfica: orden límite/stop a ese precio<br>Arrastra las líneas
             <b>TP</b>/<b>SL</b> para moverlas · rueda = zoom</div></div>
       </div>
@@ -652,6 +656,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
         <nav class="prtools" id="pr-tools" aria-label="Herramientas de dibujo"></nav>
         <div id="pr-chart"><div id="pr-kl"></div>
           <div class="prbadge" id="pr-badge"></div><div class="prtoasts" id="pr-toasts"></div>
+          <button class="prnow" id="pr-now" type="button" title="Ir al precio actual (tecla N)">Precio actual <span aria-hidden="true">⇥</span></button>
           <div id="pr-msg">Cargando…</div></div>
       </div></div>
       <aside class="side">
@@ -1103,7 +1108,7 @@ function renderBots() {
           <span class="beat">${b.heartbeat ? "latido " + ago(b.heartbeat) : ""}</span></div></div>
       <div class="kpis">
         ${kv("Hoy", t.n ? usd0(t.net_usd) : "—", `${t.n} ${t.n === 1 ? "trade" : "trades"}${b.open_usd != null ? " · abierto " + usd0(b.open_usd) : ""}`, cls(t.n ? t.net_usd : null))}
-        ${kv("Total", a.n ? usd0(a.net_usd) : "—", afterFees != null ? "real " + usd0(afterFees) : "sin trades aún", cls(a.n ? a.net_usd : null))}
+        ${kv("Total · todas", a.n ? usd0(a.net_usd) : "—", afterFees != null ? "real " + usd0(afterFees) : "sin trades aún", cls(a.n ? a.net_usd : null))}
         ${kv("Trades", a.n || "0", a.n ? `${a.wins} ganados` : "—")}
         ${kv("Acierto", a.n ? Math.round(a.win_rate * 100) + "%" : "—", a.n ? `prom. ${usd0(a.avg_usd)}` : "—")}
       </div>
@@ -1145,7 +1150,8 @@ function parTable(b) {
   return `<h4>En paralelo · mismo mercado, solo papel · prende las que quieras</h4>
     <div class="vers scroll"><table class="par-t"><thead><tr><th>Versión</th><th style="text-align:right">Hoy</th>
       <th style="text-align:right">Total</th><th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
-      <tbody>${row(b.strategy, "", mainNow, b.today, b.total, b.open_usd, true)}
+      <tbody>${row(b.main ? `${b.main.version} · ${b.main.title}` : b.strategy, "", mainNow,
+        b.main?.today || b.today, b.main?.total || b.total, b.open_usd, true)}
       ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false, v)).join("")}</tbody></table></div>`;
 }
 
@@ -1898,7 +1904,18 @@ function prKey(e) {
   else if (k === "b") prOrderBtn("LONG"); else if (k === "s") prOrderBtn("SHORT");
   else if (k === "c") { if (PR.pos) prExit(null, "Cierre manual"); else prCancelOrder(); }
   else if (k === "r") prRandom(true);
+  else if (k === "n") prToNow();
 }
+
+/** Vuelve a la vela actual de la práctica: la gráfica al final y el eje de
+ *  precios otra vez automático (por si se movió o se estiró a mano). */
+function prToNow() {
+  const kl = PR.kl; if (!kl) return;
+  try { kl._resetYAxisAutoCalcTickFlag?.(); } catch {}
+  kl.scrollToRealTime();
+  prPaint();
+}
+$("pr-now").onclick = prToNow;
 
 /* ── datos y reproducción ── */
 function prRandom(load) {

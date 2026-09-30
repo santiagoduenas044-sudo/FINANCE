@@ -13,7 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..output.record import commission_per_trade
-from ..versions import BOT_VERSIONS, STRATEGIES, version_by_date
+from ..versions import BOT_VERSIONS, STRATEGIES, current_version, version_by_date
 
 NY = "America/New_York"
 ORBIT_ALIVE_SECONDS = 180          # ORBIT saves its state every 30 s
@@ -65,6 +65,15 @@ def _versions(bot: str, rows: list[tuple[str, float]], variants: list[dict] = ()
         out.append(line)
     out[-1]["current"] = True
     return out[::-1]
+
+
+def _main_record(bot: str, rows: list[tuple[str, float, bool]]) -> dict:
+    """Today and total of the version running now only: (version, $, is today)."""
+    cur = current_version(bot)
+    title = next(t for v, _s, t, _r in BOT_VERSIONS[bot] if v == cur)
+    mine = [(u, today) for v, u, today in rows if v == cur]
+    return {"version": cur, "title": title, "today": _record([u for u, d in mine if d]),
+            "total": _record([u for u, _ in mine])}
 
 
 # --------------------------------------------------------------------------- #
@@ -183,6 +192,9 @@ def ghost_card(runtime, now: pd.Timestamp, shadows_dir: Path | None = None) -> d
         "now": lines,
         "today": _record([t.pnl_points * pv for t in closed if _ny(t.closed_at).date() == today]),
         "total": _record([u for _, u in rows]),
+        # the version running now, on its own (the "principal" row next to the variants)
+        "main": _main_record("GHOST", [(v, u, _ny(t.closed_at).date() == today)
+                                       for (v, u), t in zip(rows, closed)]),
         "open_usd": round(sum(t.pnl_points for t in open_t) * pv, 2) if open_t else None,
         "versions": _versions("GHOST", rows, variants),
     }
@@ -305,6 +317,8 @@ def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | No
             "now": lines,
             "today": _record([float(c.get("usd", 0)) for c in bot.closed if c.get("day") == today]),
             "total": _record([u for _, u in rows]), "open_usd": open_usd,
+            "main": _main_record("ORBIT", [(v, u, c.get("day") == today)
+                                           for (v, u), c in zip(rows, bot.closed)]),
             "versions": _versions("ORBIT", rows)}
 
 

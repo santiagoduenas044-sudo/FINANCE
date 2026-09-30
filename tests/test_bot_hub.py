@@ -52,6 +52,9 @@ def test_hub_shows_both_bots_and_orbit_state(tmp_path, monkeypatch):
     per = {v["version"]: v for v in orbit["versions"]}
     assert per["v1"]["net_usd"] == -120.0 and per["v2"]["net_usd"] == 900.0
     assert orbit["today"]["n"] == 1
+    # the "principal" row counts only the version running now (v2), not v1's trades
+    assert orbit["main"]["version"] == "v2" and orbit["main"]["total"]["net_usd"] == 900.0
+    assert ghost["main"]["version"] == current_version("GHOST")
     live = {s["name"]: s["live"] for s in d["strategies"] if s["status"] == "en vivo"}
     assert live["APERTURA"] == {"n": 2, "net_usd": 780.0}
 
