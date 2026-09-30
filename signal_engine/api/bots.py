@@ -7,6 +7,8 @@ file doubles as its heartbeat).
 """
 from __future__ import annotations
 
+import logging
+import math
 import time
 from pathlib import Path
 
@@ -16,6 +18,7 @@ from ..output.record import commission_per_trade
 from ..versions import BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of
 
 NY = "America/New_York"
+log = logging.getLogger(__name__)
 ORBIT_ALIVE_SECONDS = 180          # ORBIT saves its state every 30 s
 _REASONS_ES = {
     "active_trade": "ya había otro trade abierto", "cooldown": "pausa tras un stop",
@@ -30,7 +33,7 @@ _REASONS_ES = {
 
 
 def _px(v) -> str:
-    return "—" if v is None else f"{float(v):,.2f}"
+    return "—" if v is None or not math.isfinite(float(v)) else f"{float(v):,.2f}"
 
 
 def _usd(v: float) -> str:
@@ -331,11 +334,41 @@ def _iso(v) -> str | None:
         return None
 
 
+def _clean(v):
+    """JSON-safe: NaN/inf (e.g. a missing Yahoo price) become None instead of
+    making the whole answer fail."""
+    if isinstance(v, float) and not math.isfinite(v):
+        return None
+    if isinstance(v, dict):
+        return {k: _clean(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_clean(x) for x in v]
+    return v
+
+
+def _broken(name: str, color: str, exc: Exception) -> dict:
+    """A bot card that could not be built: the others still show, and this one
+    says what went wrong (the full traceback goes to the dashboard log)."""
+    return {"name": name, "color": color, "strategy": "—", "position": "—",
+            "status": "ERROR", "state": "off", "heartbeat": None, "fee_per_trade": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+            "now": [{"kind": "alert", "text": f"No pude leer este bot: {type(exc).__name__}: {exc}"}],
+            "today": _record([]), "total": _record([]), "open_usd": None,
+            "variants": [], "versions": _versions(name, []) if name in BOT_VERSIONS else []}
+
+
 def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | None = None,
              shadows_dir: Path | None = None) -> dict:
     now = _ny(now if now is not None else pd.Timestamp.now(tz=NY))
-    bots = [ghost_card(runtime, now, shadows_dir), orbit_card(orbit_dir, now, shadows_dir)]
-    totals = {b["name"]: b["total"]["net_usd"] for b in bots}
+    bots = []
+    for name, color, build in (("GHOST", "gold", lambda: ghost_card(runtime, now, shadows_dir)),
+                               ("ORBIT", "violet", lambda: orbit_card(orbit_dir, now, shadows_dir))):
+        try:
+            bots.append(build())
+        except Exception as exc:  # noqa: BLE001 - one bad bot never hides the others
+            log.exception("bot hub: %s card failed", name)
+            bots.append(_broken(name, color, exc))
+    totals = {b["name"]: b["total"]["net_usd"] or 0 for b in bots}
     variants = {v["id"]: v for b in bots for v in b.get("variants", [])}
     strategies = []
     for st in STRATEGIES:
@@ -351,5 +384,5 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
                         "detail": [{"name": v["name"], "n": v["total"]["n"],
                                     "net_usd": v["total"]["net_usd"]} for v in runs]}
         strategies.append({**st, "live": live})
-    return {"now": now.isoformat(), "commit": commit or {}, "bots": bots,
-            "strategies": strategies, "combined_usd": round(sum(totals.values()), 2)}
+    return _clean({"now": now.isoformat(), "commit": commit or {}, "bots": bots,
+                   "strategies": strategies, "combined_usd": round(sum(totals.values()), 2)})

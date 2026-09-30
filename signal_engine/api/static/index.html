@@ -1102,7 +1102,9 @@ function renderIdeas() {
 }
 
 /* ═══════════════════════════ BOTS · central ═══════════════════════════ */
-async function pollBots() { try { S.bots = await api("/api/bots"); } catch { S.bots = null; } }
+async function pollBots() {
+  try { S.bots = await api("/api/bots"); S.botsErr = null; } catch (e) { S.bots = null; S.botsErr = e.message; }
+}
 const STATE_ES = { trading: "Operando", watching: "Vigilando", scanning: "Buscando", closed: "Fuera de horario",
   done: "Terminó por hoy", paused: "En pausa", off: "Apagado", stale: "Sin señal" };
 const ICO = { trade: "●", watch: "◎", read: "·", decision: "↳", alert: "!" };
@@ -1111,7 +1113,8 @@ const ago = iso => { const d = okDate(iso); if (!d) return "—"; const s = Math
   return s < 90 ? `hace ${Math.round(s)} s` : s < 5400 ? `hace ${Math.round(s / 60)} min` : `hace ${(s / 3600).toFixed(1)} h`; };
 function renderBots() {
   const d = S.bots;
-  if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.</div></div>`; return; }
+  if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.${
+    S.botsErr ? `<br><span class="mono" style="font-size:12px">${esc(S.botsErr)}</span>` : ""}</div></div>`; return; }
   $("hub-sum").innerHTML = `<span class="pill"><span class="k">juntos</span><span class="v ${cls(d.combined_usd)}">${usd0(d.combined_usd)}</span></span>`
     + (d.commit?.commit ? `<span class="pill"><span class="k">código</span><span class="v mono">${esc(d.commit.commit)}</span></span>` : "");
   $("hub-bots").innerHTML = d.bots.map(b => {

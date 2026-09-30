@@ -10,6 +10,7 @@ URLs, no tokens) — see signal_engine/runtime/engine.py.
 """
 from __future__ import annotations
 
+import logging
 import os
 import time
 from pathlib import Path
@@ -398,8 +399,12 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             commit = maintenance.version(backtests.root)
         except Exception:  # noqa: BLE001 - the hub never fails over git
             commit = {}
-        return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None), commit=commit,
-                        shadows_dir=getattr(app.state, "shadows_dir", None))
+        try:
+            return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None),
+                            commit=commit, shadows_dir=getattr(app.state, "shadows_dir", None))
+        except Exception as exc:  # noqa: BLE001 - say what broke instead of a bare 500
+            logging.getLogger(__name__).exception("bot hub failed")
+            raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
     @app.post("/api/bots/{bot}/variants/{variant_id}")
     def switch_variant(bot: str, variant_id: str, on: bool) -> dict:

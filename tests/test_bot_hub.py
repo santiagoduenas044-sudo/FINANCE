@@ -213,3 +213,25 @@ def test_old_trades_go_to_the_version_that_really_made_them():
     assert ghost_version_of(t("zone_retrace", "1m", "2026-09-28 10:22")) == "v3"   # 1 min, 27-28 sep
     assert ghost_version_of(t("zone_retrace", "1m", "2026-09-30 21:00")) == "v3"   # 1 min at night
     assert ghost_version_of(t("zone_retrace", "1m", "2026-09-28 10:22", bot_version="v9")) == "v9"
+
+
+def test_hub_survives_a_missing_price_and_a_broken_bot(tmp_path, monkeypatch):
+    today = pd.Timestamp.now(tz="America/New_York").date().isoformat()
+    # ORBIT saw a bar with no price (Yahoo gaps): NaN used to make /api/bots fail
+    trade = {"id": "APERTURA-x", "day": today, "long": True, "entry": 25000.0, "stop": 24950.0,
+             "stop_initial": 24950.0, "target": 25075.0, "risk": 50.0, "be_done": False,
+             "opened_at": f"{today} 09:50:00-04:00", "box_hi": 25010.0, "box_lo": 24950.0,
+             "signal_ts": f"{today} 09:50:00-04:00"}
+    _orbit_files(tmp_path, {"day": today, "hi": 25010.0, "lo": 24950.0, "bars": 15,
+                            "box_sent": True, "done": True, "pending": None, "trade": trade,
+                            "last_ts": f"{today} 10:02:00-04:00", "last_close": float("nan")}, [])
+    c = _client(tmp_path)
+    r = c.get("/api/bots")
+    assert r.status_code == 200
+    assert r.json()["bots"][1]["open_usd"] is None
+    # a bot whose card cannot be built shows its error; the other one still shows
+    from signal_engine.api import bots
+    monkeypatch.setattr(bots, "ghost_card", lambda *a, **k: 1 / 0)
+    d = c.get("/api/bots").json()
+    assert d["bots"][0]["error"].startswith("ZeroDivisionError")
+    assert d["bots"][1]["name"] == "ORBIT" and "error" not in d["bots"][1]
