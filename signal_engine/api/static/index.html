@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#06070a">
 <title>GHOST · Panel</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23ffb020'/%3E%3Ctext x='8' y='12' font-family='sans-serif' font-size='11' font-weight='bold' text-anchor='middle'%3EG%3C/text%3E%3C/svg%3E">
+<link rel="icon" type="image/png" href="/static/ghost-64.png">
+<link rel="apple-touch-icon" href="/static/ghost-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -51,10 +52,10 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   padding: 12px 24px; background: rgba(6, 7, 10, .72); backdrop-filter: saturate(160%) blur(18px);
   -webkit-backdrop-filter: saturate(160%) blur(18px); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .brand { display: flex; align-items: center; gap: 11px; color: var(--ink-1); text-decoration: none; }
-.brand .mark { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
+.brand .mark { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex: none; padding: 1.5px;
   background: linear-gradient(145deg, #f7d98f, #d9a13a 55%, #9c6a17);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 6px 18px -6px rgba(232, 181, 79, .55); }
-.brand .mark svg { width: 20px; height: 20px; }
+.brand .mark img { width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: block; }
 .brand .wm { display: flex; flex-direction: column; line-height: 1.05; }
 .brand .wm b { font-weight: 700; letter-spacing: .28em; font-size: 13px; }
 .brand .wm small { color: var(--ink-3); font-size: 10.5px; letter-spacing: .06em; margin-top: 3px; }
@@ -371,6 +372,8 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .bot .av { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none;
   font: 700 15px var(--sans); color: #0b0d12; background: var(--c);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 8px 20px -8px var(--c); }
+.bot .av img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; display: block; }
+.bot .av:has(img) { padding: 2px; }
 .bot .nm { font-weight: 700; letter-spacing: .16em; font-size: 14px; }
 .bot .st { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
 .bot .hd .r { margin-left: auto; text-align: right; }
@@ -462,7 +465,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
 <body>
 <header class="top">
   <span class="brand" aria-label="GHOST">
-    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.8c-4.2 0-7.2 3.1-7.2 7.3v9.8c0 .7.8 1.1 1.4.7l1.6-1.2 1.7 1.3c.4.3.9.3 1.3 0L12 19.4l1.2 1.3c.4.3.9.3 1.3 0l1.7-1.3 1.6 1.2c.6.4 1.4 0 1.4-.7v-9.8c0-4.2-3-7.3-7.2-7.3Z" fill="#1d1405" fill-opacity=".92"/><circle cx="9.4" cy="10.4" r="1.45" fill="#f6d58c"/><circle cx="14.6" cy="10.4" r="1.45" fill="#f6d58c"/></svg></span>
+    <span class="mark" aria-hidden="true"><img src="/static/ghost.png" alt=""></span>
     <span class="wm"><b>GHOST</b><small>NQ · paper trading</small></span>
   </span>
   <span class="vsep opt" aria-hidden="true"></span>
@@ -1079,7 +1082,7 @@ function renderBots() {
         <td class="num hide-s" style="text-align:right">${v.n ? Math.round(v.win_rate * 100) + "%" : "—"}</td>
         <td class="num ${cls(v.net_usd)}" style="text-align:right;font-weight:600">${v.n ? usd0(v.net_usd) : "—"}</td></tr>`).join("");
     return `<div class="card bot ${b.color === "violet" ? "violet" : ""}">
-      <div class="hd"><span class="av">${esc(b.name[0])}</span>
+      <div class="hd"><span class="av">${b.name === "GHOST" ? '<img src="/static/ghost.png" alt="">' : esc(b.name[0])}</span>
         <div><div class="nm">${esc(b.name)}</div><div class="st">${esc(b.strategy)} · ${esc(b.position)} · papel</div></div>
         <div class="r"><span class="state ${esc(b.state)}"><span class="dot ${b.state === "trading" || b.state === "scanning" ? "ok" : b.state === "off" ? "bad" : b.state === "stale" || b.state === "paused" ? "warn" : ""}"></span>${STATE_ES[b.state] || esc(b.state)}</span>
           <span class="beat">${b.heartbeat ? "latido " + ago(b.heartbeat) : ""}</span></div></div>
