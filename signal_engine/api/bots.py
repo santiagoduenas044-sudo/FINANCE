@@ -16,7 +16,7 @@ import pandas as pd
 
 from ..output.record import commission_per_trade
 from ..versions import (BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of,
-                        orbit_version_of)
+                        orbit_version_of, version_title)
 
 NY = "America/New_York"
 log = logging.getLogger(__name__)
@@ -189,7 +189,9 @@ def ghost_card(runtime, now: pd.Timestamp, shadows_dir: Path | None = None) -> d
     variants = ghost_variants(runtime, sym, pv, today, shadows_dir)
     return {
         "variants": variants,
-        "name": "GHOST", "color": "gold", "strategy": f"Zonas {zr.timeframe}", "position": label,
+        "name": "GHOST", "color": "gold",
+        "strategy": version_title("GHOST", current_version("GHOST")).split(" · ")[0],
+        "position": label,
         "status": status, "state": state, "symbol": sym,
         "heartbeat": _iso(getattr(runtime, "last_heartbeat_at", None)),
         "fee_per_trade": fee,
@@ -361,7 +363,7 @@ def _broken(name: str, color: str, exc: Exception) -> dict:
 
 
 def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | None = None,
-             shadows_dir: Path | None = None) -> dict:
+             shadows_dir: Path | None = None, lab_dir: Path | None = None) -> dict:
     now = _ny(now if now is not None else pd.Timestamp.now(tz=NY))
     bots = []
     for name, color, build in (("GHOST", "gold", lambda: ghost_card(runtime, now, shadows_dir)),
@@ -372,24 +374,192 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
             log.exception("bot hub: %s card failed", name)
             bots.append(_broken(name, color, exc))
     totals = {b["name"]: b["total"]["net_usd"] or 0 for b in bots}
-    variants = {v["id"]: v for b in bots for v in b.get("variants", [])}
-    strategies = []
-    for st in STRATEGIES:
-        live = None
-        main = next((b for b in bots if st["status"] == "en vivo" and b["name"] == st["bot"]), None)
-        if main is not None:
-            live = {"n": main["total"]["n"], "net_usd": main["total"]["net_usd"]}
-        elif st.get("shadows"):
-            runs = [variants[i] for i in st["shadows"] if i in variants]
-            if runs:
-                live = {"n": sum(v["total"]["n"] for v in runs),
-                        "net_usd": round(sum(v["total"]["net_usd"] for v in runs), 2),
-                        "detail": [{"name": v["name"], "n": v["total"]["n"],
-                                    "net_usd": v["total"]["net_usd"]} for v in runs]}
-        strategies.append({**st, "live": live})
     return _clean({"now": now.isoformat(), "commit": commit or {}, "bots": bots,
-                   "strategies": strategies, "combined_usd": round(sum(totals.values()), 2),
+                   "strategies": strategy_cards(bots, lab_dir),
+                   "combined_usd": round(sum(totals.values()), 2),
                    "news": news_today(getattr(runtime, "news", None), now)})
+
+
+def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
+    """The catalogue with each strategy's OWN paper record: the bot versions
+    that traded it for real plus its parallel variants, never another
+    strategy's trades (IMÁN 15 counts GHOST v4 only; IMÁN 1 gets v2's)."""
+    cards = {b["name"]: b for b in bots}
+    variants = {v["id"]: (b["name"], v) for b in bots for v in b.get("variants", [])}
+    lab = latest_lab_rows(lab_dir)
+    out = []
+    for st in STRATEGIES:
+        parts = []
+        for bot, vids in (st.get("real") or {}).items():
+            per = {v["version"]: v for v in cards.get(bot, {}).get("versions", [])}
+            for vid in vids:
+                v = per.get(vid)
+                if v is None or (not v["n"] and not v.get("current")):
+                    continue
+                parts.append({"kind": "real", "bot": bot, "version": vid,
+                              "name": f"{bot} {vid} · en vivo{' (ahora)' if v.get('current') else ''}",
+                              "n": v["n"], "net_usd": v["net_usd"]})
+        on = []
+        for sid in st.get("shadows") or []:
+            if sid not in variants:
+                continue
+            bot, v = variants[sid]
+            on.append(v["enabled"])
+            parts.append({"kind": "paper", "bot": bot, "variant": sid,
+                          "name": f"en paralelo{'' if v['enabled'] else ' (apagada)'}",
+                          "enabled": v["enabled"],
+                          "n": v["total"]["n"], "net_usd": v["total"]["net_usd"]})
+        status = st["status"]
+        if status == "en paralelo" and on and not any(on):
+            status = "apagada"
+        live = None
+        if parts:
+            live = {"n": sum(p["n"] for p in parts),
+                    "net_usd": round(sum(p["net_usd"] or 0 for p in parts), 2), "detail": parts}
+        card = {**st, "status": status, "live": live}
+        if st.get("lab_prefix"):
+            card["lab_run"] = lab_summary(lab, st["lab_prefix"])
+        out.append(card)
+    return out
+
+
+def latest_lab_rows(lab_dir: Path | None, keep: int = 20) -> list[dict]:
+    """The newest lab runs saved with their numbers (data_store/lab/*.json),
+    newest first."""
+    if lab_dir is None:
+        return []
+    import json
+    out = []
+    for f in sorted(Path(lab_dir).glob("*.json"), reverse=True)[:keep]:
+        try:
+            data = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if data.get("rows"):
+            out.append({"id": f.stem, "meta": data.get("meta", {}), "rows": data["rows"]})
+    return out
+
+
+def lab_summary(runs: list[dict], prefix: str) -> dict | None:
+    """How the variants of one idea did in the newest lab run that tried it:
+    how many passed the blind test and the best one (by its TEST result)."""
+    for lab in runs:
+        rows = [r for r in lab["rows"]
+                if r["name"] == prefix or r["name"].startswith(prefix + " ·")]
+        if not rows:
+            continue
+        best = max(rows, key=lambda r: (r["ok"], (r.get("test") or {}).get("conf", -99)))
+        te, tr, al = best.get("test") or {}, best.get("train") or {}, best.get("all") or {}
+        return {"run": lab["id"], "position": lab["meta"].get("label"),
+                "variants": len(rows), "passed": sum(1 for r in rows if r["ok"]),
+                "best": {"name": best["name"], "ok": best["ok"],
+                         "n": al.get("n", 0), "net_usd": al.get("net"),
+                         "train_avg": tr.get("avg"), "test_avg": te.get("avg"),
+                         "dd": al.get("dd")}}
+    return None
+
+
+# --------------------------------------------------------------------------- #
+# every closed trade, for the calendar and the history
+# --------------------------------------------------------------------------- #
+def _ghost_rows(tracker, sym: str, pv: float, fee: float, src: str, version=None) -> list[dict]:
+    out = []
+    for t in (tracker.closed_trades if tracker is not None else []):
+        if t.closed_at is None or t.instrument != sym:
+            continue
+        usd = t.pnl_points * pv
+        out.append({"src": src, "version": version or ghost_version_of(t),
+                    "day": _ny(t.closed_at).date().isoformat(),
+                    "opened_at": _iso(t.opened_at), "closed_at": _iso(t.closed_at),
+                    "side": t.direction, "entry": t.entry, "exit": t.exit_price,
+                    "pts": round(t.pnl_points, 2), "usd": round(usd, 2),
+                    "net_usd": round(usd - fee, 2),
+                    "why": getattr(t.exit_reason, "value", None) or "",
+                    "idea": (t.context or {}).get("idea_number")})
+    return out
+
+
+def _orbit_rows(bot, src: str, version=None) -> list[dict]:
+    out = []
+    for c in bot.closed:
+        if not c.get("closed_at"):
+            continue
+        usd = float(c.get("usd", 0))
+        out.append({"src": src, "version": version or orbit_version_of(c),
+                    "day": c.get("day") or _ny(c["closed_at"]).date().isoformat(),
+                    "opened_at": _iso(c.get("opened_at")), "closed_at": _iso(c["closed_at"]),
+                    "side": "LONG" if c.get("long") else "SHORT", "entry": c.get("entry"),
+                    "exit": c.get("exit"), "pts": c.get("pts"),
+                    # ORBIT's dollars already have commission and slippage out
+                    "usd": round(usd, 2), "net_usd": round(usd, 2),
+                    "why": c.get("why", ""), "size": f"{c.get('contracts', '')} {c.get('symbol', '')}".strip()})
+    return out
+
+
+def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None = None) -> dict:
+    """Every closed paper trade of every bot, version and parallel variant,
+    each in dollars for the size it traded. GHOST's `usd` is before
+    commissions and `net_usd` after them; ORBIT's are already net (as in its
+    Discord messages). `sources` says what each `src` is."""
+    from dataclasses import replace
+    from ..paper.tracker import PaperTradeTracker
+    from ..runtime.shadows import SHADOWS_DIR, is_on, load_specs, store_dir
+    from ..subbots.opening_range import OpeningRangeBot
+    from ..subbots.orbit import STORE_DIR, bot_name, settings
+    base = shadows_dir or SHADOWS_DIR
+    sources, trades = [], []
+
+    # GHOST and its variants (all priced at GHOST's position)
+    feeds = list(getattr(runtime, "live_feeds", None) or {}) or ["NQ"]
+    sym = "NQ" if "NQ" in feeds else feeds[0]
+    try:
+        pos = runtime._point_values(sym) or {}
+    except Exception:  # noqa: BLE001
+        pos = {}
+    label, pv = next(iter(pos.items())) if pos else (f"1 punto {sym}", 1.0)
+    fee = commission_per_trade(label)
+    sources.append({"id": "ghost", "bot": "GHOST", "kind": "main", "name": "GHOST",
+                    "position": label, "fee": fee,
+                    "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["GHOST"]],
+                    "current": current_version("GHOST")})
+    trades += _ghost_rows(getattr(runtime, "paper_tracker", None), sym, pv, fee, "ghost")
+    running = {sp.id: rt for sp, rt in (getattr(runtime, "shadows", None) or [])}
+    for spec in load_specs("ghost"):
+        rt = running.get(spec.id)
+        if rt is not None:
+            tr = rt.paper_tracker
+        else:
+            d = store_dir("ghost", spec.id, base) / "paper"
+            tr = PaperTradeTracker(store_dir=d) if d.exists() else None
+        src = f"ghost:{spec.id}"
+        sources.append({"id": src, "bot": "GHOST", "kind": "variant", "name": spec.name,
+                        "about": spec.about, "enabled": is_on("ghost", spec, base),
+                        "position": label, "fee": fee})
+        trades += _ghost_rows(tr, sym, pv, fee, src, version=spec.version or "paralelo")
+
+    # ORBIT and its variants
+    s = settings()
+    odir = Path(orbit_dir or STORE_DIR)
+    sources.append({"id": "orbit", "bot": "ORBIT", "kind": "main", "name": bot_name(),
+                    "position": s.position, "fee": 0,
+                    "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["ORBIT"]],
+                    "current": current_version("ORBIT")})
+    if (odir / "apertura_trades.jsonl").exists():
+        trades += _orbit_rows(OpeningRangeBot(odir, settings=s), "orbit")
+    for spec in load_specs("orbit"):
+        src = f"orbit:{spec.id}"
+        sources.append({"id": src, "bot": "ORBIT", "kind": "variant", "name": spec.name,
+                        "about": spec.about, "enabled": is_on("orbit", spec, base),
+                        "position": s.position, "fee": 0})
+        d = store_dir("orbit", spec.id, base)
+        if (d / "apertura_trades.jsonl").exists():
+            try:
+                rules = replace(s, **(spec.settings or {}))
+            except (TypeError, ValueError):
+                rules = s
+            trades += _orbit_rows(OpeningRangeBot(d, settings=rules), src, version="paralelo")
+    trades.sort(key=lambda t: t["closed_at"] or "")
+    return _clean({"sources": sources, "trades": trades})
 
 
 def news_today(calendar, now) -> dict:

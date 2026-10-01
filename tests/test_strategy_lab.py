@@ -246,3 +246,51 @@ def test_night_sessions_and_protection_study_names():
     names = [n for n, _ in lab.PROTECTIONS]
     assert len(names) == 7 and names[0] == "sin protección"
     assert "Zonas 15 min · de día · sin protección" in lab.BOT_LIKE
+
+
+# --------------------------------------------------------------------------- #
+# new ideas (--estudio nuevas)
+# --------------------------------------------------------------------------- #
+def _range_then_break():
+    """09:30-11:30: bounces between ~100 and ~130 (four times each side);
+    then it breaks down and falls to 70."""
+    px = []
+    for k in range(120):
+        px.append(115 + 15 * np.sin(2 * np.pi * k / 30))          # 4 swings in 2 hours
+    px += list(np.linspace(112, 70, 40))
+    rows = [(p, p + 1, p - 1, p) for p in px]
+    return _market(rows, start="2025-03-03 09:30")
+
+
+def test_muro_finds_the_range_and_enters_where_it_breaks():
+    mk = _range_then_break()
+    brk = lab.wall_breakouts(mk, 24)
+    assert brk, "no range found"
+    x = brk[0]
+    assert x["long"] is False
+    assert 129 <= x["hi"] <= 131 and 99 <= x["lo"] <= 101
+    assert pd.Timestamp(x["ready"]) >= pd.Timestamp("2025-03-03 11:30")   # only once it breaks
+    sig = lab.wall(mk, brk, "opuesto", 2.0)[0]
+    assert sig.stop == x["hi"] and not sig.long
+    tgt = lab.wall(mk, brk, "opuesto", None, measured=True)[0].target
+    assert tgt == x["lo"] - (x["hi"] - x["lo"])
+    assert lab.wall(mk, brk, "ema20", 2.0)[0].stop > x["close"]        # short: stop above
+
+
+def test_new_ideas_run_and_carry_their_codes():
+    rng = np.random.default_rng(3)
+    idx = pd.date_range("2025-03-02 18:00", "2025-03-14 16:59", freq="1min")
+    idx = idx[(idx.dayofweek < 5) | ((idx.dayofweek == 6) & (idx.hour >= 18))]
+    idx = idx[~((idx.hour == 17))]
+    c = 20000 + np.cumsum(rng.normal(0, 3, len(idx)))
+    o = np.r_[c[0], c[:-1]]
+    df = pd.DataFrame({"open": o, "high": np.maximum(o, c) + 1, "low": np.minimum(o, c) - 1,
+                       "close": c, "volume": 100.0}, index=idx)
+    mk = lab.Market(df)
+    codes = ("MURO", "APERTURA VWAP", "RELLENO", "TRAMPA", "RESORTE", "CIERRE", "IMPULSO")
+    rows = list(lab.variants_nuevas(mk))
+    assert len(rows) > 30
+    for name, sig, _be in rows:
+        assert name.split(" · ")[0] in codes
+        lab.run(mk, sig, 1.0, "rth")
+    assert any(sig for name, sig, _ in rows if name.startswith("MURO"))

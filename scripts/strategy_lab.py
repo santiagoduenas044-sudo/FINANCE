@@ -485,6 +485,293 @@ def levels(mk: Market, which: str, k: float, vol: bool) -> list[Signal]:
 
 
 # --------------------------------------------------------------------------- #
+# new ideas (--estudio nuevas). Each row name starts with the strategy's code
+# (versions.py STRATEGIES), so the dashboard's catalogue finds its result.
+# --------------------------------------------------------------------------- #
+def day_vwap(mk: Market) -> np.ndarray:
+    """The day session's VWAP (from 09:30) at the close of each 5-minute bar;
+    nan outside 09:30-16:00. Bars without volume weigh the same."""
+    if "_vwap5" not in mk.__dict__:
+        b = mk.bars("5min")
+        mins = b.index.hour * 60 + b.index.minute
+        rth = pd.Series((mins >= 9 * 60 + 30) & (mins < 16 * 60), index=b.index)
+        tp = (b["high"] + b["low"] + b["close"]) / 3
+        w = b["volume"].where(b["volume"] > 0, 1.0).where(rth, 0.0)
+        day = b.index.normalize()
+        num = (tp * w).groupby(day).cumsum()
+        den = w.groupby(day).cumsum()
+        mk._vwap5 = (num / den.replace(0, np.nan)).where(rth).to_numpy()
+    return mk._vwap5
+
+
+def vwap_side(mk: Market):
+    """+1 while the last closed 5-minute bar is above the day's VWAP, -1 below."""
+    b = mk.bars("5min")
+    side = np.sign(b["close"].to_numpy() - day_vwap(mk))
+
+    def f(when) -> float:
+        v = mk.asof("5min", side, when)
+        return v if np.isfinite(v) else 0.0
+    return f
+
+
+def rth_days(mk: Market) -> pd.DataFrame:
+    """Open, high, low and close of each day session (09:30-16:00)."""
+    if "_days" not in mk.__dict__:
+        rth = mk.m1.between_time("09:30", "15:59")
+        g = rth.groupby(rth.index.normalize())
+        mk._days = pd.DataFrame({"open": g["open"].first(), "high": g["high"].max(),
+                                 "low": g["low"].min(), "close": g["close"].last()})
+    return mk._days
+
+
+def gap_fill(mk: Market, min_gap: float, max_gap: float = 150.0,
+             until: str | None = None) -> list[Signal]:
+    """RELLENO: the day opens `min_gap`+ pts away from yesterday's close. The
+    first 5-minute candle (before 10:30) that closes against the gap enters
+    toward yesterday's close (the target); stop behind the day's extreme."""
+    days, b = rth_days(mk), mk.bars("5min")
+    prev = days["close"].shift(1)
+    out = []
+    for day, row in days.iterrows():
+        pc = prev.get(day)
+        if not np.isfinite(pc):
+            continue
+        gap = row["open"] - pc
+        f = float(mk.scale_at([day])[0])
+        if not (min_gap * f <= abs(gap) <= max_gap * f):
+            continue
+        g = b[(b.index >= day + pd.Timedelta(hours=9, minutes=30))
+              & (b.index < day + pd.Timedelta(hours=10, minutes=30))]
+        hi = lo = None
+        for t, r in g.iterrows():
+            hi = r["high"] if hi is None else max(hi, r["high"])
+            lo = r["low"] if lo is None else min(lo, r["low"])
+            if gap > 0 and r["close"] < r["open"] and r["close"] > pc:
+                out.append(Signal(r["end"].to_datetime64(), False, hi + 2, target=pc, until=until))
+                break
+            if gap < 0 and r["close"] > r["open"] and r["close"] < pc:
+                out.append(Signal(r["end"].to_datetime64(), True, lo - 2, target=pc, until=until))
+                break
+    return out
+
+
+def sweep(mk: Market, which: str, k: float, max_poke: float = 25.0) -> list[Signal]:
+    """TRAMPA: a 5-minute candle pokes past yesterday's (or the night's)
+    high/low by at most `max_poke` pts and CLOSES back inside, against the
+    poke: enter the other way, stop 1 pt behind the poke. Once per side and day."""
+    m1, b = mk.m1, mk.bars("5min")
+    tday = (m1.index + pd.Timedelta(hours=6)).normalize()
+    mins = m1.index.hour * 60 + m1.index.minute
+    rth = (mins >= 9 * 60 + 30) & (mins < 16 * 60)
+    night = (mins < 9 * 60 + 30) | (mins >= 18 * 60)
+    g_rth = m1[rth].groupby(tday[rth]).agg({"high": "max", "low": "min"})
+    g_night = m1[night].groupby(tday[night]).agg({"high": "max", "low": "min"})
+    ref = (g_rth.shift(1) if which == "ayer" else g_night).reindex(g_rth.index)
+    bday = (b.index + pd.Timedelta(hours=6)).normalize()
+    bmin = b.index.hour * 60 + b.index.minute
+    O, H, L, C = (b[c].to_numpy() for c in ("open", "high", "low", "close"))
+    end = b["end"].to_numpy()
+    lv = ref.reindex(bday)
+    lhi, llo = lv["high"].to_numpy(), lv["low"].to_numpy()
+    f = mk.scale_at(b.index)
+    ok = np.asarray((bmin >= 9 * 60 + 30) & (bmin < 15 * 60 + 30))
+    out, done = [], set()
+    for i in np.flatnonzero(ok & np.isfinite(lhi)):
+        d = bday[i]
+        if lhi[i] < H[i] <= lhi[i] + max_poke * f[i] and C[i] < lhi[i] and C[i] < O[i] \
+                and (d, -1) not in done:
+            done.add((d, -1))
+            out.append(Signal(end[i], False, H[i] + 1, k=k))
+        elif llo[i] - max_poke * f[i] <= L[i] < llo[i] and C[i] > llo[i] and C[i] > O[i] \
+                and (d, 1) not in done:
+            done.add((d, 1))
+            out.append(Signal(end[i], True, L[i] - 1, k=k))
+    return out
+
+
+def nr7(mk: Market, k: float, stop_at: str = "vela") -> list[Signal]:
+    """RESORTE: yesterday's day session was the narrowest of the last 7.
+    Today the first 5-minute close beyond yesterday's high/low enters that
+    way; stop behind the breakout candle ("vela") or at yesterday's middle."""
+    days, b = rth_days(mk), mk.bars("5min")
+    rng = days["high"] - days["low"]
+    narrow = (rng <= rng.rolling(7).min()).shift(1).fillna(False).astype(bool)
+    yhi, ylo = days["high"].shift(1), days["low"].shift(1)
+    out = []
+    for day in days.index[narrow.to_numpy()]:
+        hi, lo = yhi[day], ylo[day]
+        g = b[(b.index >= day + pd.Timedelta(hours=9, minutes=30))
+              & (b.index < day + pd.Timedelta(hours=15, minutes=30))]
+        for t, r in g.iterrows():
+            up, dn = r["close"] > hi, r["close"] < lo
+            if up or dn:
+                stop = ((r["low"] - 1) if up else (r["high"] + 1)) if stop_at == "vela" \
+                    else (hi + lo) / 2
+                out.append(Signal(r["end"].to_datetime64(), bool(up), stop, k=k))
+                break
+    return out
+
+
+def last_hour(mk: Market, at: str, stop_at: str = "30min") -> list[Signal]:
+    """CIERRE: at `at` (14:30 / 15:00) the day is clearly one-sided (above
+    the VWAP and the open, or below both): enter that way and hold to 15:55.
+    Stop behind the last 30 minutes' extreme, or behind the VWAP."""
+    b, days = mk.bars("5min"), rth_days(mk)
+    vw = day_vwap(mk)
+    h, m = map(int, at.split(":"))
+    end = b["end"]
+    idx = np.flatnonzero((end.dt.hour.to_numpy() == h) & (end.dt.minute.to_numpy() == m))
+    out = []
+    for i in idx:
+        day = b.index[i].normalize()
+        if day not in days.index or i < 6 or not np.isfinite(vw[i]):
+            continue
+        c, o = b["close"].iat[i], days.at[day, "open"]
+        up, dn = c > vw[i] and c > o, c < vw[i] and c < o
+        if not (up or dn):
+            continue
+        if stop_at == "30min":
+            stop = b["low"].iloc[i - 5:i + 1].min() - 1 if up else b["high"].iloc[i - 5:i + 1].max() + 1
+        else:
+            stop = vw[i] - 2 if up else vw[i] + 2
+        out.append(Signal(end.iat[i].to_datetime64(), bool(up), stop, k=10.0, until="15:55"))
+    return out
+
+
+def impulse(mk: Market, move: float, k: float) -> list[Signal]:
+    """IMPULSO: the first 30 minutes move `move`+ pts one way. Between 10:00
+    and 12:00, the first 5-minute candle that dips to the 20-EMA (or the
+    VWAP) and closes back in the move's direction enters; stop 2 pts behind
+    that candle."""
+    b, days = mk.bars("5min"), rth_days(mk)
+    C = b["close"].to_numpy()
+    e20, vw = _ema(C, 20), day_vwap(mk)
+    out = []
+    for day, row in days.iterrows():
+        at10 = b[(b.index >= day + pd.Timedelta(hours=9, minutes=30))
+                 & (b.index < day + pd.Timedelta(hours=10))]
+        if len(at10) < 5:
+            continue
+        drive = at10["close"].iat[-1] - row["open"]
+        f = float(mk.scale_at([day])[0])
+        if abs(drive) < move * f:
+            continue
+        up = drive > 0
+        lo_i = int(b.index.searchsorted(day + pd.Timedelta(hours=10)))
+        hi_i = int(b.index.searchsorted(day + pd.Timedelta(hours=12)))
+        for i in range(lo_i, hi_i):
+            o, hgh, low, c = b["open"].iat[i], b["high"].iat[i], b["low"].iat[i], C[i]
+            lvl = max(e20[i], vw[i]) if up else min(e20[i], vw[i])
+            if not np.isfinite(lvl):
+                continue
+            if up and low <= lvl < c and c > o:
+                out.append(Signal(b["end"].iat[i].to_datetime64(), True, low - 2, k=k))
+                break
+            if not up and hgh >= lvl > c and c < o:
+                out.append(Signal(b["end"].iat[i].to_datetime64(), False, hgh + 2, k=k))
+                break
+    return out
+
+
+def wall_breakouts(mk: Market, n: int, min_w: float = 15.0, max_w: float = 90.0,
+                   touches: int = 2) -> list[dict]:
+    """The ranges MURO trades: over the last `n` 5-minute candles price kept
+    bouncing between a ceiling (resistance) and a floor (support), each one
+    visited at least `touches` separate times (a visit = candles within 15%
+    of the range's height from that side). The first candle that CLOSES
+    outside is the breakout. One per range; the next range starts after it."""
+    b = mk.bars("5min")
+    O, H, L, C = (b[c].to_numpy() for c in ("open", "high", "low", "close"))
+    t, end = b.index.to_numpy(), b["end"].to_numpy()
+    e9, e20 = _ema(C, 9), _ema(C, 20)
+    f = mk.scale_at(b.index)
+    span = np.timedelta64(5 * n, "m")
+
+    def visits(mask: np.ndarray) -> int:
+        return int(mask[0]) + int(np.sum(mask[1:] & ~mask[:-1]))
+
+    out, skip = [], -1
+    for i in range(n, len(b)):
+        if i <= skip or t[i] - t[i - n] != span:
+            continue
+        hi, lo = H[i - n:i].max(), L[i - n:i].min()
+        w = hi - lo
+        if not (min_w * f[i] <= w <= max_w * f[i]):
+            continue
+        up, dn = C[i] > hi, C[i] < lo
+        if not (up or dn):
+            continue
+        tol = 0.15 * w
+        if visits(H[i - n:i] >= hi - tol) < touches or visits(L[i - n:i] <= lo + tol) < touches:
+            continue
+        out.append({"ready": end[i], "long": bool(up), "hi": hi, "lo": lo, "close": C[i],
+                    "low": L[i], "high": H[i], "e9": e9[i], "e20": e20[i], "f": f[i]})
+        skip = i + n // 2
+    return out
+
+
+def wall(mk: Market, brk: list[dict], stop_at: str, k: float | None,
+         measured: bool = False, max_stop: float = 100.0) -> list[Signal]:
+    """MURO: enter where the range breaks (see wall_breakouts). Stop at the
+    other side, the middle, just behind the broken level, or behind the 9-
+    or 20-EMA (2 pts). Target k x the stop, or (measured) the range's height
+    beyond the broken level."""
+    out = []
+    for x in brk:
+        up, hi, lo, c = x["long"], x["hi"], x["lo"], x["close"]
+        stop = {"opuesto": lo if up else hi,
+                "medio": (hi + lo) / 2,
+                "nivel": (hi - 3 * x["f"]) if up else (lo + 3 * x["f"]),
+                "ema9": x["e9"] - 2 if up else x["e9"] + 2,
+                "ema20": x["e20"] - 2 if up else x["e20"] + 2}[stop_at]
+        risk = (c - stop) if up else (stop - c)
+        if risk <= 2 or risk > max_stop * x["f"]:
+            continue
+        if measured:
+            tgt = hi + (hi - lo) if up else lo - (hi - lo)
+            out.append(Signal(x["ready"], up, stop, target=tgt))
+        else:
+            out.append(Signal(x["ready"], up, stop, k=k))
+    return out
+
+
+def variants_nuevas(mk: Market):
+    """New ideas, each a small grid so a ✔ is not one lucky setting."""
+    for n, lab in ((24, "2 h"), (48, "4 h")):
+        brk = wall_breakouts(mk, n)
+        for stop_at, sname in (("opuesto", "stop otro lado"), ("medio", "stop a la mitad"),
+                               ("nivel", "stop tras el nivel roto"), ("ema9", "stop tras EMA 9"),
+                               ("ema20", "stop tras EMA 20")):
+            for k in (1.5, 2.0, 3.0):
+                yield f"MURO · rango {lab} · {sname} · TP {k:g}×", wall(mk, brk, stop_at, k), None
+            yield (f"MURO · rango {lab} · {sname} · objetivo = altura del rango",
+                   wall(mk, brk, stop_at, None, measured=True), None)
+        yield f"MURO · rango {lab} · stop tras EMA 20 · TP 2× · BE+2 al 70%", \
+            wall(mk, brk, "ema20", 2.0), 0.7
+    vs = vwap_side(mk)
+    for minutes in (15, 30):
+        for k in (1.5, 2.0):
+            yield (f"APERTURA VWAP · caja {minutes} min · TP {k:g}×",
+                   only_with(orb(mk, minutes, k, "opuesto"), vs), None)
+    for g in (20.0, 40.0):
+        yield f"RELLENO · hueco ≥ {g:g} pts", gap_fill(mk, g), None
+        yield f"RELLENO · hueco ≥ {g:g} pts · cierra 12:00", gap_fill(mk, g, until="12:00"), None
+    for which in ("ayer", "noche"):
+        for k in (2.0, 3.0):
+            yield f"TRAMPA · barrida de máx/mín de {which} · TP {k:g}×", sweep(mk, which, k), None
+    for k in (1.5, 2.0, 3.0):
+        yield f"RESORTE · tras día NR7 · stop tras la vela · TP {k:g}×", nr7(mk, k), None
+    yield "RESORTE · tras día NR7 · stop a la mitad de ayer · TP 2×", nr7(mk, 2.0, "medio"), None
+    for at in ("14:30", "15:00"):
+        yield f"CIERRE · desde {at} · stop 30 min", last_hour(mk, at), None
+        yield f"CIERRE · desde {at} · stop tras el VWAP", last_hour(mk, at, "vwap"), None
+    for move in (40.0, 70.0):
+        for k in (2.0, 3.0):
+            yield f"IMPULSO · primeros 30 min ≥ {move:g} pts · TP {k:g}×", impulse(mk, move, k), None
+
+
+# --------------------------------------------------------------------------- #
 # filters: keep a signal only when the wider market agrees with its side
 # --------------------------------------------------------------------------- #
 def nq_trend(mk: Market, n: int = 20):
@@ -801,11 +1088,12 @@ def main() -> int:
     ap.add_argument("--slip-ticks", type=float, default=1.0, help="deslizamiento por lado")
     ap.add_argument("--sessions", choices=("rth", "noche", "all"), default="rth")
     ap.add_argument("--min-n", type=int, default=60, help="trades mínimos en TRAIN y en TEST")
-    ap.add_argument("--estudio", choices=("todo", "apertura", "zonas", "proteccion"),
+    ap.add_argument("--estudio", choices=("todo", "apertura", "zonas", "proteccion", "nuevas"),
                     default="todo",
                     help="apertura: la ruptura de apertura a fondo · zonas: la estrategia de "
                          "GHOST en velas de 1, 5 y 15 min · proteccion: GHOST (zonas 15 min) "
-                         "con cada forma de asegurar ganancia, de día y de noche")
+                         "con cada forma de asegurar ganancia, de día y de noche · nuevas: "
+                         "MURO, RELLENO, TRAMPA, RESORTE, CIERRE, IMPULSO, APERTURA VWAP")
     ap.add_argument("--escala", choices=("puntos", "precio"), default="puntos",
                     help="precio: los límites en puntos crecen con el precio del NQ "
                          f"(escritos para {REF_PRICE:,.0f}; a 30,000 valen el doble)")
@@ -840,7 +1128,8 @@ def main() -> int:
     rows, raws = [], {}
     grid = {"apertura": lambda: variants_orb(mk),
             "zonas": lambda: variants_zonas(mk),
-            "proteccion": lambda: variants_proteccion(mk)}.get(a.estudio, lambda: variants(mk, big))()
+            "proteccion": lambda: variants_proteccion(mk),
+            "nuevas": lambda: variants_nuevas(mk)}.get(a.estudio, lambda: variants(mk, big))()
     for name, sig, be in grid:
         kw = dict(be) if isinstance(be, dict) else {"be_at": be}
         sessions = kw.pop("sessions", a.sessions)

@@ -67,6 +67,35 @@ class OrbSettings:
                    cost_points=round(commission / pv + 2 * TICK, 4), **kw)
 
 
+# Until 30-Sep a trade did not store its size when it opened: one that closed
+# after an update took the size of the new code. What ORBIT really traded
+# then, by when the trade opened (UTC): (until, position).
+LEGACY_SIZES = (("2026-09-29 18:29:37+00:00", "1 MNQ"),    # until the 1 NQ update
+                ("2026-09-30 16:01:51+00:00", "1 NQ"))
+
+
+def legacy_size(t: dict) -> dict:
+    """A closed trade with the size it was really opened with. Trades that
+    stored it (since 30-Sep) are returned as they are."""
+    if "usd_per_point" in t or not t.get("opened_at") or "pts" not in t:
+        return t
+    try:
+        opened = pd.Timestamp(t["opened_at"])
+        opened = opened.tz_localize(TZ) if opened.tzinfo is None else opened
+    except (TypeError, ValueError):
+        return t
+    if opened < pd.Timestamp("2026-09-29", tz=TZ):
+        return t
+    pos = next((p for until, p in LEGACY_SIZES if opened < pd.Timestamp(until)), None)
+    if pos is None:
+        return t
+    s = OrbSettings.for_position(pos)
+    net = float(t["pts"]) - s.cost_points
+    return {**t, "contracts": s.contracts, "symbol": s.symbol, "usd_per_point": s.usd_per_point,
+            "cost_points": s.cost_points, "net_pts": round(net, 2),
+            "usd": round(net * s.usd_per_point * s.contracts, 2)}
+
+
 @dataclass
 class DayState:
     day: str = ""
@@ -134,8 +163,8 @@ class OpeningRangeBot:
 
     def _load_trades(self) -> list[dict]:
         try:
-            return [json.loads(line) for line in self.trades_file.read_text().splitlines()
-                    if line.strip()]
+            return [legacy_size(json.loads(line))
+                    for line in self.trades_file.read_text().splitlines() if line.strip()]
         except (OSError, ValueError):
             return []
 

@@ -368,6 +368,7 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .sumt .who i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .sumt .sub { display: block; color: var(--ink-3); font-size: 11.5px; font-weight: 400; margin-top: 2px; }
 .sumt tr.child td:first-child { padding-left: 30px; }
+tr.go { cursor: pointer; }
 .sumt tr.child .who { font-weight: 500; color: var(--ink-2); }
 .sumt tr.off td { opacity: .5; }
 .sumt .lab { color: var(--ink-3); font-size: 12px; min-width: 200px; }
@@ -436,6 +437,73 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .vtag { font: 600 11px var(--mono); padding: 2px 7px; border-radius: 6px; background: var(--panel-3); color: var(--ink-1); }
 .vers .vt { color: var(--ink-1); font-weight: 500; white-space: normal; min-width: 150px; }
 .vers .vr { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 2px; white-space: normal; line-height: 1.45; }
+/* ── historial: selector de bot/versión y calendario ── */
+.hrow { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.hsrc { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px; }
+.hsrc button { padding: 6px 11px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--ink-2);
+  background: var(--panel-2); border: 1px solid var(--line); display: inline-flex; gap: 6px; align-items: center; }
+.hsrc button .n { font: 500 11px var(--mono); color: var(--ink-3); }
+.hsrc button.par { border-style: dashed; }
+.hsrc button[aria-pressed="true"] { background: var(--amber-dim); color: var(--amber-2); border-color: rgba(232, 181, 79, .45); }
+.hsrc button[aria-pressed="true"] .n { color: var(--amber); }
+.hsrc .sep { width: 100%; font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-3); margin-top: 4px; }
+.calnav { display: inline-flex; align-items: center; gap: 10px; }
+.calnav b { font: 600 13px var(--sans); color: var(--ink-1); min-width: 120px; text-align: center; text-transform: capitalize; }
+.calnav button { width: 28px; height: 28px; border-radius: 8px; background: var(--panel-2); color: var(--ink-1); font-size: 16px; line-height: 1; }
+.calnav button:disabled { opacity: .3; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) minmax(0, 1.15fr); gap: 4px; }
+.cal .hd { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); text-align: center; padding: 2px 0 4px; font-weight: 600; }
+.cal .d { position: relative; min-height: 74px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--line);
+  padding: 6px 7px; display: flex; flex-direction: column; justify-content: space-between; align-items: flex-start;
+  text-align: left; color: var(--ink-2); min-width: 0; }
+.cal .d .v { max-width: 100%; }
+.tile.sm .fig { font-size: 22px; white-space: nowrap; }
+.cal .d.out { background: transparent; border-color: transparent; }
+.cal .d .dn { font: 500 11px var(--mono); color: var(--ink-3); }
+.cal .d .v { font: 600 13px var(--mono); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal .d .c { font: 10.5px var(--mono); color: var(--ink-3); }
+.cal .d.has { cursor: pointer; }
+.cal .d.has:hover { border-color: var(--rule-strong); }
+.cal .d.win { background: rgba(47, 208, 140, var(--a, .14)); border-color: rgba(47, 208, 140, .35); }
+.cal .d.loss { background: rgba(255, 93, 112, var(--a, .14)); border-color: rgba(255, 93, 112, .35); }
+.cal .d.win .v { color: var(--good); } .cal .d.loss .v { color: var(--critical); }
+.cal .d.istoday { box-shadow: inset 0 0 0 1.5px var(--amber); }
+.cal .d.sel { outline: 2px solid var(--ink-1); outline-offset: 1px; }
+.cal .wk { border-radius: 10px; background: var(--panel-3); padding: 6px 8px; display: flex; flex-direction: column;
+  justify-content: center; gap: 2px; min-height: 74px; min-width: 0; }
+.cal .wk .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); }
+.cal .wk .v { font: 600 13px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal .wk .c { font: 10.5px var(--mono); color: var(--ink-3); }
+.dayx { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.dayx h5 { margin: 0 0 8px; font-size: 12px; color: var(--ink-1); font-weight: 600; display: flex; gap: 10px; align-items: baseline; }
+.vtag2 { font: 600 10.5px var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--panel-3); color: var(--ink-2); }
+.lastdays { display: flex; gap: 4px; margin: 0 20px; }
+.bot h4 .golink { text-transform: none; letter-spacing: 0; margin-left: 6px; }
+.lastdays .ld { flex: 1; min-width: 0; border-radius: 8px; padding: 6px 4px; text-align: center; background: var(--panel-2);
+  border: 1px solid var(--line); cursor: pointer; }
+.lastdays .ld .dn { font: 500 10px var(--mono); color: var(--ink-3); display: block; }
+.lastdays .ld .v { font: 600 11.5px var(--mono); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lastdays .ld.win { background: rgba(47, 208, 140, .12); border-color: rgba(47, 208, 140, .3); }
+.lastdays .ld.loss { background: rgba(255, 93, 112, .12); border-color: rgba(255, 93, 112, .3); }
+.lastdays .ld.win .v { color: var(--good); } .lastdays .ld.loss .v { color: var(--critical); }
+.golink { font-size: 12px; color: var(--amber); font-weight: 600; background: none; padding: 0; }
+.golink:hover { color: var(--amber-2); }
+.strat .det { display: block; width: 100%; text-align: left; font: 12px var(--mono); color: var(--ink-2); background: none; padding: 2px 0; }
+.strat .det:hover { color: var(--ink-1); }
+.strat .code { font: 700 13px var(--mono); letter-spacing: .04em; color: var(--ink-1); }
+.strat .sname { display: block; color: var(--ink-3); font-size: 12px; margin-top: 4px; }
+.strat .labrun { margin-top: 6px; color: var(--ink-2); }
+.stag.todo { background: rgba(123, 150, 255, .10); color: var(--info); border: 1px dashed rgba(123, 150, 255, .4); }
+.stag.offs { background: var(--panel-3); color: var(--ink-2); }
+@media (max-width: 560px) {
+  .cal { gap: 2px; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+  .cal .wk, .cal .hd.wkh { display: none; }
+  .cal .d { min-height: 52px; padding: 4px 3px; border-radius: 7px; }
+  .cal .d .v { font-size: 10px; }
+  .cal .d .c { display: none; }
+  .cal .d .dn { font-size: 9.5px; }
+  .tile.sm .fig { font-size: 17px; }
+}
 .strats { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
 .strat { padding: 14px 16px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line); }
 .strat .t1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -466,7 +534,7 @@ tr.best td { background: rgba(47, 208, 140, .06); }
 .btag { font: 600 10.5px var(--mono); padding: 2px 7px; border-radius: 6px; flex: none; }
 .strat .t1 b { flex: 1; min-width: 0; }
 .btag.gold { background: var(--amber-dim); color: var(--amber); } .btag.violet { background: var(--violet-dim); color: var(--violet); }
-.btag.lab { background: var(--panel-3); color: var(--ink-2); }
+.btag.labt { background: var(--panel-3); color: var(--ink-2); }
 @media (max-width: 1080px) { .bots { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 640px) {
   .bot .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -578,7 +646,19 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
 
   <!-- ═════════ 2 · HISTORIAL ═════════ -->
   <section class="view" id="v-history">
+    <div class="card mb hpick">
+      <div class="body">
+        <div class="hrow"><div class="seg" id="h-bot" role="group" aria-label="Bot"></div>
+          <div class="seg" id="h-money" role="group" aria-label="Dólares">
+            <button type="button" data-m="net" aria-pressed="true">Con comisiones</button>
+            <button type="button" data-m="gross" aria-pressed="false">Sin comisiones</button></div></div>
+        <div class="hsrc" id="h-src" role="group" aria-label="Versión"></div>
+        <p class="foot" id="h-about"></p>
+      </div></div>
     <div class="grid g-4 mb" id="perf-tiles"></div>
+    <div class="card mb"><h3>Calendario <span class="r calnav"><button type="button" id="cal-prev" aria-label="Mes anterior">‹</button>
+        <b id="cal-title"></b><button type="button" id="cal-next" aria-label="Mes siguiente">›</button></span></h3>
+      <div class="body"><div class="cal" id="cal"></div><div id="cal-day"></div></div></div>
     <div class="card mb"><h3>Curva de resultados <span class="r" id="eq-total"></span></h3><div class="body"><div id="equity"></div></div></div>
     <div class="card"><h3>Operaciones cerradas <span class="r" id="closed-n"></span></h3><div class="scroll" id="closed-table"></div></div>
   </section>
@@ -606,7 +686,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .08em; text-align
         <div class="ph"><span class="mn">LAB</span><h2>Laboratorio de estrategias</h2><div class="gap"></div>
           <span class="pill"><span class="v" id="lab-state">—</span></span></div>
         <div class="pb" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select id="lab-est" aria-label="Estudio"><option value="todo">Todas las ideas</option><option value="apertura">Ruptura de apertura a fondo</option><option value="zonas">Zonas en 1, 5 y 15 min</option><option value="proteccion">Cómo asegurar ganancia (GHOST)</option></select>
+          <select id="lab-est" aria-label="Estudio"><option value="todo">Todas las ideas</option><option value="apertura">Ruptura de apertura a fondo</option><option value="zonas">Zonas en 1, 5 y 15 min</option><option value="proteccion">Cómo asegurar ganancia (GHOST)</option><option value="nuevas">Estrategias nuevas (MURO, RELLENO, TRAMPA…)</option></select>
           <select id="lab-esc" aria-label="Escala"><option value="puntos">Puntos fijos</option><option value="precio">Escalado al precio</option></select>
           <select id="lab-pos" aria-label="Posición"><option value="5mnq">5 MNQ fijos</option><option value="1nq">1 NQ fijo</option><option value="riesgo">Riesgo fijo $300</option></select>
           <select id="lab-ses" aria-label="Horario"><option value="rth">09:30–15:30</option><option value="noche">solo de noche</option><option value="all">día y noche</option></select>
@@ -1141,6 +1221,11 @@ const ago = iso => { const d = okDate(iso); if (!d) return "—"; const s = Math
   return s < 90 ? `hace ${Math.round(s)} s` : s < 5400 ? `hace ${Math.round(s / 60)} min` : `hace ${(s / 3600).toFixed(1)} h`; };
 function renderBots() {
   const d = S.bots;
+  if (d === undefined) {              // first visit: load now instead of waiting for the next poll
+    $("hub-bots").innerHTML = `<div class="card"><div class="empty">Cargando los bots…</div></div>`;
+    if (!S.botsBusy) { S.botsBusy = true; Promise.all([pollBots(), S.tlog ? null : pollTlog()]).then(() => { S.botsBusy = false; if (S.view === "bots") renderBots(); }); }
+    return;
+  }
   if (!d) { $("hub-bots").innerHTML = `<div class="card"><div class="empty">No pude leer el estado de los bots.${
     S.botsErr ? `<br><span class="mono" style="font-size:12px">${esc(S.botsErr)}</span>` : ""}</div></div>`; return; }
   // resumen: every bot, then its parallel variants
@@ -1153,11 +1238,11 @@ function renderBots() {
   $("hub-table").innerHTML = `<thead><tr><th>Bot</th><th>Estrategia</th><th class="hide-s">Tamaño</th><th class="hide-s">Estado</th>
       <th class="hide-s">Laboratorio (5 años)</th><th>En papel</th></tr></thead><tbody>` + d.bots.map(b => {
     const main = b.main || { title: b.strategy, total: b.total };
-    const row = `<tr><td><span class="who"><i style="background:${dotc(b)}"></i>${esc(b.name)}</span><span class="sub">principal · avisa en Discord</span></td>
+    const row = `<tr class="go" data-hist="${b.name.toLowerCase()}${main.version ? "@" + main.version : ""}"><td><span class="who"><i style="background:${dotc(b)}"></i>${esc(b.name)}</span><span class="sub">principal · avisa en Discord</span></td>
       <td>${esc(main.version ? main.version + " · " + main.title : main.title)}</td><td class="hide-s t">${esc(b.position)}</td>
       <td class="hide-s">${esc(STATE_ES[b.state] || b.state)}</td><td class="lab hide-s">${esc(labOf(b.name))}</td>
       <td class="t">${paper(main.total, b.open_usd)}</td></tr>`;
-    return row + (b.variants || []).map(v => `<tr class="child ${v.enabled ? "" : "off"}">
+    return row + (b.variants || []).map(v => `<tr class="child go ${v.enabled ? "" : "off"}" data-hist="${b.name.toLowerCase()}:${esc(v.id)}">
       <td><span class="who"><i style="background:${dotc(b)};opacity:.5"></i>${esc(b.name)}</span><span class="sub">en paralelo · ${v.enabled ? "prendida" : "apagada"}</span></td>
       <td>${esc(v.name)}</td><td class="hide-s t">${esc(b.position)}</td>
       <td class="hide-s">${v.enabled ? (v.open_usd != null ? "Operando" : "Prendida") : "Apagada"}</td>
@@ -1203,6 +1288,7 @@ function renderBots() {
         ${kv("Trades", a.n || "0", a.n ? `${a.wins} ganados` : "—")}
         ${kv("Acierto", a.n ? Math.round(a.win_rate * 100) + "%" : "—", a.n ? `prom. ${usd0(a.avg_usd)}` : "—")}
       </div>
+      ${lastStrip(b)}
       <h4>Ahora mismo</h4>
       <ul class="feed">${b.now.map(l => `<li class="${esc(l.kind)}"><span class="ico">${ICO[l.kind] || "·"}</span><span>${esc(l.text)}</span></li>`).join("")}</ul>
       ${parTable(b)}
@@ -1213,15 +1299,33 @@ function renderBots() {
         <tbody>${rows}</tbody></table></div>
     </div>`;
   }).join("");
-  const SK = { "en vivo": "live", "en estudio": "study", "en paralelo": "par" };
-  $("hub-strats").innerHTML = d.strategies.map(st => {
-    const bt = st.bot === "GHOST" ? "gold" : st.bot === "ORBIT" ? "violet" : "lab";
+  const SK = { "en vivo": "live", "en estudio": "study", "en paralelo": "par", "por probar": "todo", "apagada": "offs" };
+  const ORDER = ["en vivo", "en paralelo", "apagada", "en estudio", "por probar", "descartada"];
+  const strats = d.strategies.slice().sort((a, b) => ORDER.indexOf(a.status) - ORDER.indexOf(b.status));
+  $("hub-strats").innerHTML = strats.map(st => {
+    const bt = st.bot === "GHOST" ? "gold" : st.bot === "ORBIT" ? "violet" : "labt";
+    const lr = st.lab_run, best = lr?.best;
+    const det = (st.live?.detail || []).map(p => {
+      const sel = p.kind === "real" ? `${p.bot.toLowerCase()}@${p.version}` : `${p.bot.toLowerCase()}:${p.variant}`;
+      return `<button type="button" class="det" data-hist="${esc(sel)}">· ${esc(p.name)}: ${p.n} ${p.n === 1 ? "trade" : "trades"} · <span class="${cls(p.n ? p.net_usd : null)}">${p.n ? usd0(p.net_usd) : "—"}</span> ›</button>`;
+    }).join("");
     return `<div class="strat"><div class="t1"><span class="stag ${SK[st.status] || "gone"}">${esc(st.status)}</span>
-        <b>${esc(st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span></div>
+        <b class="code">${esc(st.code || st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span></div>
+      <span class="sname">${esc(st.name)}</span>
       <p>${esc(st.text)}</p>
-      <div class="lab">Laboratorio: ${esc(st.lab)}${st.live ? `<br>En papel: ${st.live.n} trades · <span class="${cls(st.live.net_usd)}">${usd0(st.live.net_usd)}</span>` : ""}${
-        (st.live?.detail || []).length > 1 ? st.live.detail.map(v => `<br>· ${esc(v.name)}: ${v.n} trades · <span class="${cls(v.net_usd)}">${usd0(v.net_usd)}</span>`).join("") : ""}</div></div>`;
+      <div class="lab">Laboratorio: ${esc(st.lab)}${lr ? `<div class="labrun">Última prueba: ${lr.passed} de ${lr.variants} variantes ✔${best ? `<br>Mejor: ${esc(best.name.split(" · ").slice(1).join(" · "))} · ${best.n} trades · <span class="${cls(best.net_usd)}">${usd0(best.net_usd)}</span>${best.test_avg != null ? ` · ${usd0(best.test_avg)}/trade en 2024–26` : ""}` : ""}</div>` : ""}${
+        st.live ? `<br>En papel: ${st.live.n} ${st.live.n === 1 ? "trade" : "trades"} · <span class="${cls(st.live.n ? st.live.net_usd : null)}">${st.live.n ? usd0(st.live.net_usd) : "—"}</span>${det}` : ""}</div></div>`;
   }).join("");
+}
+
+function lastStrip(b) {
+  if (!S.tlog || !b.main) return "";
+  const sel = `${b.name.toLowerCase()}@${b.main.version}`;
+  const days = lastDays(sel, 7);
+  return `<h4>Últimos días · ${esc(b.main.version)} <button type="button" class="golink" data-hist="${esc(sel)}">Ver calendario ›</button></h4>
+    <div class="lastdays">${days.length ? days.map(x => `<button type="button" class="ld ${x.usd > 0 ? "win" : x.usd < 0 ? "loss" : ""}" data-hist="${esc(sel)}"
+      title="${x.n} trades"><span class="dn">${esc(x.day.slice(8))}/${esc(x.day.slice(5, 7))}</span><span class="v">${k$(x.usd)}</span></button>`).join("")
+      : `<span class="zero" style="font-size:12px">Todavía sin trades cerrados en esta versión.</span>`}</div>`;
 }
 
 function parTable(b) {
@@ -1229,7 +1333,8 @@ function parTable(b) {
   if (!vs.length) return "";
   const R = 'style="text-align:right"';
   const bot = b.name === "GHOST" ? "ghost" : "orbit";
-  const row = (name, about, now, t, a, open, main, v) => `<tr class="${main ? "main" : v && !v.enabled ? "off" : ""}">
+  const row = (name, about, now, t, a, open, main, v) => `<tr class="go ${main ? "main" : v && !v.enabled ? "off" : ""}"
+      data-hist="${main ? bot + (b.main ? "@" + b.main.version : "") : bot + ":" + esc(v.id)}">
       <td class="pn"><span class="tglcell">${v ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.id)}"
           aria-pressed="${v.enabled}" aria-label="${v.enabled ? "Apagar" : "Encender"} ${esc(name)}" title="${esc(about)}"></button>` : ""}
         <span>${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}</span></span></span></td>
@@ -1246,6 +1351,12 @@ function parTable(b) {
       ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false, v)).join("")}</tbody></table></div>`;
 }
 
+// any row / chip with data-hist opens that bot, version or variant in the calendar
+document.getElementById("v-bots").addEventListener("click", e => {
+  if (e.target.closest(".tgl")) return;
+  const el = e.target.closest("[data-hist]");
+  if (el) openHistory(el.dataset.hist);
+});
 // the version switches (Bots tab): one click turns a variant on/off
 $("hub-bots").addEventListener("click", async e => {
   const b = e.target.closest(".tgl[data-variant]");
@@ -1258,35 +1369,166 @@ $("hub-bots").addEventListener("click", async e => {
   await pollBots(); renderBots();
 });
 
-/* ═══════════════════════════ 2 · HISTORIAL ═══════════════════════════ */
+/* ═══════════════════════════ 2 · HISTORIAL · calendario ═══════════════════════════ */
+// every closed trade of every bot / version / parallel variant (/api/bots/trades)
+async function pollTlog() {
+  try { S.tlog = await api("/api/bots/trades"); S.tlogErr = null; } catch (e) { S.tlogErr = e.message; }
+}
+// what is selected: a source ("ghost", "ghost:zonas_1m") and, for a bot's real trades, a version
+const H = { bot: "GHOST", sel: "ghost", month: null, day: null, money: "net" };
+const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const k$ = v => { const a = Math.abs(v); return (v < 0 ? "−" : "+") + "$" + (a >= 10000 ? (a / 1000).toFixed(0) + "k" : a >= 1000 ? (a / 1000).toFixed(1) + "k" : a.toFixed(0)); };
+const tUsd = t => H.money === "net" ? t.net_usd : t.usd;
+function hTrades(sel = H.sel) {
+  const [src, ver] = sel.split("@");
+  return ((S.tlog || {}).trades || []).filter(t => t.src === src && (!ver || t.version === ver));
+}
+function hSources() {
+  const L = S.tlog || { sources: [] }, out = [];
+  for (const so of L.sources.filter(x => x.bot === H.bot)) {
+    if (so.kind === "main") {
+      out.push({ sel: so.id, label: "Todo lo real", sub: so.position, group: "real", about:
+        `${so.name}: todos sus trades reales (los que avisó en Discord), de todas sus versiones.` });
+      for (const v of so.versions.slice().reverse()) out.push({ sel: `${so.id}@${v.version}`, label: `${v.version} · ${v.title.split(" · ")[0]}`,
+        group: "real", about: `${so.name} ${v.version} — ${v.title}${v.version === so.current ? " (la que usa ahora)" : ""}.` });
+    } else {
+      out.push({ sel: so.id, label: so.name.split(" · ")[0], group: "par", off: !so.enabled,
+        about: `En paralelo (solo papel, sin Discord) — ${so.name}${so.enabled ? "" : " · apagada"}. ${so.about || ""}` });
+    }
+  }
+  return out;
+}
+function openHistory(sel) {            // from the Bots tab: a bot, a version or a variant
+  H.sel = sel; H.bot = sel.startsWith("orbit") ? "ORBIT" : "GHOST"; H.day = null; H.month = null;
+  setView("history");
+}
 function renderHistory() {
-  const tr = S.closed.slice().filter(t => t.closed_at && (!S.symbol || t.instrument === S.symbol))
-    .sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
-  let cum = 0, peak = 0, dd = 0;
-  const eq = tr.map(t => { cum += t.pnl_points || 0; peak = Math.max(peak, cum); dd = Math.min(dd, cum - peak); return { t: t.closed_at, cum_pts: cum }; });
-  const pts = cum;
-  const w = tr.filter(t => t.pnl_points > 0), l = tr.filter(t => t.pnl_points < 0);
-  const gw = w.reduce((s, t) => s + t.pnl_points, 0), gl = -l.reduce((s, t) => s + t.pnl_points, 0);
-  const pf = gl > 0 ? gw / gl : (gw > 0 ? Infinity : null);
+  const L = S.tlog;
+  if (!L) { if (!S.tlogBusy) { S.tlogBusy = true; pollTlog().then(() => { S.tlogBusy = false; renderHistory(); }); }
+    $("cal").innerHTML = `<div class="empty" style="grid-column:1/-1">${S.tlogErr ? "No pude leer los trades: " + esc(S.tlogErr) : "Cargando…"}</div>`; return; }
+  // bot + version pickers
+  $("h-bot").innerHTML = ["GHOST", "ORBIT"].map(b => `<button type="button" data-b="${b}" aria-pressed="${H.bot === b}">${b}</button>`).join("");
+  const srcs = hSources();
+  if (!srcs.some(x => x.sel === H.sel)) H.sel = srcs[0]?.sel || "ghost";
+  let lastGroup = null;
+  $("h-src").innerHTML = srcs.map(x => {
+    const n = hTrades(x.sel).length;
+    const head = x.group !== lastGroup ? `<span class="sep">${x.group === "real" ? "Lo que operó de verdad" : "En paralelo · solo papel"}</span>` : "";
+    lastGroup = x.group;
+    return head + `<button type="button" class="${x.group === "par" ? "par" : ""}" data-sel="${esc(x.sel)}" aria-pressed="${x.sel === H.sel}"
+      title="${esc(x.about)}">${esc(x.label)}<span class="n">${n}${x.off ? " · off" : ""}</span></button>`;
+  }).join("");
+  const cur = srcs.find(x => x.sel === H.sel);
+  const so = L.sources.find(x => x.id === H.sel.split("@")[0]) || {};
+  $("h-about").textContent = (cur?.about || "") + (so.position ? ` Dólares con ${so.position}` : "") +
+    (H.bot === "GHOST" ? (H.money === "net" ? `, después de comisiones ($${num(so.fee || 0)} por trade).` : ", antes de comisiones.")
+      : ", ya con comisión y deslizamiento.");
+  document.querySelectorAll("#h-money button").forEach(b => b.setAttribute("aria-pressed", b.dataset.m === H.money));
+  $("h-money").hidden = H.bot !== "GHOST";
+
+  const tr = hTrades().slice().sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
+  const today = fmtDate.format(new Date());
+  // the month shown: the chosen one, else the last month with trades (or this one)
+  if (!H.month) H.month = (tr.length ? tr[tr.length - 1].day : today).slice(0, 7);
+  const byDay = {};
+  for (const t of tr) (byDay[t.day] = byDay[t.day] || []).push(t);
+  const dsum = d => (byDay[d] || []).reduce((s, t) => s + (tUsd(t) || 0), 0);
+
+  // tiles: this month
+  const [Y, M] = H.month.split("-").map(Number);
+  const inMonth = Object.keys(byDay).filter(d => d.startsWith(H.month)).sort();
+  const mTr = inMonth.flatMap(d => byDay[d]);
+  const mNet = mTr.reduce((s, t) => s + (tUsd(t) || 0), 0);
+  const wd = inMonth.filter(d => dsum(d) > 0).length, ld = inMonth.filter(d => dsum(d) < 0).length;
+  const wins = mTr.filter(t => (tUsd(t) || 0) > 0).length;
+  const best = inMonth.length ? inMonth.reduce((a, d) => dsum(d) > dsum(a) ? d : a) : null;
+  const worst = inMonth.length ? inMonth.reduce((a, d) => dsum(d) < dsum(a) ? d : a) : null;
   $("perf-tiles").innerHTML =
-    tile("Resultado total", `${sgn(pts, 1)} pts`, tr.length ? usd(pts, S.symbol) : "—", pts >= 0 ? "good" : "critical") +
-    tile("Acierto", tr.length ? Math.round(w.length / tr.length * 100) + "%" : "—", `${w.length} ganados · ${l.length} perdidos · ${tr.length - w.length - l.length} en cero`) +
-    tile("Factor de beneficio", pf == null ? "—" : pf === Infinity ? "∞" : num(pf), "ganado ÷ perdido", pf == null ? "" : pf >= 1 ? "good" : "critical") +
-    tile("Peor racha", tr.length ? dol(dd, symPV(S.symbol)) : "—", `caída máxima · ${num(dd, 1)} pts`, dd < 0 ? "critical" : "");
-  $("eq-total").textContent = tr.length ? dol(cum, symPV(S.symbol)) : "";
-  $("equity").innerHTML = btEquitySvg(eq, "", symPV(S.symbol));
+    tile(`Resultado · ${MONTHS[M - 1]}`, mTr.length ? usd0(mNet) : "—", `${mTr.length} ${mTr.length === 1 ? "trade" : "trades"}`, mTr.length ? (mNet >= 0 ? "good" : "critical") : "") +
+    tile("Días", inMonth.length ? `${wd} / ${ld}` : "—", "ganados / perdidos") +
+    tile("Acierto", mTr.length ? Math.round(wins / mTr.length * 100) + "%" : "—", mTr.length ? `${wins} de ${mTr.length} trades` : "—") +
+    (inMonth.length > 1
+      ? tile("Mejor / peor día", `<span class="${cls(dsum(best))}">${k$(dsum(best))}</span> <span style="color:var(--ink-3)">/</span> <span class="${cls(dsum(worst))}">${k$(dsum(worst))}</span>`,
+          `el ${Number(best.slice(8))} y el ${Number(worst.slice(8))} de ${MONTHS[M - 1]}`, "sm")
+      : tile("Mejor / peor día", "—", "hace falta más de un día", "sm"));
+
+  // the calendar (Monday first) with each week's total
+  $("cal-title").textContent = `${MONTHS[M - 1]} ${Y}`;
+  const first = new Date(Date.UTC(Y, M - 1, 1)), days = new Date(Date.UTC(Y, M, 0)).getUTCDate();
+  const lead = (first.getUTCDay() + 6) % 7;
+  const maxAbs = Math.max(1, ...inMonth.map(d => Math.abs(dsum(d))));
+  let html = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map(d => `<div class="hd">${d}</div>`).join("") + `<div class="hd wkh">Semana</div>`;
+  const cells = [];
+  for (let i = 0; i < lead; i++) cells.push(null);
+  for (let d = 1; d <= days; d++) cells.push(`${H.month}-${String(d).padStart(2, "0")}`);
+  while (cells.length % 7) cells.push(null);
+  for (let w = 0; w < cells.length / 7; w++) {
+    const wk = cells.slice(w * 7, w * 7 + 7);
+    for (const d of wk) {
+      if (!d) { html += `<div class="d out"></div>`; continue; }
+      const ts = byDay[d] || [], v = dsum(d);
+      const tone = ts.length ? (v > 0 ? "win" : v < 0 ? "loss" : "") : "";
+      const a = ts.length ? (0.10 + 0.32 * Math.abs(v) / maxAbs).toFixed(2) : null;
+      html += `<button type="button" class="d ${ts.length ? "has" : ""} ${tone} ${d === today ? "istoday" : ""} ${d === H.day ? "sel" : ""}"
+        ${a ? `style="--a:${a}"` : ""} data-day="${d}" ${ts.length ? "" : "disabled"} aria-label="${d}${ts.length ? `: ${k$(v)}, ${ts.length} trades` : ""}">
+        <span class="dn">${Number(d.slice(8))}</span>${ts.length ? `<span class="v">${k$(v)}</span><span class="c">${ts.length} tr</span>` : ""}</button>`;
+    }
+    const wdays = wk.filter(d => d && byDay[d]);
+    const wv = wdays.reduce((s, d) => s + dsum(d), 0), wn = wdays.reduce((s, d) => s + byDay[d].length, 0);
+    html += `<div class="wk"><span class="k">Semana ${w + 1}</span>${wn ? `<span class="v ${cls(wv)}">${k$(wv)}</span><span class="c">${wn} tr · ${wdays.length} d</span>` : `<span class="c">—</span>`}</div>`;
+  }
+  $("cal").innerHTML = html;
+  const months = Object.keys(byDay).map(d => d.slice(0, 7));
+  const lo = months.length ? months.reduce((a, b) => a < b ? a : b) : H.month;
+  $("cal-prev").disabled = H.month <= lo;
+  $("cal-next").disabled = H.month >= today.slice(0, 7);
+
+  // the chosen day's trades
+  const dayTr = H.day ? byDay[H.day] || [] : [];
+  $("cal-day").innerHTML = H.day && dayTr.length ? `<div class="dayx"><h5>${esc(fmtDay.format(new Date(H.day + "T12:00:00Z")))}
+      <span class="${cls(dsum(H.day))}">${usd0(dsum(H.day))}</span><span style="color:var(--ink-3);font-weight:400">${dayTr.length} trades</span></h5>
+      ${tradeTable(dayTr, false)}</div>`
+    : `<p class="foot">Toca un día para ver sus trades.${tr.length ? "" : " Esta versión todavía no tiene trades cerrados."}</p>`;
+
+  // the whole record of this selection
+  let cum = 0;
+  const eq = tr.map(t => { cum += tUsd(t) || 0; return { t: t.closed_at, cum_pts: cum }; });
+  $("eq-total").textContent = tr.length ? usd0(cum) : "";
+  $("equity").innerHTML = btEquitySvg(eq, H.money === "net" || H.bot === "ORBIT" ? "con comisiones" : "sin comisiones", 1);
   $("closed-n").textContent = tr.length || "";
+  $("closed-table").innerHTML = tr.length ? tradeTable(tr.slice().reverse(), true) : `<div class="empty">Ninguna operación cerrada todavía.</div>`;
+}
+const WHY_ES = { ...EXIT_ES, objetivo: "Objetivo", stop: "Stop", "BE+2": "BE+2" };
+function tradeTable(ts, withDay) {
   const R = 'style="text-align:right"';
-  $("closed-table").innerHTML = tr.length ? `<table><thead><tr><th>Cierre ET</th><th>Idea</th><th>Dir.</th>
-      <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>Dólares</th></tr></thead><tbody>` +
-    tr.slice().reverse().map(t => `<tr><td class="t">${esc(dhm(t.closed_at))}</td>
-      <td>${t.context?.idea_number ? (t.context.idea_direct ? "⚡" : "🟢") + " #" + t.context.idea_number : esc(t.setup)}</td>
-      <td><span class="tag ${t.direction === "LONG" ? "up" : "down"}">${t.direction === "LONG" ? "Compra" : "Venta"}</span></td>
-      <td class="num" ${R}>${num(t.entry)}</td><td class="num" ${R}>${num(t.exit_price)}</td>
-      <td>${esc(EXIT_ES[t.exit_reason] || t.exit_reason || "—")}${t.context?.correction ? ' <span class="badge warn">corregido</span>' : ""}</td>
-      <td class="num ${cls(t.pnl_points)}" ${R}>${sgn(t.pnl_points)}</td>
-      <td class="num ${cls(t.pnl_points)}" style="text-align:right;font-weight:700">${dol(t.pnl_points, symPV(S.symbol))}</td></tr>`).join("") + "</tbody></table>"
-    : `<div class="empty">Ninguna operación ha cerrado todavía.</div>`;
+  return `<div class="scroll"><table><thead><tr><th>${withDay ? "Cierre ET" : "Hora ET"}</th><th>Versión</th><th>Dir.</th>
+    <th ${R}>Entrada</th><th ${R}>Salida</th><th>Motivo</th><th ${R}>Puntos</th><th ${R}>Dólares</th></tr></thead><tbody>` +
+    ts.map(t => `<tr><td class="t">${esc(withDay ? dhm(t.closed_at) : hm(t.opened_at) + " → " + hm(t.closed_at))}</td>
+      <td><span class="vtag2">${esc(t.version)}</span>${t.size ? ` <span class="zero" style="font-size:11px">${esc(t.size)}</span>` : ""}</td>
+      <td><span class="tag ${t.side === "LONG" ? "up" : "down"}">${t.side === "LONG" ? "Compra" : "Venta"}</span></td>
+      <td class="num" ${R}>${num(t.entry)}</td><td class="num" ${R}>${num(t.exit)}</td>
+      <td>${esc(WHY_ES[t.why] || t.why || "—")}</td>
+      <td class="num ${cls(t.pts)}" ${R}>${sgn(t.pts)}</td>
+      <td class="num ${cls(tUsd(t))}" style="text-align:right;font-weight:700">${usd0(tUsd(t))}</td></tr>`).join("") + "</tbody></table></div>";
+}
+$("h-bot").addEventListener("click", e => { const b = e.target.closest("button[data-b]"); if (!b) return;
+  H.bot = b.dataset.b; H.sel = H.bot.toLowerCase(); H.month = null; H.day = null; renderHistory(); });
+$("h-src").addEventListener("click", e => { const b = e.target.closest("button[data-sel]"); if (!b) return;
+  H.sel = b.dataset.sel; H.month = null; H.day = null; renderHistory(); });
+$("h-money").addEventListener("click", e => { const b = e.target.closest("button[data-m]"); if (!b) return;
+  H.money = b.dataset.m; renderHistory(); });
+$("cal").addEventListener("click", e => { const b = e.target.closest(".d.has"); if (!b) return;
+  H.day = H.day === b.dataset.day ? null : b.dataset.day; renderHistory(); });
+const shiftMonth = k => { const [y, m] = H.month.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + k, 1));
+  H.month = d.toISOString().slice(0, 7); H.day = null; renderHistory(); };
+$("cal-prev").onclick = () => shiftMonth(-1);
+$("cal-next").onclick = () => shiftMonth(1);
+
+/* the last days of a selection, for the bot cards: [{day, usd, n}] newest last */
+function lastDays(sel, n = 7) {
+  const by = {};
+  for (const t of hTrades(sel)) { const x = by[t.day] = by[t.day] || { day: t.day, usd: 0, n: 0 }; x.usd += tUsd(t) || 0; x.n++; }
+  return Object.values(by).sort((a, b) => a.day.localeCompare(b.day)).slice(-n);
 }
 
 /* ═══════════════════════════ 4 · SISTEMA ═══════════════════════════ */
@@ -2315,6 +2557,7 @@ async function refresh(force = false) {
     if (force || S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     if (S.view === "system") jobs.push(pollDecisions());
     if (S.view === "bots") jobs.push(pollBots());
+    if ((S.view === "bots" || S.view === "history") && (force || !S.tlog || S.tick % 6 === 0)) jobs.push(pollTlog());
     if (S.view === "backtest") jobs.push(btPoll());
     await Promise.all(jobs);
     renderAll();

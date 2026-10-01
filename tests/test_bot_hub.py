@@ -58,8 +58,9 @@ def test_hub_shows_both_bots_and_orbit_state(tmp_path, monkeypatch):
     # the "principal" row counts only the version running now (v3), not the older ones
     assert orbit["main"]["version"] == "v3" and orbit["main"]["total"]["net_usd"] == 450.0
     assert ghost["main"]["version"] == current_version("GHOST")
-    live = {s["name"]: s["live"] for s in d["strategies"] if s["status"] == "en vivo"}
-    assert live["APERTURA"] == {"n": 3, "net_usd": 1230.0}
+    live = {s["code"]: s["live"] for s in d["strategies"] if s["status"] == "en vivo"}
+    assert (live["APERTURA"]["n"], live["APERTURA"]["net_usd"]) == (3, 1230.0)
+    assert [p["version"] for p in live["APERTURA"]["detail"]] == ["v1", "v2", "v3"]
 
 
 def test_hub_flags_a_silent_orbit(tmp_path):
@@ -238,3 +239,89 @@ def test_hub_survives_a_missing_price_and_a_broken_bot(tmp_path, monkeypatch):
     d = c.get("/api/bots").json()
     assert d["bots"][0]["error"].startswith("ZeroDivisionError")
     assert d["bots"][1]["name"] == "ORBIT" and "error" not in d["bots"][1]
+
+
+# --------------------------------------------------------------------------- #
+# each strategy counts only its own trades; the calendar's trade log
+# --------------------------------------------------------------------------- #
+def _ghost_trade(when, tf, pts, n):
+    from signal_engine.paper.models import ExitReason, PaperTrade
+    opened = pd.Timestamp(when, tz="America/New_York")
+    t = PaperTrade(signal_id=f"s{n}", instrument="NQ", direction="LONG", setup="zone_retrace",
+                   entry=20000.0, stop=19970.0, take_profits=[20090.0], opened_at=opened,
+                   initial_risk=30.0, timeframe=tf)
+    t.pnl_points, t.closed_at = pts, opened + pd.Timedelta(minutes=20)
+    t.exit_price, t.exit_reason = 20000.0 + pts, ExitReason.STOP
+    return t
+
+
+def test_each_strategy_counts_only_its_own_trades(tmp_path):
+    from signal_engine.paper.tracker import PaperTradeTracker
+    rt = _runtime(DataEngine(EngineConfig.load(strategy="zones")))
+    rt.paper_tracker = PaperTradeTracker(store_dir=tmp_path / "paper")
+    rt.paper_tracker.closed_trades += [
+        _ghost_trade("2026-09-25 10:05", "1m", 40.0, 1),      # v2 · IMÁN 1
+        _ghost_trade("2026-09-25 11:05", "1m", 60.0, 2),      # v2
+        _ghost_trade("2026-09-28 21:05", "1m", -10.0, 3),     # v3 · IMÁN 1 NOCHE
+        _ghost_trade("2026-09-30 10:45", "15m", 25.0, 4)]     # v4 · IMÁN 15
+    app = create_app(rt)
+    app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
+    c = TestClient(app)
+    st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
+    pv = st["IMÁN 15"]["live"]["net_usd"] / 25.0                 # $ per point of GHOST's size
+    assert st["IMÁN 15"]["live"]["n"] == 1                        # not the 1-minute trades
+    real = [p for p in st["IMÁN 1"]["live"]["detail"] if p["kind"] == "real"]
+    assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
+                     "name": "GHOST v2 · en vivo", "n": 2, "net_usd": 100.0 * pv}]
+    assert st["IMÁN 1"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
+    assert st["IMÁN 1 NOCHE"]["live"]["n"] == 1
+    assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
+    assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None
+    # the trade log behind the calendar: every trade, with its version and day
+    log = c.get("/api/bots/trades").json()
+    mine = [t for t in log["trades"] if t["src"] == "ghost"]
+    assert [t["version"] for t in mine] == ["v2", "v2", "v3", "v4"]
+    assert mine[0]["day"] == "2026-09-25" and mine[0]["usd"] == 40.0 * pv
+    ids = {s["id"] for s in log["sources"]}
+    assert {"ghost", "orbit", "ghost:zonas_1m", "orbit:apertura_30m"} <= ids
+
+
+def test_old_orbit_trades_keep_the_size_they_opened_with(tmp_path):
+    from signal_engine.subbots.opening_range import OpeningRangeBot, OrbSettings
+    rows = [  # closed after an update, so saved with the NEW size: the real one is put back
+        {"id": "a", "day": "2026-09-29", "opened_at": "2026-09-29 09:50:00-04:00", "long": True,
+         "pts": 30.0, "usd": 9999.0, "contracts": 1, "symbol": "NQ"},          # was 1 MNQ
+        {"id": "b", "day": "2026-09-30", "opened_at": "2026-09-30 09:55:00-04:00", "long": True,
+         "pts": 30.0, "usd": 9999.0, "contracts": 5, "symbol": "MNQ"},         # was 1 NQ
+        {"id": "c", "day": "2026-10-01", "opened_at": "2026-10-01 09:55:00-04:00", "long": True,
+         "pts": 30.0, "usd": 287.0, "contracts": 5, "symbol": "MNQ", "usd_per_point": 2.0,
+         "cost_points": 1.02}]                                                 # stored: as is
+    _orbit_files(tmp_path, {"day": "2026-10-01"}, rows)
+    closed = OpeningRangeBot(tmp_path, settings=OrbSettings.for_position("5 MNQ")).closed
+    mnq, nq = OrbSettings.for_position("1 MNQ"), OrbSettings.for_position("1 NQ")
+    assert (closed[0]["symbol"], closed[0]["contracts"]) == ("MNQ", 1)
+    assert closed[0]["usd"] == round((30.0 - mnq.cost_points) * 2.0, 2)
+    assert (closed[1]["symbol"], closed[1]["contracts"]) == ("NQ", 1)
+    assert closed[1]["usd"] == round((30.0 - nq.cost_points) * 20.0, 2)
+    assert closed[2]["usd"] == 287.0
+    from signal_engine.versions import orbit_version_of
+    assert [orbit_version_of(c) for c in closed] == ["v1", "v2", "v3"]
+
+
+def test_catalogue_shows_the_last_lab_run_of_each_new_idea(tmp_path):
+    from signal_engine.api.bots import strategy_cards
+    row = lambda name, ok, avg: {"name": name, "ok": ok, "train": {"n": 80, "avg": avg},  # noqa: E731
+                                 "test": {"n": 80, "avg": avg, "conf": 1.5 if ok else 0.2},
+                                 "all": {"n": 160, "net": avg * 160, "dd": 900.0}}
+    (tmp_path / "20261001-200000.json").write_text(json.dumps({"meta": {"label": "5 MNQ"}, "rows": [
+        row("MURO · rango 2 h · stop otro lado · TP 2×", False, -3.0),
+        row("MURO · rango 4 h · stop tras EMA 20 · TP 2×", True, 14.0),
+        row("RELLENO · hueco ≥ 20 pts", False, -1.0)]}))
+    (tmp_path / "20261002-090000.json").write_text(json.dumps({"meta": {}, "rows": [
+        row("Zonas 15 min · TP 3× stop", True, 9.0)]}))           # a newer run of another study
+    cards = {c["code"]: c for c in strategy_cards([], tmp_path)}
+    muro = cards["MURO"]["lab_run"]
+    assert (muro["variants"], muro["passed"]) == (2, 1)
+    assert muro["best"]["name"].endswith("stop tras EMA 20 · TP 2×") and muro["best"]["net_usd"] == 2240.0
+    assert cards["RELLENO"]["lab_run"]["passed"] == 0
+    assert cards["TRAMPA"]["lab_run"] is None                       # not tried yet

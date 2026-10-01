@@ -14,20 +14,20 @@
 
 ghost:
   - id: setups_clasicos
-    name: "Setups clásicos"
+    name: "CLÁSICO · setups clásicos"
     about: "La primera versión (v1): ruptura de apertura, barrida de liquidez y VWAP en velas de 5 min."
     strategy: legacy
     version: v1
     enabled: false
 
   - id: zonas_1m
-    name: "Zonas 1 min · de día"
+    name: "IMÁN 1 · zonas 1 min de día"
     about: "La versión de 1 min tal cual corría (v2): zonas de 5 min, entrada con vela de 1 min, BE+2 al 70 %, 9:30–15:30."
     strategy: zones_1m
     version: v2
 
   - id: zonas_1m_noche
-    name: "Zonas 1 min · día y noche"
+    name: "IMÁN 1 NOCHE · zonas 1 min día y noche"
     about: "La misma versión de 1 min, también de noche (como v3)."
     strategy: zones_1m
     version: v3
@@ -37,7 +37,7 @@ ghost:
         last_entry_time: "16:15"
 
   - id: zonas_15m_noticias
-    name: "Zonas 15 min · sin noticias"
+    name: "IMÁN 15 CALMA · sin noticias"
     about: "La versión principal, pero sin entrar de 10 min antes a 15 min después de una noticia fuerte de EE.UU. (CPI, empleo, FOMC…)."
     strategy: zones
     overrides:
@@ -46,13 +46,13 @@ ghost:
 
 orbit:
   - id: apertura_30m
-    name: "APERTURA · caja 30 min"
+    name: "APERTURA 30 · caja de 30 min"
     about: "La caja de 9:30 a 10:00 en vez de 9:45; todo lo demás igual."
     settings:
       range_minutes: 30
 
   - id: apertura_tp2
-    name: "APERTURA · objetivo 2×"
+    name: "APERTURA 2× · objetivo 2×"
     about: "La misma caja de 15 min con el objetivo a 2× el stop en vez de 1.5×."
     settings:
       target_mult: 2.0

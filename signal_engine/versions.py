@@ -13,16 +13,16 @@ import pandas as pd
 # bot -> [(version, from ET date, title, rules)]
 BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
     "GHOST": [
-        ("v1", "2026-09-15", "Setups clásicos",
+        ("v1", "2026-09-15", "CLÁSICO · setups clásicos",
          "Ruptura de apertura, barrida de liquidez y vuelta al VWAP en velas de 5 min, "
          "con un filtro de confluencia."),
-        ("v2", "2026-09-24", "Zonas 1 min · de día",
+        ("v2", "2026-09-24", "IMÁN 1 · zonas 1 min de día",
          "Huecos de precio (FVG) de 5 min, entra si una vela de 1 min reacciona en la zona. "
          "Stop 20–35 pts, objetivo 3× el stop, de 9:30 a 15:30."),
-        ("v3", "2026-09-27", "Zonas 1 min · día y noche",
+        ("v3", "2026-09-27", "IMÁN 1 NOCHE · zonas 1 min día y noche",
          "La misma versión de 1 min, también de noche, con el stop a entrada +2 al 70 % "
          "del camino."),
-        ("v4", "2026-09-29", "Zonas 15 min · solo de día",
+        ("v4", "2026-09-29", "IMÁN 15 · zonas 15 min de día",
          "Huecos de 15 min confirmados por una vela de 15 min. Stop 20–35 pts desde la "
          "entrada, objetivo 3×, entradas 9:30–15:30, cierre 16:55, sin límites diarios."),
     ],
@@ -38,49 +38,113 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
     ],
 }
 
-# name, where it runs, status, what it does, what the lab measured
+# The strategy catalogue. Every strategy has a short NAME (its code) and a
+# description. Its paper record adds up only what is really its own:
+#   "real":    the bot versions that traded it for real ({bot: [versions]}),
+#   "shadows": the parallel variants that run it (config/shadows.yaml).
+# "lab" is what the 5-year lab said; "lab_prefix" finds its rows in the
+# lab's latest run (data_store/lab/*.json) for the ideas still to be tested.
+# status: "en vivo" (a bot trades it) · "en paralelo" / "apagada" (decided by
+# its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
-    {"name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
+    {"code": "IMÁN 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
+     "real": {"GHOST": ["v4"]},
      "text": "Huecos de precio de 15 min, primer regreso, stop 20–35 pts, objetivo 3×.",
      "lab": "5 años, 5 MNQ: +$25 por trade en 2021–23 y +$12 en 2024–26. Gana en los dos "
             "periodos, pero todavía sin suficiente confianza."},
-    {"name": "APERTURA", "bot": "ORBIT", "status": "en vivo",
+    {"code": "APERTURA", "name": "Ruptura de la caja de apertura", "bot": "ORBIT",
+     "status": "en vivo", "real": {"ORBIT": ["v1", "v2", "v3"]},
      "text": "Ruptura de la caja de 9:30 a 9:45, objetivo 1.5× el stop, entrada +2 al 70 %.",
      "lab": "5 años, 5 MNQ: +$109,070, peor caída −$16,969. La única que pasó la prueba "
             "a ciegas."},
-    {"name": "Asegurar ganancia (escalones)", "bot": "GHOST", "status": "en estudio",
-     "text": "Subir el stop por escalones cuando el trade va bien (BE+2, 30 %, 60 %…).",
-     "lab": "Pendiente: --estudio proteccion en la Mac."},
-    {"name": "Evitar noticias fuertes", "bot": "GHOST", "status": "en paralelo",
-     "shadows": ["zonas_15m_noticias"],
-     "text": "La de 15 min sin entrar de 10 min antes a 15 min después de CPI, empleo, "
-             "FOMC y otras noticias fuertes de EE.UU.",
-     "lab": "Sin prueba de 5 años (no hay calendario histórico); se mide en papel."},
-    {"name": "Zonas 1 min", "bot": "GHOST", "status": "en paralelo", "shadows": ["zonas_1m"],
-     "text": "La versión anterior de GHOST (zonas de 5 min confirmadas en 1 min), corriendo "
-             "en papel al lado de la de 15 min para compararlas.",
+    {"code": "IMÁN 1", "name": "Zonas 1 min · de día", "bot": "GHOST", "status": "en paralelo",
+     "real": {"GHOST": ["v2"]}, "shadows": ["zonas_1m"],
+     "text": "La primera estrategia de zonas de GHOST (huecos de 5 min confirmados en 1 min), "
+             "de 9:30 a 15:30. Fue la principal del 24 al 26 de sep; ahora corre en papel al "
+             "lado de IMÁN 15 para compararlas.",
      "lab": "5 años, 5 MNQ: −$91,774."},
-    {"name": "Zonas 1 min de noche", "bot": "GHOST", "status": "en paralelo",
-     "shadows": ["zonas_1m_noche"],
-     "text": "La misma versión de 1 min también fuera del horario de día, en papel.",
+    {"code": "IMÁN 1 NOCHE", "name": "Zonas 1 min · día y noche", "bot": "GHOST",
+     "status": "en paralelo", "real": {"GHOST": ["v3"]}, "shadows": ["zonas_1m_noche"],
+     "text": "IMÁN 1 también fuera del horario de día. Fue la principal el 27 y 28 de sep.",
      "lab": "5 años, 5 MNQ: cerca de −$167,000."},
-    {"name": "APERTURA con otras reglas", "bot": "ORBIT", "status": "en paralelo",
-     "shadows": ["apertura_30m", "apertura_tp2"],
-     "text": "La ruptura de apertura con caja de 30 min y con objetivo 2×, en papel al lado "
-             "de la de ORBIT.",
+    {"code": "IMÁN 15 CALMA", "name": "Zonas 15 min sin noticias", "bot": "GHOST",
+     "status": "en paralelo", "shadows": ["zonas_15m_noticias"],
+     "text": "IMÁN 15 sin entrar de 10 min antes a 15 min después de CPI, empleo, FOMC y "
+             "otras noticias fuertes de EE.UU.",
+     "lab": "Sin prueba de 5 años (no hay calendario histórico); se mide en papel."},
+    {"code": "APERTURA 30", "name": "Caja de apertura de 30 min", "bot": "ORBIT",
+     "status": "en paralelo", "shadows": ["apertura_30m"],
+     "text": "APERTURA con la caja de 9:30 a 10:00; todo lo demás igual.",
      "lab": "Parte del estudio de apertura (--estudio apertura)."},
-    {"name": "Vuelta al VWAP", "bot": "Laboratorio", "status": "descartada",
+    {"code": "APERTURA 2×", "name": "Caja de apertura con objetivo 2×", "bot": "ORBIT",
+     "status": "en paralelo", "shadows": ["apertura_tp2"],
+     "text": "APERTURA con el objetivo a 2× el stop en vez de 1.5×.",
+     "lab": "Parte del estudio de apertura (--estudio apertura)."},
+    {"code": "CLÁSICO", "name": "Setups clásicos", "bot": "GHOST", "status": "en paralelo",
+     "real": {"GHOST": ["v1"]}, "shadows": ["setups_clasicos"],
+     "text": "La primera versión de GHOST: ruptura de apertura, barrida de liquidez y vuelta "
+             "al VWAP en velas de 5 min.",
+     "lab": "No pasó la prueba a ciegas."},
+    {"code": "ESCUDO", "name": "Asegurar ganancia por escalones", "bot": "GHOST",
+     "status": "en estudio",
+     "text": "Subir el stop por escalones cuando el trade va bien (BE+2, 30 %, 60 %…).",
+     "lab": "Pendiente: 'Cómo asegurar ganancia (GHOST)' en el laboratorio."},
+    # new ideas: the lab's "Estrategias nuevas" study (strategy_lab.py --estudio nuevas)
+    {"code": "MURO", "name": "Ruptura de soportes y resistencias", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "MURO",
+     "text": "Como APERTURA, pero la caja la dibujan los soportes y resistencias del momento: "
+             "el precio rebota 2+ veces en un techo y en un piso (2 o 4 horas); cuando una "
+             "vela de 5 min cierra fuera, entra hacia ese lado. Prueba el stop al otro lado, "
+             "a la mitad, tras el nivel roto o tras la EMA 9/20, y como objetivo 1.5–3× o la "
+             "altura del rango.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "RELLENO", "name": "Relleno del hueco de apertura", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "RELLENO",
+     "text": "Si el NQ abre lejos del cierre de ayer (un hueco), apuesta a que vuelve a "
+             "cerrarlo: entra contra el hueco cuando la primera vela de 5 min se da vuelta, "
+             "objetivo el cierre de ayer.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "TRAMPA", "name": "Barrida de máx/mín de ayer", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "TRAMPA",
+     "text": "El precio pasa el máximo (o mínimo) de ayer o de la noche, saca los stops y "
+             "vuelve a cerrar adentro: entra al revés, stop detrás de la barrida.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "RESORTE", "name": "Ruptura tras un día comprimido", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "RESORTE",
+     "text": "Si ayer fue el día de rango más estrecho de la semana (NR7), hoy opera la "
+             "ruptura del máximo o mínimo de ayer: tras la calma suele venir el movimiento.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "CIERRE", "name": "Tendencia de la última hora", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "CIERRE",
+     "text": "A las 14:30–15:00, si el día va claramente en una dirección (arriba del VWAP y "
+             "de la apertura, o abajo), entra a favor hasta el cierre.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "APERTURA VWAP", "name": "Caja de apertura a favor del VWAP", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "APERTURA VWAP",
+     "text": "APERTURA, pero solo si la ruptura va del mismo lado del VWAP del día.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "IMPULSO", "name": "Primer impulso de la mañana", "bot": "Laboratorio",
+     "status": "por probar", "lab_prefix": "IMPULSO",
+     "text": "Si los primeros 30 min se mueven fuerte en una dirección, entra a favor en el "
+             "primer retroceso al VWAP o a la EMA 20 de 5 min.",
+     "lab": "Por probar: 'Estrategias nuevas' en el laboratorio."},
+    {"code": "PÉNDULO", "name": "Vuelta al VWAP", "bot": "Laboratorio", "status": "descartada",
      "text": "Vender/comprar cuando el precio se aleja mucho del VWAP.",
      "lab": "Pierde en los dos periodos."},
-    {"name": "Cajas, niveles de ayer y rebotes en EMA", "bot": "Laboratorio",
+    {"code": "NIVELES", "name": "Cajas, niveles de ayer y rebotes en EMA", "bot": "Laboratorio",
      "status": "descartada",
      "text": "Rupturas de cajas de 30/60 min, de máximos y mínimos de ayer o de la noche, "
              "y rebotes en EMA 9/20/50/200.",
      "lab": "Ninguna gana en 2021–23 y en 2024–26 a la vez."},
-    {"name": "Filtro de NQ y de las grandes", "bot": "Laboratorio", "status": "descartada",
+    {"code": "BRÚJULA", "name": "Filtro de NQ y de las grandes", "bot": "Laboratorio",
+     "status": "descartada",
      "text": "Operar solo si NQ o las 8 grandes (NVDA, MSFT, AAPL…) van a favor.",
      "lab": "No mejora a las estrategias que filtra."},
 ]
+
+
+def version_title(bot: str, vid: str) -> str:
+    return next((t for v, _s, t, _r in BOT_VERSIONS[bot] if v == vid), vid)
 
 
 def current_version(bot: str) -> str:

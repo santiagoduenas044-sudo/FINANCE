@@ -14,7 +14,7 @@ from pathlib import Path
 
 POSITIONS = ("5mnq", "1nq", "riesgo")
 SESSIONS = ("rth", "noche", "all")
-STUDIES = ("todo", "apertura", "zonas", "proteccion")
+STUDIES = ("todo", "apertura", "zonas", "proteccion", "nuevas")
 SCALES = ("puntos", "precio")
 
 
@@ -47,7 +47,9 @@ class LabManager:
         with open(out, "w") as fh:
             self.proc = subprocess.Popen(
                 [self.python, "scripts/strategy_lab.py", "--position", position,
-                 "--sessions", sessions, "--estudio", estudio, "--escala", escala],
+                 "--sessions", sessions, "--estudio", estudio, "--escala", escala,
+                 # the numbers too, so the strategy catalogue can show them
+                 "--json-out", str(self.dir / f"{run_id}.json")],
                 cwd=self.root, env=env, stdout=fh, stderr=subprocess.STDOUT,
                 preexec_fn=(lambda: os.nice(10)) if hasattr(os, "nice") else None)
         self.current = {"id": run_id, "position": position, "sessions": sessions,

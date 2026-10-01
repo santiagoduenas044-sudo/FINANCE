@@ -401,9 +401,22 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             commit = {}
         try:
             return overview(runtime, orbit_dir=getattr(app.state, "orbit_dir", None),
-                            commit=commit, shadows_dir=getattr(app.state, "shadows_dir", None))
+                            commit=commit, shadows_dir=getattr(app.state, "shadows_dir", None),
+                            lab_dir=lab.dir)
         except Exception as exc:  # noqa: BLE001 - say what broke instead of a bare 500
             logging.getLogger(__name__).exception("bot hub failed")
+            raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+
+    @app.get("/api/bots/trades")
+    def get_bot_trades() -> dict:
+        """Every closed trade of every bot, version and parallel variant
+        (the calendar and the history)."""
+        from .bots import trade_log
+        try:
+            return trade_log(runtime, orbit_dir=getattr(app.state, "orbit_dir", None),
+                             shadows_dir=getattr(app.state, "shadows_dir", None))
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).exception("trade log failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
 
     @app.post("/api/bots/{bot}/variants/{variant_id}")
