@@ -180,6 +180,60 @@
     .col { border-right: 0; border-bottom: 1px solid var(--hair); }
     .col:last-child { border-bottom: 0; }
   }
+  /* ---- discover / board / portfolio ---- */
+  .pad { padding: 16px; }
+  .ptitle { margin: 2px 0 2px; font: 800 26px var(--display); text-transform: uppercase; letter-spacing: .03em; }
+  .phead { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 14px; }
+  .pack { border: 1px solid var(--hair); background: var(--bg); padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .pack .tag { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--good); }
+  .pack h3 { margin: 0; font: 800 20px var(--display); text-transform: uppercase; letter-spacing: .03em; }
+  .pack ul { list-style: none; margin: 0; padding: 0; }
+  .pack li { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-top: 1px solid var(--hair); font-size: 14px; }
+  .pack li span:last-child { font: 13px var(--mono); white-space: nowrap; }
+  .pack .foot { display: flex; justify-content: space-between; align-items: center; margin-top: auto; padding-top: 6px; }
+  .btn.sm { padding: 6px 12px; font-size: 15px; }
+  .proven { font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--bg);
+    background: var(--good); padding: 2px 6px; margin-left: 6px; vertical-align: middle; }
+  .sysform[hidden] { display: none; }
+  .sysform { display: grid; gap: 8px; margin: 12px 0; padding: 12px; border: 1px solid var(--hair); background: var(--bg); }
+  .mono { font-family: var(--mono) !important; color: var(--query-ink) !important; }
+  .search { margin: 12px 0 8px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 10px; }
+  .filters.boxed { border: 1px solid var(--hair); padding: 8px 10px; margin-top: 12px; }
+  .flabel { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 4px 0 8px; }
+  .flabel:first-child { margin-left: 0; }
+  .pill { border: 1px solid var(--hair); background: none; color: var(--ink); font: 600 13px var(--body); padding: 4px 10px; cursor: pointer; }
+  .pill.on { background: var(--good); border-color: var(--good); color: var(--bg); }
+  .sys { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; padding: 12px 0; border-top: 1px solid var(--hair); }
+  .sys .nm { font-weight: 600; font-size: 16px; }
+  .sys .q { font: 13px var(--mono); color: var(--query-ink); overflow-wrap: anywhere; }
+  .sys .meta2 { font: 12px var(--mono); color: var(--muted); }
+  .sys .rec { text-align: right; font: 600 16px var(--mono); white-space: nowrap; }
+  .sys .acts { display: flex; gap: 6px; justify-content: flex-end; }
+  .sys .acts button { border: 1px solid var(--hair); background: none; color: var(--ink); font: 600 13px var(--mono);
+    padding: 3px 8px; cursor: pointer; }
+  .empty-state { text-align: center; color: var(--muted); padding: 34px 10px; }
+  .stack { position: relative; max-width: 520px; margin: 18px auto 6px; min-height: 300px; }
+  .bcard { position: absolute; inset: 0; border: 1px solid var(--hair); background: var(--bg); padding: 18px;
+    display: flex; flex-direction: column; gap: 10px; touch-action: pan-y; user-select: none; transition: transform .25s, opacity .25s; }
+  .bcard.behind { transform: translateY(10px) scale(.97); opacity: .5; pointer-events: none; }
+  .bcard.dragging { transition: none; }
+  .bcard .bet { font: 600 30px/1.1 var(--mono); letter-spacing: -.02em; }
+  .bcard .game { font: 800 22px var(--display); text-transform: uppercase; letter-spacing: .03em; }
+  .bcard .why { font: 13px var(--mono); color: var(--query-ink); overflow-wrap: anywhere; }
+  .bcard .nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: auto; }
+  .bcard .nums span { display: block; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .bcard .nums b { font: 600 16px var(--mono); }
+  .stamp { position: absolute; top: 18px; right: 18px; font: 900 26px var(--display); padding: 2px 10px; border: 3px solid; opacity: 0;
+    text-transform: uppercase; }
+  .stamp.yes { color: var(--good); } .stamp.no { color: var(--bad); left: 18px; right: auto; }
+  .swipebtns { display: flex; justify-content: center; gap: 14px; margin: 8px 0; }
+  .swipebtns button { width: 64px; height: 64px; border-radius: 50%; border: 2px solid var(--hair); background: var(--bg);
+    font: 600 26px var(--mono); cursor: pointer; }
+  .swipebtns .no { color: var(--bad); border-color: var(--bad); } .swipebtns .yes { color: var(--good); border-color: var(--good); }
+  .res { display: inline-block; min-width: 28px; text-align: center; font: 600 12px var(--mono); padding: 2px 6px; border: 1px solid var(--hair); }
+  .res.W { color: var(--good); border-color: var(--good); } .res.L { color: var(--bad); border-color: var(--bad); }
 </style>
 </head>
 <body>
@@ -190,8 +244,10 @@
       <button class="theme" id="theme" title="Cambiar tema">Auto</button></div>
   </div>
   <nav id="tabs">
-    <button data-t="trends" class="on">Tendencias</button>
+    <button data-t="trends" class="on">Consulta</button>
+    <button data-t="discover">Descubrir</button>
     <button data-t="pro">Proyecciones</button>
+    <button data-t="portfolio">Portafolio</button>
     <button data-t="ratings">Ratings</button>
     <button data-t="splits">Splits</button>
     <button data-t="model">Modelo</button>
@@ -207,10 +263,9 @@
         <input id="q" spellcheck="false" autocomplete="off" autocapitalize="off" value="total < 40 and wind >= 12 and outdoors">
         <button class="icon go" id="run" title="Buscar">&#9654;</button>
         <button class="icon" id="share" title="Copiar link">&#8599;</button>
-        <button class="icon" id="save" title="Guardar consulta">&#9733;</button>
+        <button class="icon" id="save" title="Guardar como sistema">&#9733;</button>
       </div>
       <div class="interp" id="interp"></div>
-      <div class="saved" id="saved"></div>
       <div class="opts">
         <input id="desde" type="number" placeholder="Desde">
         <input id="hasta" type="number" placeholder="Hasta">
@@ -225,6 +280,56 @@
     </div>
     <div id="result"></div>
   </section>
+
+  <!-- DESCUBRIR -->
+  <section id="discover">
+    <div class="panel pad">
+      <div class="label">Escritorios armados</div>
+      <h2 class="ptitle">Packs de sistemas</h2>
+      <div class="small muted">Grupos de sistemas para empezar. Los récords se calculan en vivo con tu base de datos.</div>
+      <div class="packs" id="packs"></div>
+    </div>
+
+    <div class="panel pad">
+      <div class="phead">
+        <div><div class="label">Tu biblioteca</div><h2 class="ptitle">Mis sistemas</h2>
+          <div class="small muted">Una consulta + qué apostar cuando un partido cumple el filtro.</div></div>
+        <button class="btn" id="newsys">+ Nuevo sistema</button>
+      </div>
+      <form id="sysform" class="sysform" hidden>
+        <input id="sf-name" placeholder="Nombre (ej. Under con viento)" required>
+        <div class="row">
+          <select id="sf-sport"><option value="nfl">NFL</option><option value="cfb">CFB</option><option value="nba">NBA</option>
+            <option value="cbb">CBB</option><option value="nhl">NHL</option><option value="mlb">MLB</option></select>
+          <select id="sf-bet"><option value="ats">ATS (spread del equipo)</option><option value="ml">Moneyline del equipo</option>
+            <option value="over">Over del partido</option><option value="under">Under del partido</option></select>
+        </div>
+        <input id="sf-query" class="mono" placeholder="team = PIT and p:ATSW and H" spellcheck="false" autocapitalize="off" required>
+        <input id="sf-notes" placeholder="Notas (opcional)">
+        <div class="row"><button class="btn" type="submit">Guardar sistema</button>
+          <button class="btn ghost" type="button" id="sf-cancel">Cancelar</button><span id="sf-msg" class="small"></span></div>
+      </form>
+      <input id="sys-search" class="search" placeholder="Buscar sistemas, consultas o notas…">
+      <div class="filters"><span class="flabel">Deporte</span><span id="sys-sport"></span>
+        <span class="flabel">Orden</span><span id="sys-sort"></span></div>
+      <div id="syslist"></div>
+    </div>
+
+    <div class="panel pad">
+      <div class="label">Tablero</div>
+      <h2 class="ptitle">Desliza el tablero</h2>
+      <div class="small muted" id="board-sub">Partidos de los próximos días que cumplen tus sistemas. Derecha = seguir, izquierda = pasar.</div>
+      <div class="filters boxed"><span class="flabel">Deporte</span><span id="b-sport"></span>
+        <span class="flabel">Orden</span><span id="b-sort"></span>
+        <span id="b-toggles"></span></div>
+      <div id="board"></div>
+    </div>
+
+    <div class="panel pad" id="pf-mini"></div>
+  </section>
+
+  <!-- PORTAFOLIO -->
+  <section id="portfolio"><div id="pfresult"></div></section>
 
   <!-- PROYECCIONES -->
   <section id="pro">
@@ -275,7 +380,7 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const pct = (x, d = 1) => x == null ? "—" : (x * 100).toFixed(d) + "%";
-const sgn = (x, d = 1) => x == null ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(d);
+const sgn = (x, d = 1) => { if (x == null) return "—"; let v = Number(x).toFixed(d); if (Number(v) === 0) v = (0).toFixed(d); return (Number(v) > 0 ? "+" : "") + v; };
 const odds = (o) => o == null ? "" : (o > 0 ? "+" + o : String(o));
 const cls = (x) => x == null ? "" : x > 0 ? "pos" : x < 0 ? "neg" : "";
 const gclass = (g) => "g" + (g || "F")[0];
@@ -290,11 +395,12 @@ function fail(el, e) { el.innerHTML = `<div class="err">${esc(e.message || e)}</
 
 // tabs
 const loaded = {};
-document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
-  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  document.querySelectorAll("section").forEach((s) => s.classList.toggle("on", s.id === b.dataset.t));
-  if (!loaded[b.dataset.t]) { loaded[b.dataset.t] = true; ({pro: loadPro, ratings: loadRatings, splits: loadSplits, model: loadModel}[b.dataset.t] || (()=>{}))(); }
-});
+function loadTab(t) {
+  if (t === "discover") return loadDiscover();
+  if (t === "portfolio") return loadPortfolio();
+  if (!loaded[t]) { loaded[t] = true; ({pro: loadPro, ratings: loadRatings, splits: loadSplits, model: loadModel}[t] || (()=>{}))(); }
+}
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.t));
 
 // ---------------- trends
 let SPORT = "nfl", META = null;
@@ -400,18 +506,7 @@ $("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") runQuery(); 
 // share link + saved queries (kept in this browser)
 function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); }
 $("#share").onclick = async () => { setHash(); try { await navigator.clipboard.writeText(location.href); toast("Link copiado"); } catch (e) { toast(location.href); } };
-function loadSaved() { try { return JSON.parse(localStorage.getItem("sl-saved") || "[]"); } catch (e) { return []; } }
-function renderSaved() {
-  const list = loadSaved();
-  $("#saved").innerHTML = list.map((x, i) => `<span class="chip" data-i="${i}" title="${esc(x.q)}">★ ${esc(x.s.toUpperCase())} · ${esc(x.q.length > 34 ? x.q.slice(0, 34) + "…" : x.q)}</span>`).join("");
-  $("#saved").querySelectorAll(".chip").forEach((c) => c.onclick = () => { const x = list[+c.dataset.i]; setSport(x.s); $("#q").value = x.q; runQuery(); });
-}
-$("#save").onclick = () => {
-  const list = loadSaved().filter((x) => !(x.q === $("#q").value && x.s === SPORT));
-  list.unshift({ s: SPORT, q: $("#q").value });
-  try { localStorage.setItem("sl-saved", JSON.stringify(list.slice(0, 12))); toast("Consulta guardada"); } catch (e) { toast("No se pudo guardar"); }
-  renderSaved();
-};
+$("#save").onclick = () => { showTab("discover"); openSysForm({ sport: SPORT, query: $("#q").value }); };
 
 function setSport(s) {
   SPORT = s;
@@ -426,6 +521,213 @@ function renderExamples() {
   const ex = META.examples.filter((x) => !x.sport || x.sport === SPORT);
   $("#examples").innerHTML = ex.map((x) => `<span class="chip" data-q="${esc(x.q)}">${esc(x.label)}</span>`).join("");
   $("#examples").querySelectorAll(".chip").forEach((c) => c.onclick = () => { $("#q").value = c.dataset.q; runQuery(); });
+}
+
+// ---------------- discover: packs, systems, board
+const SPORT_IDS = ["nfl", "cfb", "nba", "cbb", "nhl", "mlb"];
+const BET_LBL = { ats: "ATS", ml: "ML", over: "Over", under: "Under" };
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+const recLine = (r) => !r || !(r.n || r.p) ? `<span class="muted">sin partidos</span>`
+  : `${r.w}-${r.l}${r.p ? "-" + r.p : ""} · <span class="${pctc(r.pct, BE)}">${pct(r.pct)}</span> · <span class="${cls(r.roi)}">${sgn(r.roi * 100)}%</span>`;
+const provenTag = (x) => x ? `<span class="proven" title="40+ partidos, p ≤ 0.15 y rentable antes y después del corte">probado</span>` : "";
+function gameWhen(g) {
+  if (!g.date) return "";
+  const d = new Date(g.date + "T12:00:00");
+  const day = d.toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" });
+  return day + (g.hour != null ? ` · ${String(g.hour).padStart(2, "0")}h ET` : "");
+}
+function pills(el, opts, current, onPick) {
+  el.innerHTML = opts.map(([v, l]) => `<button class="pill ${v === current ? "on" : ""}" data-v="${v}">${l}</button>`).join("");
+  el.querySelectorAll(".pill").forEach((b) => b.onclick = () => onPick(b.dataset.v));
+}
+function showTab(id) {
+  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("on", x.dataset.t === id));
+  document.querySelectorAll("section").forEach((s) => s.classList.toggle("on", s.id === id));
+  window.scrollTo(0, 0);
+  loadTab(id);
+}
+
+async function loadPacks() {
+  const el = $("#packs");
+  el.innerHTML = `<div class="spinner">Calculando récords…</div>`;
+  try {
+    const packs = await api("/api/packs");
+    el.innerHTML = packs.map((p) => `<div class="pack">
+      <div class="tag">${p.sport.toUpperCase()} · ${p.systems.length} sistemas</div>
+      <h3>${esc(p.name)}</h3><div class="small muted">${esc(p.desc)}</div>
+      <ul>${p.systems.map((x) => `<li><span>${esc(x.name)} <span class="muted small">${BET_LBL[x.bet]}</span>${provenTag(x.proven)}</span><span>${recLine(x.record)}</span></li>`).join("")}</ul>
+      <div class="foot"><span class="small muted">Peso igual</span>
+        ${p.added ? `<span class="small muted">Agregado ✓</span>` : `<button class="btn sm" data-pack="${p.id}">Agregar →</button>`}</div></div>`).join("");
+    el.querySelectorAll("[data-pack]").forEach((b) => b.onclick = async () => {
+      b.disabled = true;
+      try { const r = await post("/api/packs/add", { id: b.dataset.pack }); toast(`${r.added} sistemas agregados`); loadDiscover(); }
+      catch (e) { toast(e.message); b.disabled = false; }
+    });
+  } catch (e) { fail(el, e); }
+}
+
+let sysSport = "", sysSort = "newest", sysSearch = "", searchTimer = null;
+async function loadSystems() {
+  pills($("#sys-sport"), [["", "Todos"], ...SPORT_IDS.map((s) => [s, s.toUpperCase()])], sysSport, (v) => { sysSport = v; loadSystems(); });
+  pills($("#sys-sort"), [["newest", "Nuevos"], ["roi", "Top ROI"], ["winrate", "% acierto"], ["games", "Más partidos"], ["liked", "Favoritos"]],
+    sysSort, (v) => { sysSort = v; loadSystems(); });
+  const el = $("#syslist");
+  try {
+    const list = await api("/api/systems?" + new URLSearchParams({ sport: sysSport, sort: sysSort, search: sysSearch }));
+    if (!list.length) { el.innerHTML = `<div class="empty-state">Todavía no tienes sistemas. Agrega un pack o guarda una consulta con ★.</div>`; return; }
+    el.innerHTML = list.map((s) => `<div class="sys">
+      <div><div class="nm">${esc(s.name)} ${provenTag(s.proven)}</div>
+        <div class="meta2">${s.sport.toUpperCase()} · apuesta ${BET_LBL[s.bet]}${s.upcoming ? ` · ${s.upcoming} por jugar` : ""}${s.notes ? " · " + esc(s.notes) : ""}</div>
+        <div class="q">${esc(s.query)}</div>${s.error ? `<div class="err small">${esc(s.error)}</div>` : ""}</div>
+      <div><div class="rec">${recLine(s.record)}</div>
+        <div class="meta2" style="text-align:right">${s.record && s.record.n ? `${money(s.record.units)} por $100 · p=${s.record.p_value}` : ""}</div>
+        <div class="acts"><button data-like="${s.id}" title="Favorito">${s.liked ? "★" : "☆"}</button>
+          <button data-open="${s.id}" title="Abrir en Consulta">↗</button><button data-del="${s.id}" title="Borrar">✕</button></div></div></div>`).join("");
+    el.querySelectorAll("[data-like]").forEach((b) => b.onclick = async () => { await post("/api/systems/like", { id: b.dataset.like }); loadSystems(); });
+    el.querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+      if (!confirm("¿Borrar este sistema? Tus apuestas ya seguidas se quedan en el portafolio.")) return;
+      await post("/api/systems/delete", { id: b.dataset.del }); loadSystems(); loadBoard();
+    });
+    el.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => {
+      const s = list.find((x) => String(x.id) === b.dataset.open);
+      $("#q").value = s.query; showTab("trends"); setSport(s.sport); runQuery();
+    });
+  } catch (e) { fail(el, e); }
+}
+$("#sys-search").addEventListener("input", (e) => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { sysSearch = e.target.value; loadSystems(); }, 250); });
+
+function openSysForm(prefill = {}) {
+  $("#sysform").hidden = false;
+  $("#sf-name").value = prefill.name || "";
+  $("#sf-sport").value = prefill.sport || "nfl";
+  $("#sf-bet").value = prefill.bet || "ats";
+  $("#sf-query").value = prefill.query || "";
+  $("#sf-notes").value = "";
+  $("#sf-msg").textContent = "";
+  $("#sf-name").focus();
+}
+$("#newsys").onclick = () => openSysForm({ sport: SPORT, query: $("#q").value });
+$("#sf-cancel").onclick = () => { $("#sysform").hidden = true; };
+$("#sysform").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await post("/api/systems", { name: $("#sf-name").value, sport: $("#sf-sport").value, bet: $("#sf-bet").value,
+      query: $("#sf-query").value, notes: $("#sf-notes").value || null });
+    $("#sysform").hidden = true; toast("Sistema guardado"); loadSystems(); loadBoard();
+  } catch (err) { $("#sf-msg").innerHTML = `<span class="neg">${esc(err.message)}</span>`; }
+};
+
+let bSport = "", bSort = "proven", bProven = false, bToday = false, CARDS = [];
+async function loadBoard() {
+  pills($("#b-sport"), [["", "Todos"], ...SPORT_IDS.map((s) => [s, s.toUpperCase()])], bSport, (v) => { bSport = v; loadBoard(); });
+  pills($("#b-sort"), [["proven", "Probados"], ["roi", "Top ROI"], ["winrate", "% acierto"], ["games", "Más partidos"], ["date", "Fecha"]],
+    bSort, (v) => { bSort = v; loadBoard(); });
+  $("#b-toggles").innerHTML = `<button class="pill ${bProven ? "on" : ""}" id="t-proven">Solo probados</button>
+    <button class="pill ${bToday ? "on" : ""}" id="t-today">Solo hoy</button>`;
+  $("#t-proven").onclick = () => { bProven = !bProven; loadBoard(); };
+  $("#t-today").onclick = () => { bToday = !bToday; loadBoard(); };
+  $("#board").innerHTML = `<div class="spinner">Buscando partidos…</div>`;
+  try {
+    CARDS = await api("/api/board?" + new URLSearchParams({ sport: bSport, sort: bSort, proven: bProven ? 1 : 0, today: bToday ? 1 : 0 }));
+    renderBoard();
+  } catch (e) { fail($("#board"), e); }
+}
+function renderBoard() {
+  const el = $("#board");
+  $("#board-sub").textContent = CARDS.length ? `${CARDS.length} partidos cumplen tus sistemas — derecha = seguir, izquierda = pasar.`
+    : "Partidos de los próximos días que cumplen tus sistemas. Derecha = seguir, izquierda = pasar.";
+  if (!CARDS.length) { el.innerHTML = `<div class="empty-state">Terminaste el tablero por ahora. Corre "actualizar" para traer líneas nuevas.</div>`; return; }
+  const card = (c, behind) => {
+    const g = c.game, r = c.record, s = c.split;
+    const vs = c.bet === "over" || c.bet === "under" ? `${g.home ? g.opp + " @ " + g.team : g.team + " @ " + g.opp}` : `${g.team} ${g.home ? "vs" : "@"} ${g.opp}`;
+    return `<div class="bcard ${behind ? "behind" : ""}">
+      <div class="stamp yes">Seguir</div><div class="stamp no">Pasar</div>
+      <div class="label">${c.sport.toUpperCase()} · ${esc(c.system)}${provenTag(c.proven)}</div>
+      <div class="game">${esc(vs)}</div><div class="small muted">${gameWhen(g)}</div>
+      <div class="bet">${esc(c.pick.label)}${c.bet !== "ml" && c.pick.odds ? ` <span class="small muted">(${odds(c.pick.odds)})</span>` : ""}</div>
+      <div class="why">${esc(c.query)}</div>
+      <div class="nums"><div><span>Récord</span><b>${r.w}-${r.l}${r.p ? "-" + r.p : ""}</b></div>
+        <div><span>ROI</span><b class="${cls(r.roi)}">${r.n ? sgn(r.roi * 100) + "%" : "—"}</b></div>
+        <div><span>${s ? "Desde " + s.test_from : "Acierto"}</span><b class="${s ? cls(s.test && s.test.roi) : ""}">${s && s.test && s.test.n ? `${s.test.w}-${s.test.l}` : pct(r.pct)}</b></div></div></div>`;
+  };
+  el.innerHTML = `<div class="stack">${CARDS[1] ? card(CARDS[1], true) : ""}${card(CARDS[0], false)}</div>
+    <div class="swipebtns"><button class="no" id="sw-no" title="Pasar">✕</button><button class="yes" id="sw-yes" title="Seguir">✓</button></div>
+    <div class="small muted" style="text-align:center">${CARDS.length - 1} más en el tablero</div>`;
+  const top = el.querySelector(".bcard:not(.behind)");
+  $("#sw-no").onclick = () => decide(false, top);
+  $("#sw-yes").onclick = () => decide(true, top);
+  let x0 = null, dx = 0;
+  top.addEventListener("pointerdown", (e) => { x0 = e.clientX; dx = 0; top.classList.add("dragging"); top.setPointerCapture(e.pointerId); });
+  top.addEventListener("pointermove", (e) => {
+    if (x0 == null) return;
+    dx = e.clientX - x0;
+    top.style.transform = `translateX(${dx}px) rotate(${dx / 25}deg)`;
+    top.querySelector(".stamp.yes").style.opacity = Math.max(0, Math.min(1, dx / 100));
+    top.querySelector(".stamp.no").style.opacity = Math.max(0, Math.min(1, -dx / 100));
+  });
+  const end = () => {
+    if (x0 == null) return;
+    x0 = null; top.classList.remove("dragging");
+    if (Math.abs(dx) > 100) decide(dx > 0, top);
+    else { top.style.transform = ""; top.querySelectorAll(".stamp").forEach((s) => s.style.opacity = 0); }
+  };
+  top.addEventListener("pointerup", end);
+  top.addEventListener("pointercancel", end);
+}
+async function decide(yes, el) {
+  const c = CARDS[0];
+  if (!c) return;
+  el.style.transform = `translateX(${yes ? 600 : -600}px) rotate(${yes ? 20 : -20}deg)`;
+  el.style.opacity = 0;
+  try {
+    await post(yes ? "/api/tail" : "/api/pass", { system_id: c.system_id, game_id: c.game.game_id, team: c.game.team });
+    if (yes) toast(`Siguiendo: ${c.pick.label}`);
+  } catch (e) { toast(e.message); }
+  CARDS.shift();
+  setTimeout(() => { renderBoard(); loadMiniPortfolio(); }, 220);
+}
+
+async function loadMiniPortfolio() {
+  try {
+    const p = await api("/api/portfolio"), t = p.total;
+    $("#pf-mini").innerHTML = `<div class="phead"><div><div class="label">Tu portafolio</div>
+      <div>${t.w + t.l + t.p + t.pending ? `${t.w}-${t.l}${t.p ? "-" + t.p : ""} · <span class="${cls(t.units)}">${sgn(t.units, 2)} u</span> · ${t.pending} pendientes`
+        : "Sigue un partido del tablero y su resultado se registra aquí."}</div></div>
+      <button class="btn ghost" id="go-pf">Ver portafolio →</button></div>`;
+    $("#go-pf").onclick = () => showTab("portfolio");
+  } catch (e) { fail($("#pf-mini"), e); }
+}
+
+function loadDiscover() { loadPacks(); loadSystems(); loadBoard(); loadMiniPortfolio(); }
+
+// ---------------- portfolio
+async function loadPortfolio() {
+  const el = $("#pfresult");
+  el.innerHTML = `<div class="spinner">Cargando…</div>`;
+  try {
+    const p = await api("/api/portfolio"), t = p.total;
+    if (!p.picks.length) { el.innerHTML = `<div class="panel pad"><div class="empty-state">Aún no sigues ninguna apuesta. Ve a Descubrir → Tablero y desliza a la derecha.</div></div>`; return; }
+    el.innerHTML = `<div class="panel"><div class="three">
+      ${column("Récord", "Apuestas calificadas", `${t.w}-${t.l}${t.p ? "-" + t.p : ""}`, `<span class="${pctc(t.pct, BE)}">${pct(t.pct)}</span>`, t.w + t.l ? t.pct : null, [["Pendientes", t.pending]])}
+      ${column("Unidades", "1 unidad por apuesta", `<span class="${cls(t.units)}">${sgn(t.units, 2)}</span>`, "", null, [["Por $100", money(t.units), cls(t.units)]])}
+      ${column("ROI", "Ganancia / riesgo", `<span class="${cls(t.roi)}">${t.roi == null ? "—" : sgn(t.roi * 100) + "%"}</span>`, "", null, [])}
+      </div></div>
+      <div class="panel pad"><div class="label">Por sistema</div><div class="scroll"><table>
+        <tr><th>Sistema</th><th class="num">Récord</th><th class="num">Pend.</th><th class="num">Unidades</th><th class="num">ROI</th></tr>
+        ${p.by_system.map((s) => `<tr><td>${esc(s.system)}</td><td class="num">${s.w}-${s.l}-${s.p}</td><td class="num">${s.pending}</td>
+          <td class="num ${cls(s.units)}">${sgn(s.units, 2)}</td><td class="num ${cls(s.roi)}">${s.roi == null ? "—" : sgn(s.roi * 100) + "%"}</td></tr>`).join("")}
+      </table></div></div>
+      <div class="panel pad"><div class="label">Apuestas</div><div class="scroll"><table class="log">
+        <tr><th>Fecha</th><th>Dep.</th><th>Apuesta</th><th>Partido</th><th>Sistema</th><th class="num">Final</th><th>Res.</th><th class="num">Unid.</th><th></th></tr>
+        ${p.picks.map((x) => `<tr><td>${ymd(x.date)}</td><td>${(x.sport || "").toUpperCase()}</td><td><b>${esc(x.label)}</b> <span class="muted">${x.odds ? odds(x.odds) : ""}</span></td>
+          <td>${esc(x.team)} ${x.home ? "vs" : "@"} ${esc(x.opp || "")}</td><td>${esc(x.system || "—")}</td>
+          <td class="num">${x.pts == null ? "—" : `${x.pts}-${x.opp_pts}`}</td>
+          <td>${x.result ? `<span class="res ${x.result}">${x.result}</span>` : `<span class="res">…</span>`}</td>
+          <td class="num ${cls(x.units)}">${x.units == null ? "—" : sgn(x.units, 2)}</td>
+          <td>${x.result ? "" : `<button class="pill" data-untail="${x.id}">Quitar</button>`}</td></tr>`).join("")}
+      </table></div></div>`;
+    el.querySelectorAll("[data-untail]").forEach((b) => b.onclick = async () => { await post("/api/untail", { id: b.dataset.untail }); loadPortfolio(); });
+  } catch (e) { fail(el, e); }
 }
 
 // ---------------- projections
@@ -564,7 +866,6 @@ async function meta() {
     const h = new URLSearchParams(location.hash.slice(1));
     if (h.get("q")) $("#q").value = h.get("q");
     setSport(h.get("s") && m.sports.some((x) => x.id === h.get("s")) ? h.get("s") : "nfl");
-    renderSaved();
     if (m.sports.find((x) => x.id === SPORT).games) runQuery();
   } catch (e) { fail($("#result"), e); }
 }

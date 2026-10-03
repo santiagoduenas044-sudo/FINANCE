@@ -18,7 +18,7 @@ import argparse
 import json
 import sys
 
-from . import db, espn, ingest, projections, report, splits, weather
+from . import db, espn, ingest, projections, report, splits, systems, weather
 from .query import FIELDS, QueryError
 
 
@@ -87,6 +87,9 @@ def main(argv=None) -> int:
                     ingest.build_team_games(conn)
                 except OSError as exc:
                     print(f"No pude actualizar ESPN ({exc})")
+            n = systems.grade_picks(conn)
+            if n:
+                print(f"{n} apuestas de tu portafolio calificadas")
             if not args.sin_clima:
                 _clima(conn)
         elif args.cmd == "buscar":

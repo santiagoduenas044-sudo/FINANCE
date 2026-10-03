@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import db, ingest, projections, report, splits, weather
+from . import db, espn, ingest, projections, report, splits, systems, weather
 from .query import FIELDS, QueryError
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -69,8 +69,8 @@ class Handler(BaseHTTPRequestHandler):
         conn = db.connect()
         try:
             self._send(200, fn(conn))
-        except (QueryError, ValueError) as exc:
-            self._send(400, {"error": str(exc)})
+        except (QueryError, ValueError, KeyError) as exc:
+            self._send(400, {"error": str(exc) if not isinstance(exc, KeyError) else f"falta el campo {exc}"})
         except Exception as exc:  # show the error in the UI instead of a dead page
             traceback.print_exc()
             self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
@@ -112,6 +112,30 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle(bt)
         if path == "/api/splits":
             return self._handle(splits.latest)
+        if path == "/api/systems":
+            return self._handle(lambda c: systems.list_systems(
+                c, qs.get("sport", [None])[0] or None, qs.get("sort", ["newest"])[0], qs.get("search", [None])[0]))
+        if path == "/api/packs":
+            def packs(c):
+                have = {(r["sport"], r["query"], r["bet"]) for r in c.execute("SELECT sport, query, bet FROM systems")}
+                out = []
+                for p in systems.PACKS:
+                    items = []
+                    for x in p["systems"]:
+                        st = systems.stats(c, {"query": x["query"], "sport": p["sport"], "bet": x["bet"]})
+                        items.append({**x, "record": st["record"], "proven": st["proven"], "upcoming": len(st["upcoming"]),
+                                      "added": (p["sport"], x["query"], x["bet"]) in have})
+                    out.append({**{k: p[k] for k in ("id", "sport", "name", "desc")}, "systems": items,
+                                "added": all(i["added"] for i in items)})
+                return out
+            return self._handle(packs)
+        if path == "/api/board":
+            return self._handle(lambda c: systems.board(
+                c, days=_int(qs, "days") or 7, sport=qs.get("sport", [None])[0] or None,
+                proven_only=qs.get("proven", ["0"])[0] == "1", today_only=qs.get("today", ["0"])[0] == "1",
+                sort=qs.get("sort", ["proven"])[0]))
+        if path == "/api/portfolio":
+            return self._handle(systems.portfolio)
         if path == "/api/upcoming":
             return self._handle(lambda c: [dict(r) for r in c.execute(
                 "SELECT game_id, season, week, gameday, gametime, away_team, home_team FROM games "
@@ -135,12 +159,33 @@ class Handler(BaseHTTPRequestHandler):
             def upd(c):
                 res = ingest.update(c)
                 try:
+                    res["espn"] = [{k: r[k] for k in ("sport", "games")} for r in espn.refresh_recent(c)]
+                    ingest.snapshot_lines(c)
+                    ingest.build_team_games(c)
+                except OSError as exc:
+                    res["espn_error"] = str(exc)
+                res["graded_picks"] = systems.grade_picks(c)
+                try:
                     res["weather"] = len(weather.update_forecasts(c))
                     ingest.build_team_games(c)
                 except OSError as exc:
                     res["weather_error"] = str(exc)
                 return res
             return self._handle(upd)
+        actions = {
+            "/api/systems": lambda c: {"id": systems.create(c, body.get("name"), body.get("sport", "nfl"),
+                                                            body.get("query", ""), body.get("bet", "ats"),
+                                                            body.get("notes"))},
+            "/api/systems/delete": lambda c: systems.delete(c, int(body["id"])),
+            "/api/systems/like": lambda c: systems.toggle_like(c, int(body["id"])),
+            "/api/packs/add": lambda c: {"added": systems.add_pack(c, body.get("id", ""))},
+            "/api/tail": lambda c: {"id": systems.tail(c, int(body["system_id"]), body["game_id"], body["team"])},
+            "/api/pass": lambda c: systems.pass_card(c, int(body["system_id"]), body["game_id"], body["team"]),
+            "/api/untail": lambda c: systems.untail(c, int(body["id"])),
+        }
+        if path in actions:
+            fn = actions[path]
+            return self._handle(lambda c: fn(c) or {"ok": True})
         if path == "/api/train":
             return self._handle(lambda c: projections.train(c, body.get("test_from")))
         self._send(404, {"error": "no encontrado"})

@@ -79,6 +79,20 @@ python3 -m sports_lab campos                                            # todos 
 - Si el filtro incluye a los dos equipos de un partido (por ejemplo, solo viento), el ATS sale 50% por construcción. Para esos filtros mira Over/Under.
 - **Teasers**: mueven la línea ±6 o ±10 puntos. +6 en ATS = el equipo recibe 6 puntos más; +6 en totales = el total sube 6 puntos (mejor para el Under).
 
+## Descubrir: sistemas, packs, tablero y portafolio
+
+- **Sistema** = una consulta + qué apostar cuando un partido la cumple: ATS o moneyline del equipo, u Over/Under del partido.
+  Se crea en Descubrir → "+ Nuevo sistema", o con ★ desde Consulta. Su récord se recalcula en vivo cada vez.
+- **Packs**: grupos de sistemas para empezar (NFL Clima, NFL Situacional, CFB, NBA, NHL). "Agregar" los copia a tu biblioteca.
+  Los de CFB/NBA/NHL necesitan que primero hagas `descargar` de ese deporte.
+- **Probado** = 40+ partidos, p ≤ 0.15, ROI positivo y rentable tanto antes como después del corte fuera de muestra.
+  No es garantía: solo filtra lo que más probablemente sea suerte.
+- **Tablero**: partidos de los próximos 7 días que cumplen tus sistemas. Desliza a la derecha (o ✓) para seguir la apuesta
+  y a la izquierda (o ✕) para pasar. Filtros por deporte, orden, "solo probados" y "solo hoy".
+- **Portafolio**: cada apuesta seguida guarda la línea y el momio de ese momento. Cuando el partido termina y corres
+  `actualizar`, se califica sola (W/L/P y unidades a 1 unidad por apuesta). Ves el récord total, por sistema y cada apuesta.
+- Todo se guarda en tu base de datos local (`sports_lab/data/`). No hay cuentas ni comunidad: es tu escritorio personal.
+
 ## Proyecciones (modelo PRO)
 
 ```bash

@@ -162,7 +162,7 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
         "all": _summarise(played, teasers=True),
         "by_season": [{"season": s, **_summarise(by_season[s])} for s in seasons],
         "warnings": warnings,
-        "recent": [_row_brief(r) for r in played[-limit_games:]][::-1],
+        "recent": [_row_brief(r) for r in (played[-limit_games:] if limit_games else [])][::-1],
         "upcoming": [_row_brief(r) for r in upcoming],
     }
     if test_from:
@@ -174,7 +174,7 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
 
 def _row_brief(r) -> dict:
     keys = ("game_id", "date", "season", "week", "team", "opp", "home", "neutral", "pts", "opp_pts", "margin",
-            "line", "total_line", "ml", "covered", "ats_push", "ats_margin", "over", "ou_margin", "total",
+            "line", "total_line", "ml", "spread_odds", "over_odds", "under_odds", "hour", "covered", "ats_push", "ats_margin", "over", "ou_margin", "total",
             "won", "lost", "tie", "wind", "wind_fcst", "temp", "rank", "opp_rank", "team_name", "opp_name")
     return {k: r[k] for k in keys}
 

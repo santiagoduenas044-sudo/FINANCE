@@ -71,6 +71,29 @@ CREATE TABLE IF NOT EXISTS line_snapshots (
     PRIMARY KEY (game_id, captured_at)
 );
 
+-- Saved systems (a query + what to bet when it matches).
+CREATE TABLE IF NOT EXISTS systems (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL, sport TEXT NOT NULL, query TEXT NOT NULL,
+    bet TEXT NOT NULL CHECK (bet IN ('ats', 'ml', 'over', 'under')),
+    notes TEXT, pack TEXT, liked INTEGER DEFAULT 0, created_at TEXT
+);
+
+-- Bets you tailed from the board; graded automatically once the game is final.
+CREATE TABLE IF NOT EXISTS picks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    system_id INTEGER, game_id TEXT NOT NULL, team TEXT NOT NULL,
+    bet TEXT NOT NULL, line REAL, odds INTEGER, stake REAL DEFAULT 1,
+    created_at TEXT, result TEXT, units REAL,
+    UNIQUE (system_id, game_id, team, bet)
+);
+
+-- Board cards you swiped away.
+CREATE TABLE IF NOT EXISTS passes (
+    system_id INTEGER, game_id TEXT, team TEXT, created_at TEXT,
+    PRIMARY KEY (system_id, game_id, team)
+);
+
 -- Weather forecasts at kickoff for upcoming outdoor games.
 CREATE TABLE IF NOT EXISTS weather_forecasts (
     game_id TEXT, captured_at TEXT,
