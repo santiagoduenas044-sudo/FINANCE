@@ -1,7 +1,8 @@
 """Command line: python -m sports_lab <comando>
 
   actualizar                 descarga datos NFL (nflverse) + guarda líneas actuales + clima
-  buscar "<consulta>"        tendencia estilo SDQL (ej. "total_line < 40 and wind >= 12")
+  buscar "<consulta>" [--deporte cfb]   tendencia estilo SDQL (ej. "team = PIT and p:ATSW and H")
+  descargar cfb --desde 2018 [--hasta 2026]   baja CFB/NBA/CBB/NHL/MLB desde ESPN
   campos                     lista de campos que puedes usar en las consultas
   entrenar [--test-desde N]  calibra el modelo y muestra el backtest fuera de muestra
   proyecciones [--temporada N --semana N]
@@ -17,7 +18,7 @@ import argparse
 import json
 import sys
 
-from . import db, ingest, projections, report, splits, weather
+from . import db, espn, ingest, projections, report, splits, weather
 from .query import FIELDS, QueryError
 
 
@@ -31,12 +32,18 @@ def main(argv=None) -> int:
 
     b = sub.add_parser("buscar", help="consulta de tendencias")
     b.add_argument("consulta")
+    b.add_argument("--deporte", default="nfl", help="nfl, cfb, nba, cbb, nhl, mlb")
     b.add_argument("--desde", type=int, help="temporada inicial")
     b.add_argument("--hasta", type=int, help="temporada final")
     b.add_argument("--test-desde", type=int, help="temporada donde empieza la prueba fuera de muestra")
     b.add_argument("--json", action="store_true")
 
     sub.add_parser("campos", help="campos disponibles")
+
+    d = sub.add_parser("descargar", help="bajar otro deporte desde ESPN")
+    d.add_argument("deporte", choices=sorted(espn.SPORTS))
+    d.add_argument("--desde", type=int, required=True, help="primera temporada (año en que empieza)")
+    d.add_argument("--hasta", type=int, help="última temporada (por defecto la actual)")
 
     e = sub.add_parser("entrenar", help="calibrar modelo + backtest")
     e.add_argument("--test-desde", type=int)
@@ -72,14 +79,35 @@ def main(argv=None) -> int:
             text = open(args.csv, encoding="utf-8").read() if args.csv else None
             print("Descargando datos de nflverse..." if text is None else "Cargando CSV local...")
             print(ingest.update(conn, text))
+            if text is None:
+                try:
+                    for r in espn.refresh_recent(conn):
+                        print(f"ESPN {r['sport']}: {r['games']} partidos actualizados")
+                    ingest.snapshot_lines(conn)
+                    ingest.build_team_games(conn)
+                except OSError as exc:
+                    print(f"No pude actualizar ESPN ({exc})")
             if not args.sin_clima:
                 _clima(conn)
         elif args.cmd == "buscar":
-            res = report.run(conn, args.consulta, args.desde, args.hasta, args.test_desde)
+            res = report.run(conn, args.consulta, args.desde, args.hasta, args.test_desde, sport=args.deporte)
             print(json.dumps(res, indent=2, default=str) if args.json else report.format_text(res))
         elif args.cmd == "campos":
-            for k, (t, d) in FIELDS.items():
-                print(f"  {k:<18} {t:<5} {d}")
+            for k, (_sql, t, desc) in FIELDS.items():
+                print(f"  {k:<16} {t:<5} {desc}")
+            print("\n  Prefijos: p: partido anterior, pp: hace dos, o: rival, op: rival en su partido anterior")
+            print("  Atajos: H A N F D W L ATSW ATSL ATSP O U")
+        elif args.cmd == "descargar":
+            from datetime import date as _date
+            last = args.hasta or _date.today().year
+            print(f"Descargando {espn.SPORTS[args.deporte]['label']} {args.desde}-{last} desde ESPN "
+                  "(un día por petición; una temporada tarda 1-2 minutos)...")
+            res = espn.download_seasons(conn, args.deporte, args.desde, last,
+                                        progress=lambda day, n: print(f"  {day}: {n} partidos", flush=True))
+            print(f"{res['games']} partidos guardados ({res['days']} días). Reconstruyendo tabla...")
+            ingest.build_team_games(conn)
+            if res["errors"]:
+                print(f"{len(res['errors'])} días fallaron, ej.: {res['errors'][0]}")
         elif args.cmd == "entrenar":
             print("Entrenando (walk-forward, tarda ~10 s)...")
             print(projections.format_eval(projections.train(conn, args.test_desde)))
@@ -105,6 +133,9 @@ def main(argv=None) -> int:
             serve(args.host, args.puerto)
     except (QueryError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error de red: {exc}. Revisa tu conexión a internet.", file=sys.stderr)
         return 1
     return 0
 

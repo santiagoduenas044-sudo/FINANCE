@@ -1,14 +1,14 @@
-# Sports Lab — tu BetLabs + KillerSports para la NFL
+# Sports Lab — tu BetLabs + KillerSports (NFL, CFB, NBA, CBB, NHL, MLB)
 
 Es independiente del bot de futuros: no importa nada de `signal_engine` y no usa
 ninguna dependencia fuera de la librería estándar de Python 3.10+.
 
 | Parte | Qué hace |
 |---|---|
-| **Base de datos** | Todos los partidos NFL desde 1999 (nflverse, gratis), con spread, total y moneyline de cierre, momios, clima, descanso, QB, coach, techo y superficie. |
-| **Buscador de tendencias** | Lenguaje tipo SDQL. Da récord SU / ATS / ML / Over-Under, ROI, valor p, desglose por temporada y **prueba fuera de muestra**. |
-| **Proyecciones** | Power ratings + línea PRO, total, ML justo y grade (A-F) por partido, como la pestaña PRO de Action. |
-| **Clima** | Pronóstico de viento, ráfagas, temperatura y lluvia a la hora del partido (Open-Meteo, gratis, sin API key). |
+| **Base de datos** | NFL desde 1999 (nflverse, gratis), con spread, total y moneyline de cierre, momios, clima, descanso, QB, coach, techo y superficie. CFB, NBA, CBB, NHL y MLB se bajan de ESPN (`descargar`). |
+| **Buscador de tendencias** | Sintaxis tipo SDQL / KillerSports (`team = PIT and p:ATSW and H`). Da SU / ATS / O-U con ROI y ganancia por $100, márgenes promedio, teasers ±6/±10, desglose por temporada, prueba fuera de muestra y el registro de cada partido. |
+| **Proyecciones** (NFL) | Power ratings + línea PRO, total, ML justo y grade (A-F) por partido, como la pestaña PRO de Action. |
+| **Clima** (NFL) | Pronóstico de viento, ráfagas, temperatura y lluvia a la hora del partido (Open-Meteo, gratis, sin API key). |
 | **Splits** | Guarda el % de tickets y de dinero que veas en Action, DK o VSiN, y así armas tu propio historial. |
 | **Movimiento de línea** | Cada vez que corres `actualizar` se guarda la línea actual, así sabes la apertura y cuánto se movió. |
 
@@ -16,35 +16,60 @@ ninguna dependencia fuera de la librería estándar de Python 3.10+.
 
 ```bash
 cd ~/FINANCE
-python3 -m sports_lab actualizar      # descarga ~7,500 partidos (unos segundos)
+python3 -m sports_lab actualizar      # descarga ~7,500 partidos NFL (unos segundos)
 python3 -m sports_lab entrenar        # calibra el modelo + backtest (~10 s)
 python3 -m sports_lab web             # abre http://localhost:8765
 ```
 
-Para verlo desde el celular en la misma red WiFi: `python3 -m sports_lab web --host 0.0.0.0`,
+Para verlo desde el celular o iPad en la misma red WiFi: `python3 -m sports_lab web --host 0.0.0.0`,
 luego abre `http://<IP-de-tu-Mac>:8765`.
 
 Los datos quedan en `sports_lab/data/` (ignorada por git). Corre `actualizar` cada día de partido:
-así se actualizan los resultados, las líneas nuevas (movimiento) y el clima.
+así se actualizan los resultados, las líneas nuevas (movimiento), el clima y los deportes de ESPN que ya bajaste.
+
+## Otros deportes (ESPN)
+
+```bash
+python3 -m sports_lab descargar cfb --desde 2018     # College Football FBS
+python3 -m sports_lab descargar nba --desde 2018
+python3 -m sports_lab descargar cbb --desde 2020     # College Basketball D-I (muchos partidos)
+python3 -m sports_lab descargar nhl --desde 2018
+python3 -m sports_lab descargar mlb --desde 2018
+```
+
+- Pide un día a la vez al scoreboard público de ESPN (sin API key). Una temporada tarda 1-2 minutos.
+- Guarda el marcador, el ranking AP (college) y la línea que muestra ESPN. En temporadas recientes ESPN trae
+  apertura y cierre, y se usa el **cierre**. En temporadas viejas puede faltar la línea de algunos partidos.
+- `--desde 2018` es la temporada que **empieza** en 2018. ESPN etiqueta NBA, NHL y CBB con el año en que
+  termina, así que la 2025-26 aparece como 2026.
+- Esta parte no se pudo probar contra ESPN real desde donde se escribió (red bloqueada); los tests usan
+  respuestas con el formato de ESPN. Si algo sale raro, avísame con el error.
 
 ## Buscador de tendencias
 
-Cada fila es **un equipo en un partido** (como SDQL). Ejemplos:
+Cada fila es **un equipo en un partido** (como SDQL). En la web eliges el deporte arriba; en la terminal usas `--deporte`:
 
 ```bash
-python3 -m sports_lab buscar "total_line < 40 and wind >= 12 and outdoors"
-python3 -m sports_lab buscar "home and dog and p_margin <= -14"
-python3 -m sports_lab buscar "team = PIT and line > 0 and rest > opp_rest" --desde 2010
-python3 -m sports_lab buscar "div and temp <= 32 and roof = outdoors"
+python3 -m sports_lab buscar "total < 40 and wind >= 12 and outdoors"
+python3 -m sports_lab buscar "team = PIT and p:ATSW and H and season > 2020"
+python3 -m sports_lab buscar "A and D and p:margin <= -14"
+python3 -m sports_lab buscar "F and rest > o:rest + 3" --desde 2010
+python3 -m sports_lab buscar "H and rank <= 10 and line <= -21" --deporte cfb
 python3 -m sports_lab buscar "money_pct >= 60 and bets_pct <= 40"      # con tus splits
 python3 -m sports_lab campos                                            # todos los campos
 ```
 
-- Operadores: `= != < <= > >=`, `and / or / not` (también `y / o / no`), `in (A, B)`, `is null`, paréntesis y sumas (`rest > opp_rest + 3`).
-- Un campo solo equivale a `= 1`: `home`, `dog`, `p_lost`, `outdoors`.
-- `line` es el spread del equipo: negativo = favorito, como en las casas de apuestas.
-- `p_*` es el partido anterior del equipo. `op_*` es el partido anterior del rival.
+- **Prefijos**: `p:` partido anterior del equipo, `pp:` hace dos partidos, `o:` el rival, `op:` el rival en su partido anterior.
+  Ejemplos: `p:W`, `p:points >= 30`, `o:rest`, `o:rank <= 10`, `op:L`.
+- **Atajos**: `H` local, `A` visitante, `N` neutral, `F` favorito, `D` underdog, `W` / `L` ganó / perdió,
+  `ATSW` / `ATSL` / `ATSP` cubrió / no cubrió / push, `O` / `U` over / under.
+- `line` es el spread del equipo (negativo = favorito). `total` es el over/under de cierre, como en SDQL;
+  `game_total` son los puntos reales.
+- Operadores: `= != < <= > >=`, `and / or / not` (también `y`), `in (A, B)`, `is null`, paréntesis y sumas.
+- Debajo de la consulta sale **"Interpretado como"**: así ves cómo se entendió cada atajo.
+- Botones: ▶ buscar, ↗ copiar link de la consulta, ★ guardarla (se guarda en ese navegador).
 - `wind` y `temp` son el clima **real** del partido. `wind_fcst` es el **pronóstico** para partidos por jugar.
+- Los nombres viejos (`p_margin`, `opp_rest`, `total_line`) siguen funcionando.
 
 ### Cómo leer el resultado
 
@@ -52,6 +77,7 @@ python3 -m sports_lab campos                                            # todos 
 - **p** es la probabilidad de lograr ese récord (o uno mejor) por pura suerte si en realidad fuera 52.4%, el punto de equilibrio a -110. Menos de 0.05 es interesante. Pero si probaste 50 filtros, alguno va a salir así por azar.
 - **Fuera de muestra**: compara las temporadas viejas con las recientes. Si una tendencia solo funcionó antes, desconfía.
 - Si el filtro incluye a los dos equipos de un partido (por ejemplo, solo viento), el ATS sale 50% por construcción. Para esos filtros mira Over/Under.
+- **Teasers**: mueven la línea ±6 o ±10 puntos. +6 en ATS = el equipo recibe 6 puntos más; +6 en totales = el total sube 6 puntos (mejor para el Under).
 
 ## Proyecciones (modelo PRO)
 

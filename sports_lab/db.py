@@ -11,6 +11,7 @@ DB_PATH = DATA_DIR / "nfl.sqlite"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
     game_id TEXT PRIMARY KEY,
+    sport TEXT DEFAULT 'nfl',
     season INTEGER, game_type TEXT, week INTEGER,
     gameday TEXT, weekday TEXT, gametime TEXT,
     away_team TEXT, home_team TEXT,
@@ -25,12 +26,13 @@ CREATE TABLE IF NOT EXISTS games (
     div_game INTEGER, roof TEXT, surface TEXT, temp REAL, wind REAL,
     stadium_id TEXT, stadium TEXT,
     away_qb_name TEXT, home_qb_name TEXT,
-    away_coach TEXT, home_coach TEXT, referee TEXT
+    away_coach TEXT, home_coach TEXT, referee TEXT,
+    away_rank INTEGER, home_rank INTEGER, away_name TEXT, home_name TEXT
 );
 
 -- One row per team per game (SDQL-style "team perspective"), rebuilt on ingest.
 CREATE TABLE IF NOT EXISTS team_games (
-    game_id TEXT, season INTEGER, week INTEGER, game_type TEXT, playoff INTEGER,
+    game_id TEXT, sport TEXT, season INTEGER, month INTEGER, week INTEGER, game_type TEXT, playoff INTEGER,
     date TEXT, weekday TEXT, hour INTEGER,
     team TEXT, opp TEXT, home INTEGER, neutral INTEGER, div INTEGER,
     pts INTEGER, opp_pts INTEGER, margin INTEGER, total INTEGER,
@@ -50,6 +52,7 @@ CREATE TABLE IF NOT EXISTS team_games (
     op_won INTEGER, op_lost INTEGER, op_covered INTEGER, op_margin INTEGER, op_line REAL,
     bets_pct REAL, money_pct REAL, ou_bets_over_pct REAL, ou_money_over_pct REAL,
     open_line REAL, line_move REAL, open_total REAL, total_move REAL,
+    rank INTEGER, opp_rank INTEGER, team_name TEXT, opp_name TEXT,
     PRIMARY KEY (game_id, team)
 );
 
@@ -75,9 +78,29 @@ CREATE TABLE IF NOT EXISTS weather_forecasts (
     PRIMARY KEY (game_id, captured_at)
 );
 
-CREATE INDEX IF NOT EXISTS tg_season ON team_games(season, week);
-CREATE INDEX IF NOT EXISTS g_season ON games(season, week);
 """
+
+INDEXES = """
+CREATE INDEX IF NOT EXISTS tg_sport ON team_games(sport, season, week);
+CREATE INDEX IF NOT EXISTS g_sport ON games(sport, season, week);
+CREATE INDEX IF NOT EXISTS tg_seq ON team_games(sport, team, season, game_no);
+"""
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring databases created by older versions up to the current schema."""
+    have = {r[1] for r in conn.execute("PRAGMA table_info(games)")}
+    for col, typ in (("sport", "TEXT DEFAULT 'nfl'"), ("away_rank", "INTEGER"), ("home_rank", "INTEGER"),
+                     ("away_name", "TEXT"), ("home_name", "TEXT")):
+        if col not in have:
+            conn.execute(f"ALTER TABLE games ADD COLUMN {col} {typ}")
+    conn.execute("UPDATE games SET sport='nfl' WHERE sport IS NULL")
+    # team_games is derived data: if its columns are outdated, drop it (next ingest rebuilds it)
+    tg = {r[1] for r in conn.execute("PRAGMA table_info(team_games)")}
+    if "sport" not in tg or "team_name" not in tg:
+        conn.execute("DROP TABLE team_games")
+        conn.executescript(SCHEMA)
+    conn.commit()
 
 
 def connect(path: Path | str | None = None) -> sqlite3.Connection:
@@ -87,4 +110,6 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(str(path))
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
+    conn.executescript(INDEXES)
     return conn

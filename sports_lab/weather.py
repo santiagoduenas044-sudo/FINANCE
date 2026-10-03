@@ -76,7 +76,7 @@ def update_forecasts(conn: sqlite3.Connection, days_ahead: int = 10, fetch=fetch
     horizon = (today + timedelta(days=days_ahead)).isoformat()
     games = conn.execute(
         """SELECT game_id, gameday, gametime, stadium_id, roof, home_team, away_team FROM games
-           WHERE home_score IS NULL AND gameday >= ? AND gameday <= ?""",
+           WHERE sport = 'nfl' AND home_score IS NULL AND gameday >= ? AND gameday <= ?""",
         (today.isoformat(), horizon),
     ).fetchall()
     captured = now_iso()

@@ -20,14 +20,14 @@ PCT_COLS = ("home_bets_pct", "home_money_pct", "over_bets_pct", "over_money_pct"
 
 
 def resolve_game_id(conn: sqlite3.Connection, game: str, season: int | None = None,
-                    week: int | None = None) -> str:
+                    week: int | None = None, sport: str = "nfl") -> str:
     game = game.strip()
     if conn.execute("SELECT 1 FROM games WHERE game_id=?", (game,)).fetchone():
         return game
     if "@" in game:
         away, home = (t.strip().upper() for t in game.split("@", 1))
-        sql = "SELECT game_id FROM games WHERE away_team=? AND home_team=?"
-        params: list = [away, home]
+        sql = "SELECT game_id FROM games WHERE away_team=? AND home_team=? AND sport=?"
+        params: list = [away, home, sport]
         if season:
             sql += " AND season=?"
             params.append(season)

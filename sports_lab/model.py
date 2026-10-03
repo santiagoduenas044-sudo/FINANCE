@@ -116,7 +116,7 @@ def load_games(conn: sqlite3.Connection) -> list[Game]:
     for r in conn.execute("SELECT game_id, wind_mph FROM weather_forecasts ORDER BY captured_at"):
         fc[r["game_id"]] = r["wind_mph"]
     out = []
-    for r in conn.execute("SELECT * FROM games ORDER BY gameday, gametime, game_id"):
+    for r in conn.execute("SELECT * FROM games WHERE sport='nfl' ORDER BY gameday, gametime, game_id"):
         if not r["gameday"]:
             continue
         outdoors = r["roof"] in ("outdoors", "open")

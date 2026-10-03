@@ -12,15 +12,37 @@ from .query import FIELDS, QueryError
 
 STATIC = Path(__file__).resolve().parent / "static"
 
+# (sport or None for all, label, query)
 EXAMPLES = [
-    ("Under con viento", "total_line < 40 and wind >= 12 and outdoors"),
-    ("Viento fuerte, cualquier total", "wind >= 15 and outdoors"),
-    ("Perro local tras paliza", "home and dog and p_margin <= -14"),
-    ("Favorito tras bye", "fav and rest >= 13"),
-    ("Divisional, perro de TD+", "div and line >= 7"),
-    ("Frío extremo", "temp <= 25 and outdoors"),
-    ("Dinero vs tickets (tus splits)", "money_pct >= 60 and bets_pct <= 40"),
+    ("nfl", "Under con viento", "total < 40 and wind >= 12 and outdoors"),
+    ("nfl", "Local tras cubrir", "H and p:ATSW and season >= 2018"),
+    ("nfl", "Perro visitante tras paliza", "A and D and p:margin <= -14"),
+    ("nfl", "Favorito tras bye", "F and rest >= 13"),
+    ("nfl", "Divisional, perro de TD+", "div and line >= 7"),
+    ("nfl", "Frío extremo", "temp <= 25 and outdoors"),
+    ("cfb", "Top 10 local favorito grande", "H and rank <= 10 and line <= -21"),
+    ("cfb", "Ranked perro vs ranked", "D and ranked and o:ranked"),
+    ("nba", "Back-to-back visitante", "A and rest = 1 and o:rest >= 2"),
+    ("nhl", "Perro local tras derrota", "H and D and p:L"),
+    ("mlb", "Totales bajos", "total <= 7.5"),
+    (None, "Dinero vs tickets (tus splits)", "money_pct >= 60 and bets_pct <= 40"),
 ]
+
+SPORT_LABELS = {"nfl": "NFL", "cfb": "CFB", "nba": "NBA", "cbb": "CBB", "nhl": "NHL", "mlb": "MLB"}
+
+
+def _meta(c):
+    counts = {r[0]: (r[1], r[2], r[3]) for r in c.execute(
+        "SELECT sport, COUNT(*), MIN(season), MAX(season) FROM games GROUP BY sport")}
+    return {
+        "fields": [{"name": k, "type": t, "desc": d} for k, (_sql, t, d) in FIELDS.items()],
+        "examples": [{"sport": sp, "label": a, "q": b} for sp, a, b in EXAMPLES],
+        "sports": [{"id": k, "label": v, "games": counts.get(k, (0,))[0],
+                    "from": counts.get(k, (0, None))[1], "to": counts.get(k, (0, None, None))[2]}
+                   for k, v in SPORT_LABELS.items()],
+        "games": sum(v[0] for v in counts.values()),
+        "model_trained": projections.PARAMS_PATH.exists(),
+    }
 
 
 def _int(qs, key):
@@ -70,16 +92,14 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._send(200, (STATIC / "index.html").read_bytes(), "text/html")
         if path == "/api/meta":
-            return self._handle(lambda c: {
-                "fields": [{"name": k, "type": t, "desc": d} for k, (t, d) in FIELDS.items()],
-                "examples": [{"label": a, "q": b} for a, b in EXAMPLES],
-                "seasons": [r[0] for r in c.execute("SELECT DISTINCT season FROM games ORDER BY season")],
-                "games": c.execute("SELECT COUNT(*) FROM games").fetchone()[0],
-                "model_trained": projections.PARAMS_PATH.exists(),
-            })
+            return self._handle(_meta)
         if path == "/api/query":
             q = qs.get("q", [""])[0]
-            return self._handle(lambda c: report.run(c, q, _int(qs, "desde"), _int(qs, "hasta"), _int(qs, "test_desde")))
+            sport = qs.get("sport", ["nfl"])[0]
+            if sport not in SPORT_LABELS:
+                return self._send(400, {"error": f"deporte desconocido: {sport}"})
+            return self._handle(lambda c: report.run(c, q, _int(qs, "desde"), _int(qs, "hasta"),
+                                                     _int(qs, "test_desde"), sport=sport))
         if path == "/api/projections":
             return self._handle(lambda c: projections.weekly(c, _int(qs, "season"), _int(qs, "week")))
         if path == "/api/ratings":
@@ -95,7 +115,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/upcoming":
             return self._handle(lambda c: [dict(r) for r in c.execute(
                 "SELECT game_id, season, week, gameday, gametime, away_team, home_team FROM games "
-                "WHERE home_score IS NULL ORDER BY gameday, gametime LIMIT 40")])
+                "WHERE sport = 'nfl' AND home_score IS NULL ORDER BY gameday, gametime LIMIT 40")])
         self._send(404, {"error": "no encontrado"})
 
     def do_POST(self):

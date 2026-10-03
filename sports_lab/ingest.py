@@ -6,7 +6,7 @@ import io
 import sqlite3
 import urllib.request
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 NFLVERSE_GAMES_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
 
@@ -110,7 +110,7 @@ def _sign(x):
 def build_team_games(conn: sqlite3.Connection) -> int:
     """Rebuild the one-row-per-team-per-game table with derived and situational fields."""
     games = conn.execute(
-        "SELECT * FROM games ORDER BY season, gameday, gametime, game_id"
+        "SELECT * FROM games ORDER BY sport, season, gameday, gametime, game_id"
     ).fetchall()
     splits = _latest_splits(conn)
     opens = _opening_lines(conn)
@@ -153,7 +153,8 @@ def build_team_games(conn: sqlite3.Connection) -> int:
                 except ValueError:
                     pass
             rows.append({
-                "game_id": g["game_id"], "season": g["season"], "week": g["week"],
+                "game_id": g["game_id"], "sport": g["sport"] or "nfl", "season": g["season"],
+                "month": int(g["gameday"][5:7]) if g["gameday"] else None, "week": g["week"],
                 "game_type": g["game_type"], "playoff": 0 if g["game_type"] == "REG" else 1,
                 "date": g["gameday"], "weekday": g["weekday"], "hour": hour,
                 "team": g[f"{side}_team"], "opp": g[f"{other}_team"],
@@ -189,6 +190,8 @@ def build_team_games(conn: sqlite3.Connection) -> int:
                 "open_total": open_total,
                 "total_move": (g["total_line"] - open_total)
                 if (g["total_line"] is not None and open_total is not None) else None,
+                "rank": g[f"{side}_rank"], "opp_rank": g[f"{other}_rank"],
+                "team_name": g[f"{side}_name"], "opp_name": g[f"{other}_name"],
             })
 
     _add_situational(rows)
@@ -208,16 +211,21 @@ def _add_situational(rows: list[dict]) -> None:
     """Season-to-date records, streaks and previous-game fields (only info known before kickoff)."""
     by_team = defaultdict(list)
     for r in rows:
-        by_team[(r["team"], r["season"])].append(r)
+        by_team[(r["sport"], r["team"], r["season"])].append(r)  # PIT (NFL) != PIT (NHL)
 
     prev_of = {}  # (game_id, team) -> previous game row of that team
-    for (_team, _season), games in by_team.items():
+    last_date = {}  # (sport, team) -> date of the previous game, across seasons, for rest days
+    for (sport, team, _season), games in sorted(by_team.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2])):
         wins = losses = aw = al = 0
         streak = ats_streak = 0
         prev = None
         for i, r in enumerate(games):
             r.update(game_no=i + 1, wins=wins, losses=losses, ats_wins=aw, ats_losses=al,
                      streak=streak, ats_streak=ats_streak)
+            if r["rest"] is None and r["date"] and (sport, team) in last_date:
+                r["rest"] = (date.fromisoformat(r["date"]) - date.fromisoformat(last_date[(sport, team)])).days
+            if r["date"]:
+                last_date[(sport, team)] = r["date"]
             for k in ("won", "lost", "covered", "margin", "pts", "opp_pts", "line", "home",
                       "over", "ou_margin", "ats_margin"):
                 r["p_" + k] = prev[k] if prev is not None else None
@@ -240,7 +248,11 @@ def _add_situational(rows: list[dict]) -> None:
                 ats_streak = ats_streak - 1 if ats_streak < 0 else -1
             prev = r
 
+    by_key = {(r["game_id"], r["team"]): r for r in rows}
     for r in rows:
+        if r["opp_rest"] is None:
+            other = by_key.get((r["game_id"], r["opp"]))
+            r["opp_rest"] = other["rest"] if other else None
         op = prev_of.get((r["game_id"], r["opp"]))
         r["op_won"] = op["won"] if op else None
         r["op_lost"] = op["lost"] if op else None

@@ -18,6 +18,7 @@
     --bg: #f3eee3; --field: #e8e1d0; --ink: #1a1712; --muted: #6b6356; --hair: #cdc4b0;
     --accent: #c8361d; --good: #1d6b3f; --bad: #b3261e; --warn-bg: #efe0b4; --warn-ink: #6e4a00;
     --gA: #1d6b3f; --gB: #5d7f24; --gC: #c89a1c; --gD: #d4722a; --gF: #b3261e; --on-grade: #f3eee3;
+    --panel: #ece6d8; --query-ink: #1d6b3f;
     --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
     --body: Barlow, "Helvetica Neue", Arial, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -25,35 +26,37 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #0f0f0d; --field: #1c1b18; --ink: #ece6d8; --muted: #9a9384; --hair: #34312b;
-      --accent: #ff6a3d; --good: #5cbf7f; --bad: #ff6f61; --warn-bg: #2e2612; --warn-ink: #f0c65a;
-      --gA: #3f9e63; --gB: #86a83a; --gC: #d9ad2b; --gD: #e0823a; --gF: #d8463a; --on-grade: #0f0f0d;
+      --bg: #0b0c0b; --panel: #111312; --field: #161917; --ink: #e8ebe5; --muted: #858b84; --hair: #232724;
+      --accent: #e8b44a; --good: #4cc879; --bad: #ef6a5e; --warn-bg: #231d0e; --warn-ink: #e8b44a;
+      --gA: #2f9e5c; --gB: #7fa83a; --gC: #d9ad2b; --gD: #e0823a; --gF: #d8463a; --on-grade: #0b0c0b;
+      --query-ink: #7fdc9b;
       color-scheme: dark;
     }
   }
   :root[data-theme="dark"] {
-    --bg: #0f0f0d; --field: #1c1b18; --ink: #ece6d8; --muted: #9a9384; --hair: #34312b;
-    --accent: #ff6a3d; --good: #5cbf7f; --bad: #ff6f61; --warn-bg: #2e2612; --warn-ink: #f0c65a;
-    --gA: #3f9e63; --gB: #86a83a; --gC: #d9ad2b; --gD: #e0823a; --gF: #d8463a; --on-grade: #0f0f0d;
+    --bg: #0b0c0b; --panel: #111312; --field: #161917; --ink: #e8ebe5; --muted: #858b84; --hair: #232724;
+    --accent: #e8b44a; --good: #4cc879; --bad: #ef6a5e; --warn-bg: #231d0e; --warn-ink: #e8b44a;
+    --gA: #2f9e5c; --gB: #7fa83a; --gC: #d9ad2b; --gD: #e0823a; --gF: #d8463a; --on-grade: #0b0c0b;
+    --query-ink: #7fdc9b;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 var(--body); }
   header { position: sticky; top: 0; z-index: 5; background: var(--bg); }
-  .mast { max-width: 980px; margin: 0 auto; padding: 14px 16px 0; display: flex; align-items: flex-end;
+  .mast { max-width: 1240px; margin: 0 auto; padding: 14px 16px 0; display: flex; align-items: flex-end;
     justify-content: space-between; gap: 12px; border-bottom: 4px double var(--ink); padding-bottom: 8px; }
   .mast h1 { font: 900 38px/0.9 var(--display); text-transform: uppercase; margin: 0; letter-spacing: .01em; }
   .mast h1 span { color: var(--accent); }
   .mast .dateline { font: 400 11px/1.3 var(--mono); color: var(--muted); text-transform: uppercase; text-align: right; }
   .theme { background: none; border: 1px solid var(--ink); color: var(--ink); font: 600 11px var(--mono);
     text-transform: uppercase; padding: 3px 6px; cursor: pointer; margin-top: 4px; }
-  nav { max-width: 980px; margin: 0 auto; display: flex; gap: 18px; overflow-x: auto; padding: 0 16px;
+  nav { max-width: 1240px; margin: 0 auto; display: flex; gap: 18px; overflow-x: auto; padding: 0 16px;
     scrollbar-width: none; border-bottom: 1px solid var(--ink); }
   nav button { background: none; border: 0; color: var(--muted); font: 800 18px var(--display);
     text-transform: uppercase; letter-spacing: .05em; padding: 9px 0 7px; cursor: pointer;
     border-bottom: 4px solid transparent; white-space: nowrap; }
   nav button.on { color: var(--ink); border-color: var(--accent); }
-  main { max-width: 980px; margin: 0 auto; padding: 18px 16px 40px; }
+  main { max-width: 1240px; margin: 0 auto; padding: 18px 16px 40px; }
   section { display: none; } section.on { display: block; }
   .card { border-top: 2px solid var(--ink); padding: 12px 0 4px; margin-bottom: 22px; }
   .card > b:first-child, .card h2 { font: 800 20px var(--display); text-transform: uppercase; letter-spacing: .03em; }
@@ -116,13 +119,74 @@
     .gl { grid-template-columns: 1fr 58px 84px 40px; } .mast h1 { font-size: 32px; }
     .game h3 { font-size: 26px; }
   }
+  /* ---- query console ---- */
+  .sports { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .sport { border: 1px solid var(--hair); background: none; color: var(--muted); font: 600 13px var(--mono);
+    padding: 5px 10px; cursor: pointer; text-transform: uppercase; }
+  .sport.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .sport.empty { opacity: .45; }
+  .label { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .qrow { display: flex; gap: 8px; align-items: stretch; margin-top: 6px; }
+  .qrow input { flex: 1; min-width: 0; font: 600 16px var(--mono); color: var(--query-ink); border: 1px solid var(--hair);
+    border-bottom: 2px solid var(--query-ink); background: var(--field); }
+  .icon { flex: 0 0 auto; width: 46px; border: 1px solid var(--hair); background: var(--field); color: var(--ink);
+    font: 600 18px var(--mono); cursor: pointer; }
+  .icon.go { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .interp { font: 400 12px var(--mono); color: var(--muted); margin-top: 6px; word-break: break-word; min-height: 1em; }
+  .interp b { color: var(--ink); font-weight: 400; }
+  .opts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .opts input { flex: 1 1 110px; font-size: 14px; padding: 7px 10px; }
+  .panel { border: 1px solid var(--hair); background: var(--panel); margin-bottom: 18px; }
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .col { padding: 14px; border-right: 1px solid var(--hair); min-width: 0; }
+  .col:last-child { border-right: 0; }
+  .col h3 { margin: 0; text-align: center; font: 800 22px var(--display); text-transform: uppercase; letter-spacing: .05em; }
+  .col .what { text-align: center; color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .recline { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .recline .big { font: 600 30px/1.1 var(--mono); letter-spacing: -.03em; }
+  .recline .pc { font: 600 17px var(--mono); }
+  .meter { height: 6px; background: var(--bad); margin: 8px 0 12px; }
+  .meter:empty { background: var(--hair); }
+  .meter i { display: block; height: 100%; background: var(--good); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; }
+  .stats div span { display: block; font: 600 10px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .stats div b { font: 600 15px var(--mono); }
+  .sec { border-top: 1px solid var(--hair); }
+  .sec > summary { padding: 10px 14px; font: 800 16px var(--display); text-transform: uppercase; letter-spacing: .05em;
+    color: var(--ink); cursor: pointer; }
+  .sec .inner { padding: 0 14px 12px; }
+  .tz td, .tz th { text-align: center; font-family: var(--mono); white-space: nowrap; }
+  .tz td:first-child, .tz th:first-child { text-align: left; }
+  .log th { white-space: nowrap; }
+  .log td { font: 14px var(--mono); white-space: nowrap; }
+  .log tr.next td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .log tr.next td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .rk { color: var(--muted); font-size: 12px; margin-right: 3px; }
+  .bdg { display: inline-block; min-width: 24px; padding: 2px 5px; text-align: center; font: 600 11px var(--mono);
+    border: 1px solid var(--hair); color: var(--muted); }
+  .bdg.w { color: var(--good); border-color: var(--good); } .bdg.l { color: var(--bad); border-color: var(--bad); }
+  .loghead { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; gap: 8px; }
+  .saved { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .saved .chip { border-color: var(--accent); }
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+    padding: 8px 14px; font: 600 13px var(--mono); z-index: 20; max-width: 90vw; overflow-wrap: anywhere; }
+  @media (max-width: 600px) {
+    .qrow { flex-wrap: wrap; }
+    .qrow input { flex: 1 1 100%; }
+    .qrow .icon { flex: 1 1 0; height: 42px; }
+  }
+  @media (max-width: 760px) {
+    .three { grid-template-columns: 1fr; }
+    .col { border-right: 0; border-bottom: 1px solid var(--hair); }
+    .col:last-child { border-bottom: 0; }
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="mast">
     <h1>Sports Lab<span>.</span></h1>
-    <div class="dateline"><div>Almanaque NFL</div><div id="dbinfo"></div>
+    <div class="dateline"><div>Laboratorio de tendencias</div><div id="dbinfo"></div>
       <button class="theme" id="theme" title="Cambiar tema">Auto</button></div>
   </div>
   <nav id="tabs">
@@ -136,16 +200,27 @@
 <main>
   <!-- TENDENCIAS -->
   <section id="trends" class="on">
-    <div class="card">
-      <textarea id="q" spellcheck="false">total_line < 40 and wind >= 12 and outdoors</textarea>
-      <div class="row" style="margin-top:8px">
-        <input id="desde" type="number" placeholder="Desde temporada">
-        <input id="hasta" type="number" placeholder="Hasta temporada">
-        <input id="testdesde" type="number" placeholder="Prueba desde (auto)">
-        <button class="btn" id="run">Buscar</button>
+    <div class="card" style="border-top:0;padding-top:0">
+      <div class="sports" id="sports"></div>
+      <div class="label">Consulta</div>
+      <div class="qrow">
+        <input id="q" spellcheck="false" autocomplete="off" autocapitalize="off" value="total < 40 and wind >= 12 and outdoors">
+        <button class="icon go" id="run" title="Buscar">&#9654;</button>
+        <button class="icon" id="share" title="Copiar link">&#8599;</button>
+        <button class="icon" id="save" title="Guardar consulta">&#9733;</button>
+      </div>
+      <div class="interp" id="interp"></div>
+      <div class="saved" id="saved"></div>
+      <div class="opts">
+        <input id="desde" type="number" placeholder="Desde">
+        <input id="hasta" type="number" placeholder="Hasta">
+        <input id="testdesde" type="number" placeholder="Prueba desde">
       </div>
       <div class="chips" id="examples"></div>
-      <details style="margin-top:10px"><summary>Campos disponibles (toca uno para agregarlo)</summary>
+      <details style="margin-top:10px"><summary>Campos, prefijos y atajos (toca un campo para agregarlo)</summary>
+        <div class="small muted" style="margin:6px 0">Prefijos: <code>p:</code> partido anterior · <code>pp:</code> hace dos ·
+          <code>o:</code> rival · <code>op:</code> rival en su partido anterior. Atajos: <code>H A N F D W L ATSW ATSL ATSP O U</code>.
+          Ejemplo: <code>team = PIT and p:ATSW and H and season > 2020</code></div>
         <div class="fields" id="fields"></div></details>
     </div>
     <div id="result"></div>
@@ -222,58 +297,136 @@ document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
 });
 
 // ---------------- trends
-function kpi(label, t, hint) {
-  if (!t || (!t.n && !t.p)) return `<div class="kpi"><div class="lbl">${label}</div><div class="rec">—</div></div>`;
-  return `<div class="kpi"><div class="lbl">${label}</div>
-    <div class="rec">${t.w}-${t.l}${t.p ? "-" + t.p : ""} <span class="small">${pct(t.pct)}</span></div>
-    <div class="sub">${hint === "su" ? "" : `ROI <b class="${cls(t.roi)}">${sgn(t.roi * 100)}%</b> · ${sgn(t.units)} u · `}p=${t.p_value ?? "—"}</div></div>`;
-}
+let SPORT = "nfl", META = null;
+const BE = 110 / 210;
+const money = (u) => u == null ? "—" : (u >= 0 ? "+$" : "-$") + Math.abs(Math.round(u * 100)).toLocaleString();
+const pctc = (x, be = 0.5) => x == null ? "" : x > be ? "pos" : x < be ? "neg" : "";
+const ymd = (d) => (d || "").replaceAll("-", "");
+const badge = (v, yes, no) => v == null ? `<span class="bdg">–</span>` : v === 1 ? `<span class="bdg w">${yes}</span>` : `<span class="bdg l">${no}</span>`;
+const recTxt = (t) => t.n || t.p ? `${t.w}-${t.l}${t.p ? "-" + t.p : ""}` : "—";
 function shortRec(t) { return !t || !t.n ? "—" : `${t.w}-${t.l}-${t.p} <span class="muted">(${pct(t.pct, 0)}, ROI <span class="${cls(t.roi)}">${sgn(t.roi*100,0)}%</span>)</span>`; }
+
+function column(title, what, rec, pctTxt, frac, stats) {
+  return `<div class="col"><h3>${title}</h3><div class="what">${what}</div>
+    <div class="recline"><span class="big">${rec}</span><span class="pc">${pctTxt}</span></div>
+    <div class="meter">${frac == null ? "" : `<i style="width:${(frac * 100).toFixed(1)}%"></i>`}</div>
+    <div class="stats">${stats.map(([k, v, c]) => `<div><span>${k}</span><b class="${c || ""}">${v}</b></div>`).join("")}</div></div>`;
+}
+
+function setHash() {
+  try { history.replaceState(null, "", "#" + new URLSearchParams({ s: SPORT, q: $("#q").value })); } catch (e) {}
+}
+
+function resultHtml(r) {
+  const a = r.all, su = a.su, ats = a.ats, ov = a.over, un = a.under, ml = a.ml, av = a.avg;
+  let h = `<div class="panel"><div class="three">
+    ${column("SU", "Moneyline / directo", recTxt(su), `<span class="${pctc(su.pct)}">${pct(su.pct)}</span>`, su.n ? su.pct : null,
+      [["ROI ML", ml.n ? sgn(ml.roi * 100) + "%" : "—", cls(ml.roi)], ["ML / $100", ml.n ? money(ml.units) : "—", cls(ml.units)],
+       ["Margen prom.", sgn(av.margin)]])}
+    ${column("ATS", "Contra el spread", recTxt(ats), `<span class="${pctc(ats.pct, BE)}">${pct(ats.pct)}</span>`, ats.n ? ats.pct : null,
+      [["ROI", ats.n ? sgn(ats.roi * 100) + "%" : "—", cls(ats.roi)], ["ATS / $100", ats.n ? money(ats.units) : "—", cls(ats.units)],
+       ["Margen ATS", sgn(av.ats_margin)], ["Línea prom.", sgn(av.line)]])}
+    ${column("O/U", "Over / Under", recTxt(ov),
+      ov.n ? `<span class="${pctc(ov.pct, BE)}">${pct(ov.pct)}</span> / <span class="${pctc(un.pct, BE)}">${pct(un.pct)}</span>` : "—",
+      ov.n ? ov.pct : null,
+      [["ROI Over", ov.n ? sgn(ov.roi * 100) + "%" : "—", cls(ov.roi)], ["ROI Under", un.n ? sgn(un.roi * 100) + "%" : "—", cls(un.roi)],
+       ["Over / $100", ov.n ? money(ov.units) : "—", cls(ov.units)], ["Under / $100", un.n ? money(un.units) : "—", cls(un.units)],
+       ["Margen O/U", sgn(av.ou_margin)], ["Total prom.", av.total_line == null ? "—" : av.total_line.toFixed(1)]])}
+  </div>`;
+  if (r.warnings.length) h += `<div style="padding:0 14px">${r.warnings.map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}</div>`;
+  if (a.teasers && r.rows) {
+    const cell = (x) => x.w + x.l ? `${x.w}-${x.l}${x.p ? "-" + x.p : ""} <span class="${pctc(x.pct)}">${pct(x.pct)}</span>` : "—";
+    h += `<details class="sec" open><summary>Teasers</summary><div class="inner scroll"><table class="tz">
+      <tr><th></th>${a.teasers.map((t) => `<th>${t.points > 0 ? "+" : ""}${t.points} pt</th>`).join("")}</tr>
+      ${[["ats", "ATS"], ["over", "Over"], ["under", "Under"]].map(([k, lbl]) => `<tr><td>${lbl}</td>${a.teasers.map((t) => `<td>${cell(t[k])}</td>`).join("")}</tr>`).join("")}
+      </table><div class="small muted">Mueve la línea esos puntos: +6 en ATS = el equipo recibe 6 puntos más; +6 en totales = total 6 puntos más alto.</div></div></details>`;
+  }
+  if (r.split) {
+    const s = r.split;
+    h += `<details class="sec" open><summary>¿Aguanta fuera de muestra?</summary><div class="inner scroll"><table>
+      <tr><th></th><th>Antes de ${s.test_from}</th><th>Desde ${s.test_from}</th></tr>
+      ${["ats","under","over"].map((k) => `<tr><td>${k.toUpperCase()}</td><td>${shortRec(s.train[k])}</td><td>${shortRec(s.test[k])}</td></tr>`).join("")}
+      </table></div></details>`;
+  }
+  if (r.by_season.length) {
+    h += `<details class="sec"><summary>Por temporada</summary><div class="inner scroll"><table>
+      <tr><th>Temp.</th><th class="num">SU</th><th class="num">ATS</th><th class="num">Over-Under</th><th style="width:28%"></th></tr>
+      ${r.by_season.slice().reverse().map((x) => { const w = x.ats.n ? x.ats.pct * 100 : 0;
+        return `<tr><td>${x.season}</td><td class="num">${x.su.w}-${x.su.l}</td><td class="num">${x.ats.n ? `${x.ats.w}-${x.ats.l}-${x.ats.p}` : "—"}</td>
+        <td class="num">${x.over.w}-${x.under.w}-${x.over.p}</td>
+        <td><div class="bar"><i style="width:${w}%;background:${w >= 52.4 ? "var(--good)" : "var(--bad)"}"></i></div></td></tr>`; }).join("")}
+      </table></div></details>`;
+  }
+  h += `</div>`;
+
+  const rows = [...r.upcoming.map((g) => ({ ...g, next: true })), ...r.recent];
+  const team = (code, rank) => `${rank ? `<span class="rk">#${rank}</span>` : ""}${esc(code)}`;
+  const ouBadge = (g) => g.ou_margin === 0 ? `<span class="bdg">P</span>` : g.over == null ? badge(null) : g.over === 1 ? `<span class="bdg w">O</span>` : `<span class="bdg l">U</span>`;
+  h += `<div class="panel"><div class="loghead"><span class="label">Registro · ${r.rows} calificados${r.upcoming.length ? ` · ${r.upcoming.length} por jugar` : ""}</span>
+    <span class="small muted">${r.recent.length < r.rows ? `mostrando los últimos ${r.recent.length}` : ""}</span></div>
+    <div class="scroll"><table class="log">
+    <tr><th>Fecha</th><th>Sem</th><th>Temp</th><th>Equipo</th><th>Rival</th><th>Sitio</th><th class="num">Final</th><th class="num">Margen</th>
+      <th>S/U</th><th class="num">Margen ATS</th><th>ATS</th><th class="num">Margen O/U</th><th>O/U</th><th class="num">Línea</th><th class="num">ML</th><th class="num">Total</th></tr>
+    ${rows.map((g) => `<tr class="${g.next ? "next" : ""}"><td>${ymd(g.date)}</td><td>${g.week ?? "—"}</td><td>${g.season}</td>
+      <td><b>${team(g.team, g.rank)}</b></td><td>${team(g.opp, g.opp_rank)}</td><td>${g.neutral ? "neutral" : g.home ? "home" : "away"}</td>
+      <td class="num">${g.next ? "—" : `${g.pts}-${g.opp_pts}`}</td><td class="num">${g.next ? "—" : sgn(g.margin, 0)}</td>
+      <td>${g.next ? badge(null) : g.tie ? `<span class="bdg">T</span>` : badge(g.won, "W", "L")}</td>
+      <td class="num">${g.ats_margin == null ? "—" : sgn(g.ats_margin)}</td>
+      <td>${g.ats_push ? `<span class="bdg">P</span>` : badge(g.covered, "W", "L")}</td>
+      <td class="num">${g.ou_margin == null ? "—" : sgn(g.ou_margin)}</td><td>${ouBadge(g)}</td>
+      <td class="num">${g.line == null ? "—" : sgn(g.line)}</td><td class="num">${g.ml == null ? "—" : odds(g.ml)}</td>
+      <td class="num">${g.total_line ?? "—"}</td></tr>`).join("")}
+    </table></div>${rows.length ? "" : `<div class="spinner">Ningún partido cumple el filtro</div>`}</div>`;
+  return h;
+}
 
 async function runQuery() {
   const el = $("#result");
-  el.innerHTML = `<div class="spinner">Buscando…</div>`;
-  const p = new URLSearchParams({ q: $("#q").value });
+  el.innerHTML = `<div class="spinner">Corriendo consulta…</div>`;
+  setHash();
+  const p = new URLSearchParams({ q: $("#q").value, sport: SPORT });
   if ($("#desde").value) p.set("desde", $("#desde").value);
   if ($("#hasta").value) p.set("hasta", $("#hasta").value);
   if ($("#testdesde").value) p.set("test_desde", $("#testdesde").value);
   try {
     const r = await api("/api/query?" + p);
-    const a = r.all;
-    let h = `<div class="card"><div class="muted small">${r.games} partidos · ${r.rows} filas equipo</div>
-      ${r.warnings.map((w) => `<div class="warn">⚠ ${esc(w)}</div>`).join("")}
-      <div class="kpis" style="margin-top:8px">${kpi("Under", a.under)}${kpi("Over", a.over)}${kpi("ATS", a.ats)}${kpi("Moneyline", a.ml)}${kpi("Récord SU", a.su, "su")}</div></div>`;
-    if (r.split) {
-      const s = r.split;
-      h += `<div class="card"><b>¿Aguanta fuera de muestra?</b> <span class="muted small">antes de ${s.test_from} vs desde ${s.test_from}</span>
-        <div class="scroll"><table><tr><th></th><th>Antes</th><th>Desde ${s.test_from}</th></tr>
-        ${["under","over","ats"].map((k) => `<tr><td>${k.toUpperCase()}</td><td>${shortRec(s.train[k])}</td><td>${shortRec(s.test[k])}</td></tr>`).join("")}
-        </table></div></div>`;
-    }
-    if (r.upcoming.length) {
-      h += `<div class="card"><b>Partidos por jugar que cumplen el filtro</b><div class="scroll"><table>
-        <tr><th>Fecha</th><th>Equipo</th><th class="num">Línea</th><th class="num">Total</th><th class="num">Viento pron.</th></tr>
-        ${r.upcoming.map((g) => `<tr><td>${g.date}</td><td>${g.team} ${g.home ? "vs" : "@"} ${g.opp}</td><td class="num">${sgn(g.line)}</td><td class="num">${g.total_line ?? "—"}</td><td class="num">${g.wind_fcst ?? "—"}</td></tr>`).join("")}
-        </table></div></div>`;
-    }
-    h += `<div class="card"><b>Por temporada</b><div class="scroll"><table>
-      <tr><th>Temp.</th><th>ATS</th><th>Under</th><th style="width:30%"></th></tr>
-      ${r.by_season.slice().reverse().map((s) => { const u = s.under; const w = u.n ? u.pct * 100 : 0;
-        return `<tr><td>${s.season}</td><td>${s.ats.n ? `${s.ats.w}-${s.ats.l}-${s.ats.p}` : "—"}</td><td>${u.n ? `${u.w}-${u.l}-${u.p} (${pct(u.pct,0)})` : "—"}</td>
-        <td><div class="bar"><i style="width:${w}%;background:${w >= 52.4 ? "var(--good)" : "var(--bad)"}"></i></div></td></tr>`; }).join("")}
-      </table></div></div>`;
-    h += `<div class="card"><b>Últimos partidos</b><div class="scroll"><table>
-      <tr><th>Fecha</th><th>Partido</th><th class="num">Marcador</th><th class="num">Línea</th><th class="num">Total</th><th class="num">Viento</th></tr>
-      ${r.recent.map((g) => `<tr><td>${g.date}</td><td>${g.team} ${g.home ? "vs" : "@"} ${g.opp}</td><td class="num">${g.pts}-${g.opp_pts}</td>
-        <td class="num ${g.covered === 1 ? "pos" : g.covered === 0 ? "neg" : ""}">${sgn(g.line)}</td>
-        <td class="num ${g.over === 0 ? "pos" : ""}">${g.total}/${g.total_line ?? "—"} ${g.over === 1 ? "O" : g.over === 0 ? "U" : ""}</td>
-        <td class="num">${g.wind ?? "—"}</td></tr>`).join("")}
-      </table></div></div>`;
-    el.innerHTML = h;
-  } catch (e) { fail(el, e); }
+    $("#interp").innerHTML = `Interpretado como: <b>${esc(r.interpreted || "todos los partidos")}</b>`;
+    el.innerHTML = resultHtml(r);
+  } catch (e) { $("#interp").textContent = ""; fail(el, e); }
 }
 $("#run").onclick = runQuery;
-$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) runQuery(); });
+$("#q").addEventListener("keydown", (e) => { if (e.key === "Enter") runQuery(); });
+
+// share link + saved queries (kept in this browser)
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 1800); }
+$("#share").onclick = async () => { setHash(); try { await navigator.clipboard.writeText(location.href); toast("Link copiado"); } catch (e) { toast(location.href); } };
+function loadSaved() { try { return JSON.parse(localStorage.getItem("sl-saved") || "[]"); } catch (e) { return []; } }
+function renderSaved() {
+  const list = loadSaved();
+  $("#saved").innerHTML = list.map((x, i) => `<span class="chip" data-i="${i}" title="${esc(x.q)}">★ ${esc(x.s.toUpperCase())} · ${esc(x.q.length > 34 ? x.q.slice(0, 34) + "…" : x.q)}</span>`).join("");
+  $("#saved").querySelectorAll(".chip").forEach((c) => c.onclick = () => { const x = list[+c.dataset.i]; setSport(x.s); $("#q").value = x.q; runQuery(); });
+}
+$("#save").onclick = () => {
+  const list = loadSaved().filter((x) => !(x.q === $("#q").value && x.s === SPORT));
+  list.unshift({ s: SPORT, q: $("#q").value });
+  try { localStorage.setItem("sl-saved", JSON.stringify(list.slice(0, 12))); toast("Consulta guardada"); } catch (e) { toast("No se pudo guardar"); }
+  renderSaved();
+};
+
+function setSport(s) {
+  SPORT = s;
+  document.querySelectorAll(".sport").forEach((b) => b.classList.toggle("on", b.dataset.s === s));
+  const info = META && META.sports.find((x) => x.id === s);
+  if (info) $("#sportinfo").textContent = info.games ? `${info.games.toLocaleString()} partidos · ${info.from}–${info.to}`
+    : `sin datos todavía — corre: python -m sports_lab descargar ${info.id} --desde 2018`;
+  renderExamples();
+}
+function renderExamples() {
+  if (!META) return;
+  const ex = META.examples.filter((x) => !x.sport || x.sport === SPORT);
+  $("#examples").innerHTML = ex.map((x) => `<span class="chip" data-q="${esc(x.q)}">${esc(x.label)}</span>`).join("");
+  $("#examples").querySelectorAll(".chip").forEach((c) => c.onclick = () => { $("#q").value = c.dataset.q; runQuery(); });
+}
 
 // ---------------- projections
 async function loadPro() {
@@ -396,13 +549,23 @@ $("#theme").onclick = () => {
 // ---------------- boot
 async function meta() {
   try {
-    const m = await api("/api/meta");
-    $("#dbinfo").textContent = m.games ? `${m.games.toLocaleString()} partidos · ${m.seasons[0]}–${m.seasons[m.seasons.length - 1]}` : "sin datos: toca Modelo → Actualizar";
-    $("#examples").innerHTML = m.examples.map((x) => `<span class="chip" data-q="${esc(x.q)}">${esc(x.label)}</span>`).join("");
-    $("#examples").querySelectorAll(".chip").forEach((c) => c.onclick = () => { $("#q").value = c.dataset.q; runQuery(); });
+    const m = META = await api("/api/meta");
+    $("#dbinfo").textContent = m.games ? `${m.games.toLocaleString()} partidos` : "sin datos: toca Modelo → Actualizar";
+    $("#sports").innerHTML = m.sports.map((x) => `<button class="sport ${x.games ? "" : "empty"}" data-s="${x.id}"
+      title="${x.games ? `${x.games.toLocaleString()} partidos` : "sin datos todavía"}">${x.label}</button>`).join("")
+      + `<span class="small muted" id="sportinfo"></span>`;
+    document.querySelectorAll(".sport").forEach((b) => b.onclick = () => {
+      setSport(b.dataset.s);
+      if (m.sports.find((x) => x.id === b.dataset.s).games) runQuery(); else { $("#result").innerHTML = ""; $("#interp").textContent = ""; }
+    });
     $("#fields").innerHTML = m.fields.map((f) => `<div><code>${f.name}</code> <span class="muted">${esc(f.desc)}</span></div>`).join("");
     $("#fields").querySelectorAll("code").forEach((c) => c.onclick = () => { const q = $("#q"); q.value = (q.value.trim() ? q.value.trim() + " and " : "") + c.textContent + " "; q.focus(); });
-    if (m.games) runQuery();
+    // restore a shared link: #s=cfb&q=...
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (h.get("q")) $("#q").value = h.get("q");
+    setSport(h.get("s") && m.sports.some((x) => x.id === h.get("s")) ? h.get("s") : "nfl");
+    renderSaved();
+    if (m.sports.find((x) => x.id === SPORT).games) runQuery();
   } catch (e) { fail($("#result"), e); }
 }
 meta();

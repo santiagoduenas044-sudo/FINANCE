@@ -5,7 +5,7 @@ import math
 import sqlite3
 from collections import defaultdict
 
-from .query import to_sql
+from .query import compile_query
 
 BREAK_EVEN_110 = 110 / 210  # 52.38% needed at -110
 
@@ -60,10 +60,26 @@ class _Tally:
         }
 
 
-def _summarise(rows) -> dict:
+TEASER_POINTS = (-10, -6, 6, 10)
+
+
+def _avg(vals):
+    vals = [v for v in vals if v is not None]
+    return round(sum(vals) / len(vals), 2) if vals else None
+
+
+def _rec(margins) -> dict:
+    w = sum(1 for m in margins if m > 0)
+    l = sum(1 for m in margins if m < 0)
+    p = sum(1 for m in margins if m == 0)
+    return {"w": w, "l": l, "p": p, "pct": round(w / (w + l), 4) if w + l else None}
+
+
+def _summarise(rows, teasers: bool = False) -> dict:
     su, ats, ml = _Tally(), _Tally(), _Tally()
     over, under = _Tally(), _Tally()
     seen_games = set()
+    ou_rows = []
     for r in rows:
         if r["won"] is not None:
             if r["tie"]:
@@ -77,27 +93,48 @@ def _summarise(rows) -> dict:
             ats.add(None if r["ats_push"] else bool(r["covered"]), r["spread_odds"])
         if r["ou_margin"] is not None and r["game_id"] not in seen_games:
             seen_games.add(r["game_id"])
+            ou_rows.append(r)
             res = None if r["ou_margin"] == 0 else r["ou_margin"] > 0
             over.add(res, r["over_odds"])
             under.add(None if res is None else not res, r["under_odds"])
-    return {
+    out = {
         "su": su.as_dict(0.5), "ats": ats.as_dict(), "ml": ml.as_dict(0.5),
         "over": over.as_dict(), "under": under.as_dict(),
+        "avg": {
+            "margin": _avg(r["margin"] for r in rows),
+            "ats_margin": _avg(r["ats_margin"] for r in rows),
+            "line": _avg(r["line"] for r in rows),
+            "ou_margin": _avg(r["ou_margin"] for r in ou_rows),
+            "total_line": _avg(r["total_line"] for r in ou_rows),
+            "points": _avg(r["pts"] for r in rows),
+            "opp_points": _avg(r["opp_pts"] for r in rows),
+        },
     }
+    if teasers:
+        # move the number by k points: ATS at (team line + k), Over/Under at (total + k)
+        ats_m = [r["ats_margin"] for r in rows if r["ats_margin"] is not None]
+        ou_m = [r["ou_margin"] for r in ou_rows]
+        out["teasers"] = [{"points": k, "ats": _rec([m + k for m in ats_m]),
+                           "over": _rec([m - k for m in ou_m]), "under": _rec([k - m for m in ou_m])}
+                          for k in TEASER_POINTS]
+    return out
 
 
 def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
-        season_to: int | None = None, test_from: int | None = None, limit_games: int = 40) -> dict:
-    where, params = to_sql(text)
+        season_to: int | None = None, test_from: int | None = None, limit_games: int = 300,
+        sport: str = "nfl") -> dict:
+    q = compile_query(text)
+    params = [sport] + q.params
     extra = ""
     if season_from:
-        extra += " AND season >= ?"
-        params = params + [season_from]
+        extra += " AND t.season >= ?"
+        params.append(season_from)
     if season_to:
-        extra += " AND season <= ?"
-        params = params + [season_to]
+        extra += " AND t.season <= ?"
+        params.append(season_to)
     rows = conn.execute(
-        f"SELECT * FROM team_games WHERE ({where}){extra} ORDER BY date, game_id, home DESC", params
+        f"SELECT t.* FROM team_games t {' '.join(q.joins)} WHERE t.sport = ? AND ({q.where}){extra} "
+        "ORDER BY t.date, t.game_id, t.home DESC", params
     ).fetchall()
     played = [r for r in rows if r["won"] is not None]
     upcoming = [r for r in rows if r["won"] is None]
@@ -115,14 +152,14 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
     warnings = []
     if both_sides:
         warnings.append("El filtro incluye a los dos equipos del mismo partido: el ATS/SU tiende a 50% "
-                        "por construcción. Para totales mira Over/Under; para lados agrega home, dog, fav, etc.")
-    if len(played) < 100:
+                        "por construcción. Para totales mira Over/Under; para lados agrega H, D, F, etc.")
+    if 0 < len(played) < 100:
         warnings.append(f"Muestra pequeña ({len(played)} filas): un récord así puede salir por azar.")
 
     out = {
-        "query": text, "sql_where": where,
+        "query": text, "sport": sport, "interpreted": q.interpreted, "sql_where": q.where,
         "rows": len(played), "games": len({r["game_id"] for r in played}),
-        "all": _summarise(played),
+        "all": _summarise(played, teasers=True),
         "by_season": [{"season": s, **_summarise(by_season[s])} for s in seasons],
         "warnings": warnings,
         "recent": [_row_brief(r) for r in played[-limit_games:]][::-1],
@@ -136,13 +173,10 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
 
 
 def _row_brief(r) -> dict:
-    return {
-        "game_id": r["game_id"], "date": r["date"], "season": r["season"], "week": r["week"],
-        "team": r["team"], "opp": r["opp"], "home": r["home"],
-        "pts": r["pts"], "opp_pts": r["opp_pts"], "line": r["line"], "total_line": r["total_line"],
-        "covered": r["covered"], "ats_push": r["ats_push"], "over": r["over"], "total": r["total"],
-        "wind": r["wind"], "wind_fcst": r["wind_fcst"], "temp": r["temp"],
-    }
+    keys = ("game_id", "date", "season", "week", "team", "opp", "home", "neutral", "pts", "opp_pts", "margin",
+            "line", "total_line", "ml", "covered", "ats_push", "ats_margin", "over", "ou_margin", "total",
+            "won", "lost", "tie", "wind", "wind_fcst", "temp", "rank", "opp_rank", "team_name", "opp_name")
+    return {k: r[k] for k in keys}
 
 
 def fmt_record(t: dict, label: str) -> str:
@@ -158,9 +192,15 @@ def fmt_record(t: dict, label: str) -> str:
 
 def format_text(res: dict) -> str:
     a = res["all"]
-    lines = [f"Consulta: {res['query']}", f"Partidos: {res['games']}  (filas equipo: {res['rows']})", ""]
+    lines = [f"Consulta [{res['sport'].upper()}]: {res['query']}", f"Interpretado como: {res['interpreted']}",
+             f"Partidos: {res['games']}  (filas equipo: {res['rows']})", ""]
     lines += [fmt_record(a["su"], "SU"), fmt_record(a["ats"], "ATS"), fmt_record(a["ml"], "ML"),
               fmt_record(a["over"], "Over"), fmt_record(a["under"], "Under")]
+    t = a.get("teasers") or []
+    if t:
+        lines += ["", "Teasers:      " + "".join(f"{x['points']:+d} pt".rjust(12) for x in t)]
+        for key, label in (("ats", "ATS"), ("over", "Over"), ("under", "Under")):
+            lines.append(f"  {label:<11} " + "".join(f"{x[key]['w']}-{x[key]['l']}-{x[key]['p']}".rjust(12) for x in t))
     if "split" in res:
         s = res["split"]
         lines += ["", f"Fuera de muestra (antes de {s['test_from']} vs desde {s['test_from']}):"]

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pytest
 
 from sports_lab import db, ingest, model, projections, report, splits, weather
-from sports_lab.query import QueryError, to_sql
+from sports_lab.query import QueryError, compile_query, to_sql
 
 HEADER = ingest.GAME_COLS
 
@@ -54,22 +54,37 @@ def conn(tmp_path, monkeypatch):
 # ------------------------------------------------------------------ query language
 def test_query_translates_and_binds():
     where, params = to_sql("total_line < 40 and wind >= 12 and outdoors")
-    assert where == "((total_line < ?) AND (wind >= ?) AND (outdoors = 1))"
+    assert where == "((t.total_line < ?) AND (t.wind >= ?) AND (t.outdoors = 1))"
     assert params == [40, 12]
 
 
 def test_query_text_fields_and_in_lists():
     where, params = to_sql("team in (pit, cle) and roof = outdoors and not home")
-    assert "team COLLATE NOCASE IN (?, ?)" in where
+    assert "t.team COLLATE NOCASE IN (?, ?)" in where
     assert params == ["PIT", "CLE", "outdoors"]
 
 
 def test_query_groups_and_field_comparison():
-    where, _ = to_sql("(dog or line = 0) and rest > opp_rest + 3")
-    assert where == "(((dog = 1) OR (line = ?)) AND (rest > (opp_rest + ?)))"
+    c = compile_query("(dog or line = 0) and rest > opp_rest + 3")
+    assert c.where == "(((t.dog = 1) OR (t.line = ?)) AND (t.rest > (o.rest + ?)))"
+    assert c.interpreted == "(dog or line = 0) and rest > o:rest + 3"
+    assert len(c.joins) == 1
 
 
-@pytest.mark.parametrize("bad", ["winds > 3", "wind >", "wind > 3; DROP TABLE games", "team = PIT)", "1 = 1 or x"])
+def test_sdql_shorthands_and_prefixes():
+    c = compile_query("team=pit and p:ATSW and H and season>2020 and op:L and o:team = NO")
+    assert c.interpreted == "team = 'PIT' and p:covered and home and season > 2020 and op:lost and o:team = 'NO'"
+    assert "(p.covered = 1)" in c.where and "(op.lost = 1)" in c.where
+    assert c.params == ["PIT", 2020, "NO"]
+    joined = " ".join(c.joins)
+    assert "team_games p ON" in joined and "team_games o ON" in joined and "team_games op ON" in joined
+    # O is the over shorthand, total is the posted total (SDQL), game_total the real points
+    c = compile_query("O and total > game_total - 3")
+    assert c.where == "((t.over = 1) AND (t.total_line > (t.total - ?)))"
+
+
+@pytest.mark.parametrize("bad", ["winds > 3", "wind >", "wind > 3; DROP TABLE games", "team = PIT)", "1 = 1 or x",
+                                 "x:won", "p:o:p:won", "team"])
 def test_query_rejects_unknown_fields_and_junk(bad):
     with pytest.raises(QueryError):
         to_sql(bad)
