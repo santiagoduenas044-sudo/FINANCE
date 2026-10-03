@@ -223,7 +223,7 @@ def season_window(sport: str, start_year: int) -> tuple[date, date]:
 def download_range(conn: sqlite3.Connection, sport: str, start: date, end: date, fetch=fetch_day,
                    pause: float = 0.15, progress=None) -> dict:
     if sport not in SPORTS:
-        raise ValueError(f"Deporte desconocido: {sport}. Opciones: {', '.join(SPORTS)}")
+        raise ValueError(f"Unknown sport: {sport}. Options: {', '.join(SPORTS)}")
     day, n_games, n_days, errors = start, 0, 0, []
     while day <= end:
         try:
@@ -231,7 +231,7 @@ def download_range(conn: sqlite3.Connection, sport: str, start: date, end: date,
         except OSError as exc:
             errors.append(f"{day}: {exc}")
             if len(errors) >= 5 and n_games == 0:
-                raise OSError(f"No pude conectar con ESPN ({exc})") from exc
+                raise OSError(f"Could not reach ESPN ({exc})") from exc
             day += timedelta(days=1)
             continue
         rows = [r for r in (parse_event(sport, ev) for ev in data.get("events") or []) if r]

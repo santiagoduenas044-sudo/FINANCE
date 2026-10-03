@@ -151,10 +151,10 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
     both_sides = len({r["game_id"] for r in played}) < len(played)
     warnings = []
     if both_sides:
-        warnings.append("El filtro incluye a los dos equipos del mismo partido: el ATS/SU tiende a 50% "
-                        "por construcción. Para totales mira Over/Under; para lados agrega H, D, F, etc.")
+        warnings.append("This filter includes both teams of the same game, so ATS/SU drifts to 50% by "
+                        "construction. Read Over/Under for totals; for sides add H, D, F, etc.")
     if 0 < len(played) < 100:
-        warnings.append(f"Muestra pequeña ({len(played)} filas): un récord así puede salir por azar.")
+        warnings.append(f"Small sample ({len(played)} rows): a record like this can happen by chance.")
 
     out = {
         "query": text, "sport": sport, "interpreted": q.interpreted, "sql_where": q.where,
@@ -186,14 +186,14 @@ def fmt_record(t: dict, label: str) -> str:
     if label == "SU":  # straight-up record has no price attached
         return f"{label:<8} {t['w']}-{t['l']}-{t['p']}  {pct:>6}"
     roi = f"{t['roi']:+.1%}" if t["roi"] is not None else "—"
-    return (f"{label:<8} {t['w']}-{t['l']}-{t['p']}  {pct:>6}  unidades {t['units']:+.1f}  "
+    return (f"{label:<8} {t['w']}-{t['l']}-{t['p']}  {pct:>6}  units {t['units']:+.1f}  "
             f"ROI {roi:>7}  z={t['z']:+.2f}  p={t['p_value']}")
 
 
 def format_text(res: dict) -> str:
     a = res["all"]
-    lines = [f"Consulta [{res['sport'].upper()}]: {res['query']}", f"Interpretado como: {res['interpreted']}",
-             f"Partidos: {res['games']}  (filas equipo: {res['rows']})", ""]
+    lines = [f"Query [{res['sport'].upper()}]: {res['query']}", f"Interpreted as: {res['interpreted']}",
+             f"Games: {res['games']}  (team rows: {res['rows']})", ""]
     lines += [fmt_record(a["su"], "SU"), fmt_record(a["ats"], "ATS"), fmt_record(a["ml"], "ML"),
               fmt_record(a["over"], "Over"), fmt_record(a["under"], "Under")]
     t = a.get("teasers") or []
@@ -203,17 +203,17 @@ def format_text(res: dict) -> str:
             lines.append(f"  {label:<11} " + "".join(f"{x[key]['w']}-{x[key]['l']}-{x[key]['p']}".rjust(12) for x in t))
     if "split" in res:
         s = res["split"]
-        lines += ["", f"Fuera de muestra (antes de {s['test_from']} vs desde {s['test_from']}):"]
+        lines += ["", f"Out of sample (before {s['test_from']} vs since {s['test_from']}):"]
         for k in ("ats", "under", "over"):
-            lines.append(f"  {k.upper():<6} antes: {_short(s['train'][k])}   |   desde: {_short(s['test'][k])}")
-    lines += ["", "Por temporada (ATS | Over/Under):"]
+            lines.append(f"  {k.upper():<6} before: {_short(s['train'][k])}   |   since: {_short(s['test'][k])}")
+    lines += ["", "By season (ATS | Over/Under):"]
     for s in res["by_season"]:
         lines.append(f"  {s['season']}: ATS {_short(s['ats'])}   O/U {s['over']['w']}-{s['under']['w']}-{s['over']['p']}")
     if res["upcoming"]:
-        lines += ["", "Partidos por jugar que cumplen el filtro:"]
+        lines += ["", "Upcoming games that match:"]
         for r in res["upcoming"]:
             lines.append(f"  {r['date']} {r['team']} vs {r['opp']}  line {r['line']}  total {r['total_line']}"
-                         f"  viento pronóstico {r['wind_fcst']}")
+                         f"  forecast wind {r['wind_fcst']}")
     for w in res["warnings"]:
         lines.append("⚠ " + w)
     return "\n".join(lines)

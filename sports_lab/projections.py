@@ -109,15 +109,15 @@ def weekly(conn: sqlite3.Connection, season: int | None = None, week: int | None
     if season is None or week is None:
         upcoming = [g for g in games if not g.played]
         if not upcoming:
-            raise ValueError("No hay partidos por jugar en la base de datos. Corre `actualizar`.")
+            raise ValueError("No upcoming games in the database. Run `update`.")
         nxt = min(upcoming, key=lambda g: g.day)
         season, week = nxt.season, nxt.week
     params = load_params()
     if params is None:
-        raise ValueError("Primero entrena el modelo: python -m sports_lab entrenar")
+        raise ValueError("Train the model first: python -m sports_lab train")
     slate = [g for g in games if g.season == season and g.week == week]
     if not slate:
-        raise ValueError(f"No hay partidos para temporada {season} semana {week}")
+        raise ValueError(f"No games for season {season} week {week}")
     as_of = min(g.day for g in slate)
     rt = model.fit_ratings([g for g in games if g.day < as_of], as_of)
     mm = model.MarginModel([g for g in games if g.played and g.season in set(params.train_seasons)] or games)
@@ -156,16 +156,16 @@ def power_table(conn: sqlite3.Connection) -> list[dict]:
 
 
 def format_weekly(res: dict) -> str:
-    lines = [f"Proyecciones temporada {res['season']} semana {res['week']}", ""]
+    lines = [f"Projections season {res['season']} week {res['week']}", ""]
     for g in res["games"]:
         lines.append(f"{g['away']} @ {g['home']}  {g['date']}" + (f"  final {g['final']}" if g["final"] else "")
-                     + (f"  viento {g['wind']:.0f} mph" if g["wind"] else ""))
+                     + (f"  wind {g['wind']:.0f} mph" if g["wind"] else ""))
         ms = g["market_spread_home"]
-        lines.append(f"  Spread {g['home']}: PRO {g['proj_spread_home']:+.1f} (modelo puro {g['raw_spread_home']:+.1f})"
-                     + " | mercado " + (f"{ms:+.1f}" if ms is not None else "—")
-                     + f"    Total: PRO {g['proj_total']:.1f} (puro {g['raw_total']:.1f})"
-                     + f" | mercado {g['market_total'] or '—'}"
-                     + f"    ML justo {g['home']} {g['proj_ml_home']:+d} / {g['away']} {g['proj_ml_away']:+d}")
+        lines.append(f"  Spread {g['home']}: PRO {g['proj_spread_home']:+.1f} (raw model {g['raw_spread_home']:+.1f})"
+                     + " | market " + (f"{ms:+.1f}" if ms is not None else "—")
+                     + f"    Total: PRO {g['proj_total']:.1f} (raw {g['raw_total']:.1f})"
+                     + f" | market {g['market_total'] or '—'}"
+                     + f"    fair ML {g['home']} {g['proj_ml_home']:+d} / {g['away']} {g['proj_ml_away']:+d}")
         for b in g["bets"]:
             team = g[b["side"]] if b["side"] in ("home", "away") else b["side"].capitalize()
             line = "" if b["line"] is None else (f"{b['line']:+.1f}" if b["market"] == "spread" else f"{b['line']}")
@@ -179,13 +179,13 @@ def format_eval(res: dict) -> str:
     e = res["evaluation"]
     p = res["backtest_params"]
     lines = [
-        f"Backtest walk-forward: entrenado antes de {res['test_from']}, probado en {e['seasons'][0]}-{e['seasons'][-1]}",
-        f"Parámetros: peso resultados spread {p['w_spread']:.2f}, total {p['w_total']:.2f}; "
-        f"k_spread {p['k_spread']:.2f}, k_total {p['k_total']:.2f}; viento vs mercado {p['wind_coef_mkt']:+.2f} pts/mph>8",
-        f"Error (RMSE) spread: modelo {e['rmse_spread_model']} vs línea de cierre {e['rmse_spread_market']}",
-        f"Error (RMSE) total:  modelo {e['rmse_total_model']} vs línea de cierre {e['rmse_total_market']}",
+        f"Walk-forward backtest: trained before {res['test_from']}, tested on {e['seasons'][0]}-{e['seasons'][-1]}",
+        f"Params: results weight spread {p['w_spread']:.2f}, total {p['w_total']:.2f}; "
+        f"k_spread {p['k_spread']:.2f}, k_total {p['k_total']:.2f}; wind vs market {p['wind_coef_mkt']:+.2f} pts/mph>8",
+        f"Error (RMSE) spread: model {e['rmse_spread_model']} vs closing line {e['rmse_spread_market']}",
+        f"Error (RMSE) total:  model {e['rmse_total_model']} vs closing line {e['rmse_total_market']}",
         "",
-        "Récord fuera de muestra por grade (una apuesta por mercado por partido):",
+        "Out-of-sample record by grade (one bet per market per game):",
     ]
     for r in e["by_grade"]:
         n = r["w"] + r["l"]

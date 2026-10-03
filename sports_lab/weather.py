@@ -87,7 +87,7 @@ def update_forecasts(conn: sqlite3.Connection, days_ahead: int = 10, fetch=fetch
             continue  # indoors: weather irrelevant
         loc = STADIUMS.get(g["stadium_id"])
         if loc is None:
-            out.append({"game_id": g["game_id"], "error": f"sin coordenadas para {g['stadium_id']}"})
+            out.append({"game_id": g["game_id"], "error": f"no coordinates for {g['stadium_id']}"})
             continue
         if g["stadium_id"] not in cache:
             cache[g["stadium_id"]] = fetch(*loc)

@@ -1,5 +1,5 @@
-"""Sports Lab — base de datos NFL, buscador de tendencias, proyecciones y splits.
+"""Sports Lab: sports betting trends database, SDQL-style queries, projections and splits.
 
-Independiente del bot de futuros (signal_engine): no importa nada de él y solo
-usa la librería estándar de Python.
+Independent from the futures bot (signal_engine): it imports nothing from it and
+only uses the Python standard library.
 """

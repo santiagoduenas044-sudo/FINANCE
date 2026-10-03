@@ -17,75 +17,75 @@ Prefixes (SDQL style):
 
 Shorthands: H home, A away, N neutral, F favorite, D underdog, W win, L loss,
 ATSW / ATSL / ATSP cover / no cover / push, O over, U under.
-Keywords: and / or / not (also y), in (...), is null, is not null.
+Keywords: and / or / not, in (...), is null, is not null.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-# query name -> (SQL template on alias {a}, type, Spanish description)
+# query name -> (SQL template on alias {a}, type, description)
 FIELDS: dict[str, tuple[str, str, str]] = {
-    "sport": ("{a}.sport", "text", "deporte: nfl, cfb, nba, cbb, nhl, mlb"),
-    "season": ("{a}.season", "num", "temporada"),
-    "week": ("{a}.week", "num", "semana (fútbol americano)"),
-    "month": ("{a}.month", "num", "mes (1-12)"),
-    "date": ("CAST(REPLACE({a}.date, '-', '') AS INTEGER)", "num", "fecha como AAAAMMDD (date >= 20250901)"),
-    "day": ("{a}.weekday", "text", "día: Sunday, Monday, Thursday..."),
-    "hour": ("{a}.hour", "num", "hora de inicio (ET, 0-23)"),
-    "game_type": ("{a}.game_type", "text", "REG o tipo de playoff (WC, DIV, CON, SB, POST)"),
-    "playoff": ("{a}.playoff", "num", "1 si es playoff"),
-    "team": ("{a}.team", "text", "equipo (PIT, KC, UGA...)"),
-    "name": ("{a}.team_name", "text", "nombre completo del equipo (si existe)"),
+    "sport": ("{a}.sport", "text", "sport: nfl, cfb, nba, cbb, nhl, mlb"),
+    "season": ("{a}.season", "num", "season"),
+    "week": ("{a}.week", "num", "week (football)"),
+    "month": ("{a}.month", "num", "month (1-12)"),
+    "date": ("CAST(REPLACE({a}.date, '-', '') AS INTEGER)", "num", "date as YYYYMMDD (date >= 20250901)"),
+    "day": ("{a}.weekday", "text", "day of week: Sunday, Monday, Thursday..."),
+    "hour": ("{a}.hour", "num", "kickoff hour (ET, 0-23)"),
+    "game_type": ("{a}.game_type", "text", "REG or playoff round (WC, DIV, CON, SB, POST)"),
+    "playoff": ("{a}.playoff", "num", "playoff game"),
+    "team": ("{a}.team", "text", "team code (PIT, KC, UGA...)"),
+    "name": ("{a}.team_name", "text", "full team name (when available)"),
     "site": ("CASE WHEN {a}.neutral = 1 THEN 'neutral' WHEN {a}.home = 1 THEN 'home' ELSE 'away' END",
-             "text", "home, away o neutral"),
-    "home": ("{a}.home", "num", "local (atajo H)"),
-    "away": ("(1 - {a}.home - {a}.neutral)", "num", "visitante (atajo A)"),
-    "neutral": ("{a}.neutral", "num", "cancha neutral (atajo N)"),
-    "div": ("{a}.div", "num", "partido divisional (NFL)"),
-    "rank": ("{a}.rank", "num", "ranking AP (1-25, college)"),
-    "ranked": ("({a}.rank IS NOT NULL)", "num", "tiene ranking AP"),
-    "points": ("{a}.pts", "num", "puntos/carreras/goles del equipo"),
+             "text", "home, away or neutral"),
+    "home": ("{a}.home", "num", "home team (shorthand H)"),
+    "away": ("(1 - {a}.home - {a}.neutral)", "num", "away team (shorthand A)"),
+    "neutral": ("{a}.neutral", "num", "neutral site (shorthand N)"),
+    "div": ("{a}.div", "num", "division game (NFL)"),
+    "rank": ("{a}.rank", "num", "AP rank (1-25, college)"),
+    "ranked": ("({a}.rank IS NOT NULL)", "num", "has an AP rank"),
+    "points": ("{a}.pts", "num", "points / runs / goals scored"),
     "margin": ("{a}.margin", "num", "points - o:points"),
-    "game_total": ("{a}.total", "num", "puntos totales anotados en el partido"),
-    "line": ("{a}.line", "num", "spread del equipo (negativo = favorito)"),
-    "total": ("{a}.total_line", "num", "over/under de cierre (como en SDQL)"),
-    "ml": ("{a}.ml", "num", "moneyline del equipo"),
-    "fav": ("{a}.fav", "num", "favorito (atajo F)"),
-    "dog": ("{a}.dog", "num", "underdog (atajo D)"),
-    "won": ("{a}.won", "num", "ganó (atajo W)"),
-    "lost": ("{a}.lost", "num", "perdió (atajo L)"),
-    "tie": ("{a}.tie", "num", "empate"),
-    "covered": ("{a}.covered", "num", "cubrió el spread (atajo ATSW)"),
-    "ats_lost": ("({a}.covered = 0)", "num", "no cubrió (atajo ATSL)"),
-    "ats_push": ("{a}.ats_push", "num", "push contra el spread (atajo ATSP)"),
+    "game_total": ("{a}.total", "num", "actual combined score"),
+    "line": ("{a}.line", "num", "team spread (negative = favorite)"),
+    "total": ("{a}.total_line", "num", "closing over/under (as in SDQL)"),
+    "ml": ("{a}.ml", "num", "team moneyline"),
+    "fav": ("{a}.fav", "num", "favorite (shorthand F)"),
+    "dog": ("{a}.dog", "num", "underdog (shorthand D)"),
+    "won": ("{a}.won", "num", "won (shorthand W)"),
+    "lost": ("{a}.lost", "num", "lost (shorthand L)"),
+    "tie": ("{a}.tie", "num", "tie"),
+    "covered": ("{a}.covered", "num", "covered the spread (shorthand ATSW)"),
+    "ats_lost": ("({a}.covered = 0)", "num", "failed to cover (shorthand ATSL)"),
+    "ats_push": ("{a}.ats_push", "num", "ATS push (shorthand ATSP)"),
     "ats_margin": ("{a}.ats_margin", "num", "margin + line"),
     "ou_margin": ("{a}.ou_margin", "num", "game_total - total"),
-    "over": ("{a}.over", "num", "fue over (atajo O)"),
-    "under": ("{a}.under", "num", "fue under (atajo U)"),
-    "rest": ("{a}.rest", "num", "días de descanso"),
+    "over": ("{a}.over", "num", "went over (shorthand O)"),
+    "under": ("{a}.under", "num", "went under (shorthand U)"),
+    "rest": ("{a}.rest", "num", "days of rest"),
     "roof": ("{a}.roof", "text", "outdoors, dome, closed, open"),
     "surface": ("{a}.surface", "text", "grass, fieldturf..."),
-    "outdoors": ("{a}.outdoors", "num", "al aire libre"),
-    "temp": ("{a}.temp", "num", "temperatura (°F)"),
-    "wind": ("{a}.wind", "num", "viento real del partido (mph, NFL)"),
-    "wind_fcst": ("{a}.wind_fcst", "num", "viento pronosticado para partidos por jugar"),
+    "outdoors": ("{a}.outdoors", "num", "played outdoors"),
+    "temp": ("{a}.temp", "num", "temperature (°F)"),
+    "wind": ("{a}.wind", "num", "actual game wind (mph, NFL)"),
+    "wind_fcst": ("{a}.wind_fcst", "num", "forecast wind for upcoming games (mph)"),
     "coach": ("{a}.coach", "text", "head coach (NFL)"),
-    "qb": ("{a}.qb", "text", "QB titular (NFL)"),
-    "game_no": ("{a}.game_no", "num", "número de partido del equipo en la temporada"),
-    "wins": ("{a}.wins", "num", "victorias antes del partido"),
-    "losses": ("{a}.losses", "num", "derrotas antes del partido"),
-    "ats_wins": ("{a}.ats_wins", "num", "coberturas antes del partido"),
-    "ats_losses": ("{a}.ats_losses", "num", "no coberturas antes del partido"),
-    "streak": ("{a}.streak", "num", "racha (+3 = 3 victorias seguidas, -2 = 2 derrotas)"),
-    "ats_streak": ("{a}.ats_streak", "num", "racha ATS"),
-    "bets_pct": ("{a}.bets_pct", "num", "% de tickets en el equipo (tus splits)"),
-    "money_pct": ("{a}.money_pct", "num", "% de dinero en el equipo (tus splits)"),
-    "over_bets_pct": ("{a}.ou_bets_over_pct", "num", "% de tickets al over"),
-    "over_money_pct": ("{a}.ou_money_over_pct", "num", "% de dinero al over"),
-    "open_line": ("{a}.open_line", "num", "spread de apertura (tus snapshots)"),
-    "line_move": ("{a}.line_move", "num", "line - open_line (negativo = se movió hacia el equipo)"),
-    "open_total": ("{a}.open_total", "num", "total de apertura"),
+    "qb": ("{a}.qb", "text", "starting QB (NFL)"),
+    "game_no": ("{a}.game_no", "num", "team's game number this season"),
+    "wins": ("{a}.wins", "num", "wins before the game"),
+    "losses": ("{a}.losses", "num", "losses before the game"),
+    "ats_wins": ("{a}.ats_wins", "num", "ATS wins before the game"),
+    "ats_losses": ("{a}.ats_losses", "num", "ATS losses before the game"),
+    "streak": ("{a}.streak", "num", "SU streak (+3 = won 3 straight, -2 = lost 2)"),
+    "ats_streak": ("{a}.ats_streak", "num", "ATS streak"),
+    "bets_pct": ("{a}.bets_pct", "num", "% of tickets on the team (your splits)"),
+    "money_pct": ("{a}.money_pct", "num", "% of money on the team (your splits)"),
+    "over_bets_pct": ("{a}.ou_bets_over_pct", "num", "% of tickets on the over"),
+    "over_money_pct": ("{a}.ou_money_over_pct", "num", "% of money on the over"),
+    "open_line": ("{a}.open_line", "num", "opening spread (your snapshots)"),
+    "line_move": ("{a}.line_move", "num", "line - open_line (negative = moved toward the team)"),
+    "open_total": ("{a}.open_total", "num", "opening total"),
     "total_move": ("{a}.total_move", "num", "total - open_total"),
 }
 
@@ -116,8 +116,8 @@ _TOKEN_RE = re.compile(
     r"\s*(?:(?P<num>\d+(?:\.\d+)?)|(?P<str>'[^']*'|\"[^\"]*\")|(?P<op><=|>=|!=|<>|==|=|<|>|\+|-|\*|/)"
     r"|(?P<lp>\()|(?P<rp>\))|(?P<comma>,)|(?P<word>(?:[A-Za-z]{1,2}:)*[A-Za-z_][A-Za-z0-9_]*))"
 )
-# no Spanish "o"/"no": O is the over shorthand and NO is New Orleans
-_KEYWORDS = {"and": "and", "y": "and", "or": "or", "not": "not",
+# O is the over shorthand and NO is New Orleans, so they are never keywords
+_KEYWORDS = {"and": "and", "or": "or", "not": "not",
              "in": "in", "is": "is", "null": "null"}
 
 
@@ -139,7 +139,7 @@ def tokenize(text: str) -> list[tuple[str, str]]:
     while pos < len(text):
         m = _TOKEN_RE.match(text, pos)
         if not m or m.end() == pos:
-            raise QueryError(f"No entiendo el texto cerca de: {text[pos:pos + 15]!r}")
+            raise QueryError(f"Can't parse the query near: {text[pos:pos + 15]!r}")
         pos = m.end()
         kind = m.lastgroup
         val = m.group(kind)
@@ -203,7 +203,7 @@ class _Parser:
     def expect(self, kind, val=None):
         k, v = self.take()
         if k != kind or (val is not None and v != val):
-            raise QueryError(f"Se esperaba {val or kind} y llegó {v!r}")
+            raise QueryError(f"Expected {val or kind} but got {v!r}")
         return v
 
     def parse(self) -> tuple[str, str]:
@@ -211,7 +211,7 @@ class _Parser:
             return "1=1", ""
         sql, pretty = self.or_expr()
         if self.i != len(self.t):
-            raise QueryError(f"Sobra texto al final: {self.peek()[1]!r}")
+            raise QueryError(f"Unexpected text at the end: {self.peek()[1]!r}")
         return sql, pretty
 
     def or_expr(self):
@@ -252,7 +252,7 @@ class _Parser:
             right, rkind, rp = self.arith(text_ctx=lp if lkind == "text" else False)
             for side, kind in ((lp, lkind), (rp, rkind)):
                 if kind == "word":
-                    raise QueryError(f"Campo desconocido: {side!r}")
+                    raise QueryError(f"Unknown field: {side!r}")
             op = {"==": "=", "<>": "!="}.get(v, v)
             collate = " COLLATE NOCASE" if "text" in (lkind, rkind) else ""
             return f"({left} {op} {right}{collate})", f"{lp} {op} {rp}"
@@ -266,7 +266,7 @@ class _Parser:
             while True:
                 item, ikind, ip = self.arith(text_ctx=lp if lkind == "text" else False)
                 if ikind == "word":
-                    raise QueryError(f"Campo desconocido: {ip!r}")
+                    raise QueryError(f"Unknown field: {ip!r}")
                 items.append(item)
                 pitems.append(ip)
                 if self.peek()[0] == "comma":
@@ -286,9 +286,9 @@ class _Parser:
             self.expect("kw", "null")
             return f"({left} IS {'NOT ' if neg else ''}NULL)", f"{lp} is {'not ' if neg else ''}null"
         if lkind == "word":
-            raise QueryError(f"Campo desconocido: {lp!r}")
+            raise QueryError(f"Unknown field: {lp!r}")
         if lkind == "text":
-            raise QueryError(f"{lp} necesita una comparación, por ejemplo {lp} = PIT")
+            raise QueryError(f"{lp} needs a comparison, e.g. {lp} = PIT")
         return f"({left} = 1)", lp  # bare field as boolean: H, D, p:L
 
     def _is_bool_group(self) -> bool:
@@ -352,8 +352,8 @@ class _Parser:
             inner, _, pretty = self.atom(text_ctx)
             return f"(-{inner})", "num", f"-{pretty}"
         if k is None:
-            raise QueryError("La consulta termina antes de tiempo")
-        raise QueryError(f"No esperaba {v!r}")
+            raise QueryError("The query ends too early")
+        raise QueryError(f"Unexpected {v!r}")
 
 
 def compile_query(text: str) -> Compiled:

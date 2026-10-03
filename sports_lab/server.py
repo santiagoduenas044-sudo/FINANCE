@@ -14,18 +14,18 @@ STATIC = Path(__file__).resolve().parent / "static"
 
 # (sport or None for all, label, query)
 EXAMPLES = [
-    ("nfl", "Under con viento", "total < 40 and wind >= 12 and outdoors"),
-    ("nfl", "Local tras cubrir", "H and p:ATSW and season >= 2018"),
-    ("nfl", "Perro visitante tras paliza", "A and D and p:margin <= -14"),
-    ("nfl", "Favorito tras bye", "F and rest >= 13"),
-    ("nfl", "Divisional, perro de TD+", "div and line >= 7"),
-    ("nfl", "Frío extremo", "temp <= 25 and outdoors"),
-    ("cfb", "Top 10 local favorito grande", "H and rank <= 10 and line <= -21"),
-    ("cfb", "Ranked perro vs ranked", "D and ranked and o:ranked"),
-    ("nba", "Back-to-back visitante", "A and rest = 1 and o:rest >= 2"),
-    ("nhl", "Perro local tras derrota", "H and D and p:L"),
-    ("mlb", "Totales bajos", "total <= 7.5"),
-    (None, "Dinero vs tickets (tus splits)", "money_pct >= 60 and bets_pct <= 40"),
+    ("nfl", "Wind unders", "total < 40 and wind >= 12 and outdoors"),
+    ("nfl", "Home after a cover", "H and p:ATSW and season >= 2018"),
+    ("nfl", "Road dog after a blowout", "A and D and p:margin <= -14"),
+    ("nfl", "Favorite off a bye", "F and rest >= 13"),
+    ("nfl", "Division dog of 7+", "div and line >= 7"),
+    ("nfl", "Extreme cold", "temp <= 25 and outdoors"),
+    ("cfb", "Top-10 home chalk", "H and rank <= 10 and line <= -21"),
+    ("cfb", "Ranked dog vs ranked", "D and ranked and o:ranked"),
+    ("nba", "Road back-to-back", "A and rest = 1 and o:rest >= 2"),
+    ("nhl", "Home dog after a loss", "H and D and p:L"),
+    ("mlb", "Low totals", "total <= 7.5"),
+    (None, "Money vs tickets (your splits)", "money_pct >= 60 and bets_pct <= 40"),
 ]
 
 SPORT_LABELS = {"nfl": "NFL", "cfb": "CFB", "nba": "NBA", "cbb": "CBB", "nhl": "NHL", "mlb": "MLB"}
@@ -70,7 +70,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self._send(200, fn(conn))
         except (QueryError, ValueError, KeyError) as exc:
-            self._send(400, {"error": str(exc) if not isinstance(exc, KeyError) else f"falta el campo {exc}"})
+            self._send(400, {"error": str(exc) if not isinstance(exc, KeyError) else f"missing field {exc}"})
         except Exception as exc:  # show the error in the UI instead of a dead page
             traceback.print_exc()
             self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
@@ -88,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             font = STATIC / "fonts" / name
             if name.endswith(".woff2") and "/" not in name and font.is_file():
                 return self._send(200, font.read_bytes(), "font/woff2")
-            return self._send(404, {"error": "no encontrado"})
+            return self._send(404, {"error": "not found"})
         if path in ("/", "/index.html"):
             return self._send(200, (STATIC / "index.html").read_bytes(), "text/html")
         if path == "/api/meta":
@@ -97,9 +97,9 @@ class Handler(BaseHTTPRequestHandler):
             q = qs.get("q", [""])[0]
             sport = qs.get("sport", ["nfl"])[0]
             if sport not in SPORT_LABELS:
-                return self._send(400, {"error": f"deporte desconocido: {sport}"})
-            return self._handle(lambda c: report.run(c, q, _int(qs, "desde"), _int(qs, "hasta"),
-                                                     _int(qs, "test_desde"), sport=sport))
+                return self._send(400, {"error": f"unknown sport: {sport}"})
+            return self._handle(lambda c: report.run(c, q, _int(qs, "from"), _int(qs, "to"),
+                                                     _int(qs, "test_from"), sport=sport))
         if path == "/api/projections":
             return self._handle(lambda c: projections.weekly(c, _int(qs, "season"), _int(qs, "week")))
         if path == "/api/ratings":
@@ -107,7 +107,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/backtest":
             def bt(_c):
                 if not projections.PARAMS_PATH.exists():
-                    raise ValueError("Modelo sin entrenar: python -m sports_lab entrenar")
+                    raise ValueError("Model not trained yet: python -m sports_lab train")
                 return json.loads(projections.PARAMS_PATH.read_text())
             return self._handle(bt)
         if path == "/api/splits":
@@ -140,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle(lambda c: [dict(r) for r in c.execute(
                 "SELECT game_id, season, week, gameday, gametime, away_team, home_team FROM games "
                 "WHERE sport = 'nfl' AND home_score IS NULL ORDER BY gameday, gametime LIMIT 40")])
-        self._send(404, {"error": "no encontrado"})
+        self._send(404, {"error": "not found"})
 
     def do_POST(self):
         path = urlparse(self.path).path
@@ -148,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = json.loads(self.rfile.read(length) or b"{}")
         except json.JSONDecodeError:
-            return self._send(400, {"error": "JSON inválido"})
+            return self._send(400, {"error": "invalid JSON"})
         if path == "/api/splits":
             def add(c):
                 gid = splits.add(c, body.get("game", ""), source=body.get("source") or "manual",
@@ -188,13 +188,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle(lambda c: fn(c) or {"ok": True})
         if path == "/api/train":
             return self._handle(lambda c: projections.train(c, body.get("test_from")))
-        self._send(404, {"error": "no encontrado"})
+        self._send(404, {"error": "not found"})
 
 
 def serve(host: str = "127.0.0.1", port: int = 8765) -> None:
     httpd = ThreadingHTTPServer((host, port), Handler)
     shown = "localhost" if host in ("127.0.0.1", "0.0.0.0") else host
-    print(f"Sports Lab en http://{shown}:{port}  (Ctrl+C para salir)")
+    print(f"Sports Lab running at http://{shown}:{port}  (Ctrl+C to quit)")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

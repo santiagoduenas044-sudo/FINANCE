@@ -39,7 +39,7 @@ def resolve_game_id(conn: sqlite3.Connection, game: str, season: int | None = No
         row = conn.execute(sql + " ORDER BY gameday LIMIT 1", params).fetchone()
         if row:
             return row["game_id"]
-    raise ValueError(f"No encuentro el partido {game!r} (usa 2026_03_CIN_PIT o CIN@PIT)")
+    raise ValueError(f"Game not found: {game!r} (use 2026_03_CIN_PIT or CIN@PIT)")
 
 
 def _pct(v):
@@ -47,7 +47,7 @@ def _pct(v):
         return None
     x = float(str(v).strip().rstrip("%"))
     if not 0 <= x <= 100:
-        raise ValueError(f"Porcentaje fuera de rango: {v}")
+        raise ValueError(f"Percentage out of range: {v}")
     return x
 
 
@@ -56,7 +56,7 @@ def add(conn: sqlite3.Connection, game: str, source: str = "manual", captured_at
     game_id = resolve_game_id(conn, game, season, week)
     values = [_pct(pcts.get(c)) for c in PCT_COLS]
     if all(v is None for v in values):
-        raise ValueError("Agrega al menos un porcentaje")
+        raise ValueError("Add at least one percentage")
     conn.execute("INSERT OR REPLACE INTO splits VALUES (?,?,?,?,?,?,?)",
                  (game_id, captured_at or now_iso(), source, *values))
     conn.commit()

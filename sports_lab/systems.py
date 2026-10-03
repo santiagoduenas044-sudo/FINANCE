@@ -20,40 +20,40 @@ SPORTS = ("nfl", "cfb", "nba", "cbb", "nhl", "mlb")
 
 # Starter packs. Records are always computed live from your database, never hard-coded.
 PACKS = [
-    {"id": "nfl-clima", "sport": "nfl", "name": "NFL Clima",
-     "desc": "Viento y frío: el mercado ajusta poco los totales en partidos al aire libre con mal clima.",
+    {"id": "nfl-clima", "sport": "nfl", "name": "NFL Weather Desk",
+     "desc": "Wind and cold: the market under-adjusts totals for outdoor games in bad weather.",
      "systems": [
-         {"name": "Under con viento fuerte", "query": "wind >= 15 and outdoors", "bet": "under"},
-         {"name": "Under total bajo + viento", "query": "total < 40 and wind >= 12 and outdoors", "bet": "under"},
-         {"name": "Under frío extremo", "query": "temp <= 25 and outdoors", "bet": "under"},
-         {"name": "Under pronóstico de viento", "query": "wind_fcst >= 15 and outdoors", "bet": "under",
-          "notes": "Solo partidos por jugar: usa el pronóstico de Open-Meteo."},
+         {"name": "Under in strong wind", "query": "wind >= 15 and outdoors", "bet": "under"},
+         {"name": "Low total + wind under", "query": "total < 40 and wind >= 12 and outdoors", "bet": "under"},
+         {"name": "Extreme cold under", "query": "temp <= 25 and outdoors", "bet": "under"},
+         {"name": "Forecast wind under", "query": "wind_fcst >= 15 and outdoors", "bet": "under",
+          "notes": "Upcoming games only: uses the Open-Meteo forecast."},
      ]},
-    {"id": "nfl-situacional", "sport": "nfl", "name": "NFL Situacional",
-     "desc": "Rebotes y descanso: perros tras paliza, favoritos tras bye, perros divisionales grandes.",
+    {"id": "nfl-situacional", "sport": "nfl", "name": "NFL Situational Desk",
+     "desc": "Bounce-backs and rest: dogs after a blowout, favorites off a bye, big division dogs.",
      "systems": [
-         {"name": "Perro visitante tras paliza", "query": "A and D and p:margin <= -14", "bet": "ats"},
-         {"name": "Perro local tras derrota", "query": "H and D and p:L", "bet": "ats"},
-         {"name": "Favorito tras bye", "query": "F and rest >= 13", "bet": "ats"},
-         {"name": "Perro divisional de TD+", "query": "div and line >= 7", "bet": "ats"},
-         {"name": "Local con más descanso", "query": "H and rest >= o:rest + 3", "bet": "ats"},
+         {"name": "Road dog after a blowout", "query": "A and D and p:margin <= -14", "bet": "ats"},
+         {"name": "Home dog after a loss", "query": "H and D and p:L", "bet": "ats"},
+         {"name": "Favorite off a bye", "query": "F and rest >= 13", "bet": "ats"},
+         {"name": "Division dog of 7+", "query": "div and line >= 7", "bet": "ats"},
+         {"name": "Home team with a rest edge", "query": "H and rest >= o:rest + 3", "bet": "ats"},
      ]},
-    {"id": "cfb-rankings", "sport": "cfb", "name": "CFB Rankings",
-     "desc": "Partidos con equipos rankeados (requiere `descargar cfb`).",
+    {"id": "cfb-rankings", "sport": "cfb", "name": "CFB Rankings Desk",
+     "desc": "Games between ranked teams (run `download cfb` first).",
      "systems": [
-         {"name": "Perro rankeado vs rankeado", "query": "D and ranked and o:ranked", "bet": "ats"},
-         {"name": "Top 10 local favorito por 21+", "query": "H and rank <= 10 and line <= -21", "bet": "ats"},
+         {"name": "Ranked dog vs ranked", "query": "D and ranked and o:ranked", "bet": "ats"},
+         {"name": "Top-10 home favorite of 21+", "query": "H and rank <= 10 and line <= -21", "bet": "ats"},
      ]},
-    {"id": "nba-descanso", "sport": "nba", "name": "NBA Descanso",
-     "desc": "Back-to-backs y ventaja de descanso (requiere `descargar nba`).",
+    {"id": "nba-descanso", "sport": "nba", "name": "NBA Rest Desk",
+     "desc": "Back-to-backs and rest edges (run `download nba` first).",
      "systems": [
-         {"name": "Visitante en back-to-back vs descansado", "query": "A and rest = 1 and o:rest >= 2", "bet": "ats"},
-         {"name": "Local descansado vs back-to-back", "query": "H and rest >= 2 and o:rest = 1", "bet": "ats"},
+         {"name": "Road team on a back-to-back vs rested", "query": "A and rest = 1 and o:rest >= 2", "bet": "ats"},
+         {"name": "Rested home team vs back-to-back", "query": "H and rest >= 2 and o:rest = 1", "bet": "ats"},
      ]},
-    {"id": "nhl-rebote", "sport": "nhl", "name": "NHL Rebote",
-     "desc": "Perros locales tras derrota (requiere `descargar nhl`).",
+    {"id": "nhl-rebote", "sport": "nhl", "name": "NHL Bounce-back Desk",
+     "desc": "Home dogs after a loss (run `download nhl` first).",
      "systems": [
-         {"name": "Perro local tras derrota (ML)", "query": "H and D and p:L", "bet": "ml"},
+         {"name": "Home dog after a loss (ML)", "query": "H and D and p:L", "bet": "ml"},
      ]},
 ]
 
@@ -63,11 +63,11 @@ def create(conn: sqlite3.Connection, name: str, sport: str, query: str, bet: str
            notes: str | None = None, pack: str | None = None) -> int:
     name = (name or "").strip()
     if not name:
-        raise ValueError("Ponle nombre al sistema")
+        raise ValueError("Give the system a name")
     if sport not in SPORTS:
-        raise ValueError(f"Deporte desconocido: {sport}")
+        raise ValueError(f"Unknown sport: {sport}")
     if bet not in BETS:
-        raise ValueError("Apuesta debe ser ats, ml, over o under")
+        raise ValueError("Bet must be ats, ml, over or under")
     compile_query(query)  # raises QueryError (a ValueError) if the query is invalid
     cur = conn.execute(
         "INSERT INTO systems (name, sport, query, bet, notes, pack, created_at) VALUES (?,?,?,?,?,?,?)",
@@ -90,7 +90,7 @@ def toggle_like(conn, system_id: int) -> None:
 def add_pack(conn, pack_id: str) -> int:
     pack = next((p for p in PACKS if p["id"] == pack_id), None)
     if pack is None:
-        raise ValueError(f"Pack desconocido: {pack_id}")
+        raise ValueError(f"Unknown pack: {pack_id}")
     have = {(r["sport"], r["query"], r["bet"]) for r in conn.execute("SELECT sport, query, bet FROM systems")}
     n = 0
     for s in pack["systems"]:
@@ -155,14 +155,14 @@ def describe_bet(bet: str, row: dict) -> dict:
     """What exactly you'd bet on this row right now: label, line and price."""
     if bet == "ats":
         line, odds = row["line"], row.get("spread_odds") or -110
-        label = f"{row['team']} {line:+g}" if line is not None else f"{row['team']} (sin línea)"
+        label = f"{row['team']} {line:+g}" if line is not None else f"{row['team']} (no line)"
     elif bet == "ml":
         line, odds = None, row.get("ml")
         label = f"{row['team']} ML" + (f" {odds:+d}" if odds else "")
     else:
         line = row["total_line"]
         odds = row.get(f"{bet}_odds") or -110
-        label = f"{BETS[bet]} {line:g}" if line is not None else f"{BETS[bet]} (sin total)"
+        label = f"{BETS[bet]} {line:g}" if line is not None else f"{BETS[bet]} (no total)"
     return {"label": label, "line": line, "odds": odds, "available": line is not None or (bet == "ml" and odds)}
 
 
@@ -211,15 +211,15 @@ def board(conn, days: int = 7, sport: str | None = None, proven_only: bool = Fal
 def tail(conn, system_id: int, game_id: str, team: str, stake: float = 1.0) -> int:
     s = conn.execute("SELECT * FROM systems WHERE id=?", (system_id,)).fetchone()
     if s is None:
-        raise ValueError("Sistema no encontrado")
+        raise ValueError("System not found")
     row = conn.execute("SELECT * FROM team_games WHERE game_id=? AND team=?", (game_id, team)).fetchone()
     if row is None:
-        raise ValueError("Partido no encontrado")
+        raise ValueError("Game not found")
     if row["won"] is not None:
-        raise ValueError("Ese partido ya terminó")
+        raise ValueError("That game is already final")
     pick = describe_bet(s["bet"], dict(row))
     if not pick["available"]:
-        raise ValueError("Todavía no hay línea para ese partido")
+        raise ValueError("There is no line for that game yet")
     cur = conn.execute(
         "INSERT OR IGNORE INTO picks (system_id, game_id, team, bet, line, odds, stake, created_at) "
         "VALUES (?,?,?,?,?,?,?,?)",
@@ -295,7 +295,7 @@ def portfolio(conn) -> dict:
 
     by_system = {}
     for p in picks:
-        by_system.setdefault(p["system"] or "(sistema borrado)", []).append(p)
+        by_system.setdefault(p["system"] or "(deleted system)", []).append(p)
     return {"total": summary(picks), "picks": picks,
             "by_system": sorted(({"system": k, **summary(v)} for k, v in by_system.items()),
                                 key=lambda x: -x["units"])}

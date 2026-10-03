@@ -107,7 +107,7 @@ def test_report_counts_totals_once_per_game(conn):
     res = report.run(conn, "wind >= 12 and outdoors")
     assert res["games"] == 2 and res["rows"] == 4
     assert res["all"]["under"]["w"] == 1 and res["all"]["over"]["w"] == 1
-    assert any("dos equipos" in w for w in res["warnings"])
+    assert any("both teams" in w for w in res["warnings"])
 
 
 def test_report_ats_and_units(conn):
