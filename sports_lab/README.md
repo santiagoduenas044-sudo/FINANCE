@@ -151,6 +151,14 @@ python3 -m pytest sports_lab/tests
 
 ## Design
 
-Graphite and champagne-gold night theme, warm ivory day theme (Auto / Day / Night toggle, top right).
-Fonts — Big Shoulders Display, Barlow and IBM Plex Mono — are SIL Open Font License and bundled in
-`static/fonts/`, so the app works offline. The original Spanish CLI command names still work.
+- **App shell**: sidebar navigation on desktop (Research · Betting · Data), an icon rail on iPad portrait and a
+  bottom tab bar on phones. The database status and the Auto / Light / Dark theme switch live in the sidebar.
+- **Query editor**: SDQL syntax highlighting (fields, prefixes, shorthands, numbers, keywords; unknown words get a
+  red underline), autocomplete for every field and shorthand (↑↓, Tab, Esc), `/` or ⌘K to focus, Enter to run.
+- **Results**: stat tiles with sparklines, a profit curve (cumulative units for ATS, ML, over and under, with a
+  hover crosshair and toggleable legend), a Verdict panel (sample, p-value meter, before/after split) and tabs
+  for the game log, season bars vs the 52.4% break-even line, and teasers.
+- **Discover**: swipe board with an "up next" queue and keyboard arrows, packs and systems with trend sparklines.
+- Team monograms use NFL team colors. Chart colors are a colorblind-validated categorical palette.
+- Fonts: IBM Plex Sans / IBM Plex Mono (UI and numbers) and Big Shoulders Display (logo), SIL Open Font License,
+  bundled in `static/fonts/` so the app works offline. The original Spanish CLI command names still work.

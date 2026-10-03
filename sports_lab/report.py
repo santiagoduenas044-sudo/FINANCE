@@ -120,9 +120,39 @@ def _summarise(rows, teasers: bool = False) -> dict:
     return out
 
 
+def _downsample(points: list, n: int) -> list:
+    if len(points) <= n:
+        return points
+    step = len(points) / n
+    out = [points[int(i * step)] for i in range(n)]
+    return out[:-1] + [points[-1]]  # always keep the final value
+
+
+def profit_series(rows, n: int = 240) -> dict:
+    """Cumulative units (1 unit risked per bet) in date order, for ATS, ML, over and under."""
+    cum = {"ats": 0.0, "ml": 0.0, "over": 0.0, "under": 0.0}
+    out = {k: [] for k in cum}
+    seen = set()
+    for r in rows:
+        if r["ats_margin"] is not None:
+            cum["ats"] += 0 if r["ats_push"] else (payout(r["spread_odds"]) if r["covered"] else -1)
+            out["ats"].append([r["date"], round(cum["ats"], 2)])
+        if r["won"] is not None and r["ml"] is not None:
+            cum["ml"] += 0 if r["tie"] else (payout(r["ml"]) if r["won"] else -1)
+            out["ml"].append([r["date"], round(cum["ml"], 2)])
+        if r["ou_margin"] is not None and r["game_id"] not in seen:
+            seen.add(r["game_id"])
+            m = r["ou_margin"]
+            cum["over"] += 0 if m == 0 else (payout(r["over_odds"]) if m > 0 else -1)
+            cum["under"] += 0 if m == 0 else (payout(r["under_odds"]) if m < 0 else -1)
+            out["over"].append([r["date"], round(cum["over"], 2)])
+            out["under"].append([r["date"], round(cum["under"], 2)])
+    return {k: _downsample(v, n) for k, v in out.items()}
+
+
 def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
         season_to: int | None = None, test_from: int | None = None, limit_games: int = 300,
-        sport: str = "nfl") -> dict:
+        sport: str = "nfl", series_points: int = 240) -> dict:
     q = compile_query(text)
     params = [sport] + q.params
     extra = ""
@@ -161,6 +191,7 @@ def run(conn: sqlite3.Connection, text: str, season_from: int | None = None,
         "rows": len(played), "games": len({r["game_id"] for r in played}),
         "all": _summarise(played, teasers=True),
         "by_season": [{"season": s, **_summarise(by_season[s])} for s in seasons],
+        "series": profit_series(played, series_points),
         "warnings": warnings,
         "recent": [_row_brief(r) for r in (played[-limit_games:] if limit_games else [])][::-1],
         "upcoming": [_row_brief(r) for r in upcoming],

@@ -107,9 +107,10 @@ def _record_for(summary: dict, bet: str) -> dict:
 
 
 def stats(conn, system: sqlite3.Row | dict) -> dict:
-    res = report.run(conn, system["query"], sport=system["sport"], limit_games=0)
+    res = report.run(conn, system["query"], sport=system["sport"], limit_games=0, series_points=48)
     rec = _record_for(res["all"], system["bet"])
-    out = {"record": rec, "games": res["games"], "upcoming": res["upcoming"], "interpreted": res["interpreted"]}
+    out = {"record": rec, "games": res["games"], "upcoming": res["upcoming"], "interpreted": res["interpreted"],
+           "spark": [v for _d, v in res["series"][system["bet"]]]}
     split = res.get("split")
     test = _record_for(split["test"], system["bet"]) if split else None
     train = _record_for(split["train"], system["bet"]) if split else None
@@ -138,7 +139,7 @@ def list_systems(conn, sport: str | None = None, sort: str = "newest", search: s
             item.update(error=str(exc), record=None, proven=False, upcoming=0)
         else:
             item.update(record=st["record"], games=st["games"], split=st["split"], proven=st["proven"],
-                        upcoming=len(st["upcoming"]), interpreted=st["interpreted"])
+                        upcoming=len(st["upcoming"]), interpreted=st["interpreted"], spark=st["spark"])
         out.append(item)
     key = {
         "roi": lambda x: -((x.get("record") or {}).get("roi") or -9),
@@ -196,7 +197,7 @@ def board(conn, days: int = 7, sport: str | None = None, proven_only: bool = Fal
             cards.append({
                 "system_id": s["id"], "system": s["name"], "sport": s["sport"], "query": s["query"],
                 "bet": s["bet"], "pack": s["pack"], "record": st["record"], "proven": st["proven"],
-                "split": st["split"], "game": g, "pick": describe_bet(s["bet"], g),
+                "split": st["split"], "spark": st["spark"], "game": g, "pick": describe_bet(s["bet"], g),
             })
     order = {
         "proven": lambda c: (not c["proven"], -(c["record"]["roi"] or -9)),
@@ -296,6 +297,10 @@ def portfolio(conn) -> dict:
     by_system = {}
     for p in picks:
         by_system.setdefault(p["system"] or "(deleted system)", []).append(p)
-    return {"total": summary(picks), "picks": picks,
+    curve, cum = [], 0.0
+    for p in sorted((p for p in picks if p["result"]), key=lambda p: (p["date"] or "", p["id"])):
+        cum += p["units"] or 0
+        curve.append([p["date"], round(cum, 2)])
+    return {"total": summary(picks), "picks": picks, "curve": curve,
             "by_system": sorted(({"system": k, **summary(v)} for k, v in by_system.items()),
                                 key=lambda x: -x["units"])}

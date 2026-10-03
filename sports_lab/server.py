@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import db, espn, ingest, projections, report, splits, systems, weather
-from .query import FIELDS, QueryError
+from .query import ALIASES, FIELDS, QueryError
 
 STATIC = Path(__file__).resolve().parent / "static"
 
@@ -36,6 +36,8 @@ def _meta(c):
         "SELECT sport, COUNT(*), MIN(season), MAX(season) FROM games GROUP BY sport")}
     return {
         "fields": [{"name": k, "type": t, "desc": d} for k, (_sql, t, d) in FIELDS.items()],
+        "aliases": {k: v for k, v in ALIASES.items()},
+        "prefixes": {"p": "previous game", "pp": "two games ago", "o": "opponent", "op": "opponent's previous game"},
         "examples": [{"sport": sp, "label": a, "q": b} for sp, a, b in EXAMPLES],
         "sports": [{"id": k, "label": v, "games": counts.get(k, (0,))[0],
                     "from": counts.get(k, (0, None))[1], "to": counts.get(k, (0, None, None))[2]}
@@ -124,6 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                     for x in p["systems"]:
                         st = systems.stats(c, {"query": x["query"], "sport": p["sport"], "bet": x["bet"]})
                         items.append({**x, "record": st["record"], "proven": st["proven"], "upcoming": len(st["upcoming"]),
+                                      "spark": st["spark"],
                                       "added": (p["sport"], x["query"], x["bet"]) in have})
                     out.append({**{k: p[k] for k in ("id", "sport", "name", "desc")}, "systems": items,
                                 "added": all(i["added"] for i in items)})
