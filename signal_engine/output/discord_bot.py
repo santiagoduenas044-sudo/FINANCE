@@ -118,7 +118,13 @@ def _record(runtime) -> str:
     tracker = getattr(runtime, "paper_tracker", None)
     closed = list(tracker.closed_trades) if tracker is not None else []
     label, pv = _position(runtime)
-    return build_record(closed, pd.Timestamp.now(tz="America/New_York"), pv, label)
+    from ..versions import current_version, ghost_version_of, version_title
+    from .record import variant_lines
+    now = pd.Timestamp.now(tz="America/New_York")
+    cur = current_version("GHOST")
+    return build_record(closed, now, pv, label, version_of=ghost_version_of, current=cur,
+                        title=f"GHOST {cur} {version_title('GHOST', cur).split(' · ')[0]}",
+                        extras=variant_lines(getattr(runtime, "shadows", None), now, pv, label))
 
 
 def _why(runtime) -> str:

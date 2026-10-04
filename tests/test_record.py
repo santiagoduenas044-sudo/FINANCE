@@ -75,7 +75,7 @@ def test_daily_record_once_after_the_flat():
 def test_record_command_on_discord():
     rt = _runtime(_tracker(), [])
     out = build_reply("!record", rt)
-    assert out.startswith("📒 **Récord · 5 MNQ**")
+    assert out.startswith("📒 **Récord · GHOST v4 IMÁN 15 · 5 MNQ**")
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
@@ -89,3 +89,34 @@ def test_record_shows_net_after_commissions():
     # 3 trades, +12 pts on 5 MNQ = +$120 gross; 3 x $5.20 = $15.60 -> +$104
     assert after_fees([10.0, -4.0, 6.0], 10.0, 5.2) == " · con comisiones +$104"
     assert after_fees([], 10.0, 5.2) == ""
+
+
+def test_day_message_counts_only_the_version_running_now():
+    """The 16:55 message used to add the old 1-minute trades to IMÁN 15's
+    record. Now today / week / total are the current version's, the older
+    versions get one line apart, and the parallel variants one line each."""
+    from signal_engine.output.record import variant_lines
+    from signal_engine.versions import ghost_version_of
+    tr = _tracker()                                   # untagged 1-min-era trades: v2 / v3
+    tr.closed_trades[-1].context["bot_version"] = "v4"   # the BE+2 one: IMÁN 15
+    shadow = SimpleNamespace(paper_tracker=_tracker())
+    spec = SimpleNamespace(name="IMÁN 1 · zonas 1 min de día")
+    now = _t("2026-09-29 16:56")
+    text = build_record(tr.closed_trades, now, 10.0, "5 MNQ", version_of=ghost_version_of,
+                        current="v4", title="GHOST v4 IMÁN 15",
+                        extras=variant_lines([(spec, shadow)], now, 10.0, "5 MNQ"))
+    assert text.startswith("📒 **Récord · GHOST v4 IMÁN 15 · 5 MNQ**")
+    assert "Hoy 29-Sep:** 1 trade · 1 ✅" in text and "perdido $0" in text and "**neto +$20**" in text
+    assert "Total desde 29-Sep:** 1 trade · gana 100%" in text and "peor caída" not in text
+    assert "_Versiones anteriores (v2, v3), aparte:_ 2 trades · neto +$500" in text
+    assert "∥ **IMÁN 1**: hoy 2 trades −$230 · total 3 trades +$520" in text
+    last = text.split("**Últimos trades**")[1]
+    assert last.count("\n") == 1                     # only IMÁN 15's trade is listed
+
+
+def test_daily_record_uses_the_current_version(tmp_path):
+    sent = []
+    tr = _tracker()
+    rt = _runtime(tr, sent)
+    rt._maybe_daily_record("NQ", _t("2026-09-29 16:57"))
+    assert "GHOST v4 IMÁN 15" in sent[0][1] and "Versiones anteriores" in sent[0][1]

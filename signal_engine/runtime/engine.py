@@ -874,10 +874,16 @@ class BotRuntime:
             if not (close <= hhmm < "18:00") or self._record_sent == day:
                 return
             self._record_sent = day
-            from ..output.record import build_record
+            from ..output.record import build_record, variant_lines
+            from ..versions import current_version, ghost_version_of, version_title
             pv = self._point_values(symbol)
             label, per_pt = next(iter(pv.items())) if pv else (f"1 punto {symbol}", 1.0)
-            text = build_record(list(self.paper_tracker.closed_trades), t, per_pt, label)
+            cur = current_version("GHOST")
+            text = build_record(list(self.paper_tracker.closed_trades), t, per_pt, label,
+                                version_of=ghost_version_of, current=cur,
+                                title=f"GHOST {cur} {version_title('GHOST', cur).split(' · ')[0]}",
+                                extras=variant_lines(getattr(self, "shadows", None), t, per_pt,
+                                                     label))
             self.output_dispatcher.publish_daily_record(text, day)
         except Exception as exc:  # noqa: BLE001
             log.warning("daily record failed (%s)", type(exc).__name__)

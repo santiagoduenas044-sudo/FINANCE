@@ -39,6 +39,10 @@ def exit_label(t) -> str:
     return _EXIT.get(reason, reason.lower() or "cerrado")
 
 
+def _n(k: int) -> str:
+    return f"{k} {'trade' if k == 1 else 'trades'}"
+
+
 def _mark(pts: float) -> str:
     return "✅" if pts > 0.01 else ("➖" if pts >= -0.01 else "🛑")
 
@@ -69,7 +73,7 @@ def won_lost(pts: list[float], pv: float) -> str:
     won = sum(p for p in pts if p > 0) * pv
     lost = sum(p for p in pts if p < 0) * pv
     net = won + lost
-    return (f"ganado +${won:,.0f} · perdido −${abs(lost):,.0f} · "
+    return (f"ganado +${won:,.0f} · perdido {'−' if lost else ''}${abs(lost):,.0f} · "
             f"**neto {'+' if net >= 0 else '−'}${abs(net):,.0f}**")
 
 
@@ -79,20 +83,33 @@ def _line(label: str, trades: list, pv: float, fee: float = 0.0) -> str:
     pts = [t.pnl_points for t in trades]
     w = sum(1 for p in pts if p > 0.01)
     flat = sum(1 for p in pts if abs(p) <= 0.01)
-    return (f"**{label}:** {len(pts)} trades · {w} ✅ {flat} ➖ {len(pts) - w - flat} 🛑 · "
+    return (f"**{label}:** {_n(len(pts))} · {w} ✅ {flat} ➖ {len(pts) - w - flat} 🛑 · "
             f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)} ({sum(pts):+.1f} pts)")
 
 
-def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> str:
+def build_record(closed: list, now, pv: float, position: str, last: int = 8,
+                 version_of=None, current: str | None = None, title: str | None = None,
+                 extras: list[str] | None = None) -> str:
     """Markdown for Discord. `closed`: closed PaperTrades; `pv`: $ per point
-    of the position the operator trades (5 MNQ = 10)."""
+    of the position the operator trades (5 MNQ = 10).
+
+    With `version_of` (trade -> "v4") and `current` ("v4"), today / this week
+    / total count ONLY the version running now (as the dashboard does); the
+    older versions get one line of their own, so their trades never inflate
+    the current strategy's record. `title` names it ("GHOST · v4 IMÁN 15");
+    `extras` are lines added at the end (the parallel variants' day)."""
     trades = sorted((t for t in closed if t.closed_at is not None), key=lambda t: _ts(t.closed_at))
+    older: list = []
+    if version_of is not None and current is not None:
+        older = [t for t in trades if version_of(t) != current]
+        trades = [t for t in trades if version_of(t) == current]
     day = trading_day(now)
     week0 = day - pd.Timedelta(days=day.dayofweek)
     today = [t for t in trades if trading_day(t.closed_at) == day]
     week = [t for t in trades if trading_day(t.closed_at) >= week0]
     fee = commission_per_trade(position)
-    lines = [f"📒 **Récord · {position}** (${pv:g} por punto, simulado"
+    head = f"{title} · {position}" if title else position
+    lines = [f"📒 **Récord · {head}** (${pv:g} por punto, simulado"
              + (f", comisión ${fee:,.2f} por trade" if fee else "") + ")",
              _line(f"Hoy {day:%d-%b}", today, pv, fee), _line("Esta semana", week, pv, fee)]
     if trades:
@@ -104,8 +121,18 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> 
             dd = max(dd, peak - eq)
         wins = sum(1 for p in pts if p > 0.01)
         first = trading_day(trades[0].closed_at)
-        lines.append(f"**Total desde {first:%d-%b}:** {len(pts)} trades · gana {wins / len(pts):.0%} · "
-                     f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)} · peor caída {usd(-dd, pv)}")
+        lines.append(f"**Total desde {first:%d-%b}:** {_n(len(pts))} · gana {wins / len(pts):.0%} · "
+                     f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)}"
+                     + (f" · peor caída {usd(-dd, pv)}" if dd > 0 else ""))
+    if older:
+        names = sorted({version_of(t) for t in older})
+        opts = [t.pnl_points for t in older]
+        lines.append(f"_Versiones anteriores ({', '.join(names)}), aparte:_ {_n(len(opts))} · "
+                     f"neto {usd(sum(opts), pv)}{after_fees(opts, pv, fee)}")
+    if extras:
+        lines.append("")
+        lines.extend(extras)
+    if trades:
         lines.append("")
         lines.append("**Últimos trades**")
         for t in trades[-last:][::-1]:
@@ -117,5 +144,30 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8) -> 
                          f"{t.entry:,.2f} → {(t.exit_price or 0):,.2f} · {exit_label(t)} · "
                          f"**{usd(t.pnl_points, pv)}**")
     else:
-        lines.append("_todavía no hay trades cerrados_")
+        lines.append("_todavía no hay trades cerrados_" if not older else
+                     "_esta versión todavía no tiene trades cerrados_")
     return "\n".join(lines)
+
+
+def variant_lines(shadows, now, pv: float, position: str) -> list[str]:
+    """One line per parallel variant switched on: what it did today (paper
+    only, no Discord of its own) and its total, so the day's message
+    compares them with the main version."""
+    fee = commission_per_trade(position)
+    day = trading_day(now)
+    out = []
+    for spec, rt in shadows or []:
+        tr = getattr(rt, "paper_tracker", None)
+        if tr is None:
+            continue
+        closed = [t for t in tr.closed_trades if t.closed_at is not None]
+        today = [t.pnl_points for t in closed if trading_day(t.closed_at) == day]
+        allp = [t.pnl_points for t in closed]
+        name = str(getattr(spec, "name", spec)).split(" · ")[0]
+        now_txt = f"hoy {_n(len(today))} {usd(sum(today), pv)}" if today else "hoy sin trades"
+        tot = f" · total {_n(len(allp))} {usd(sum(allp), pv)}" if allp else ""
+        net = after_fees(allp, pv, fee) if allp else ""
+        out.append(f"∥ **{name}**: {now_txt}{tot}{net}")
+    if out:
+        out.insert(0, "**En paralelo** (solo papel, mismo mercado)")
+    return out
