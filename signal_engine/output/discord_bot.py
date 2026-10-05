@@ -23,7 +23,7 @@ import threading
 
 import pandas as pd
 
-from .record import (after_fees, build_record, commission_per_trade, exit_label,
+from .record import (after_fees, commission_per_trade, exit_label,
                      trading_day, usd, won_lost)
 
 log = logging.getLogger("signal_engine.output.discord_bot")
@@ -120,16 +120,10 @@ def _position(runtime) -> tuple[str, float]:
 
 
 def _record(runtime) -> str:
-    tracker = getattr(runtime, "paper_tracker", None)
-    closed = list(tracker.closed_trades) if tracker is not None else []
-    label, pv = _position(runtime)
-    from ..versions import current_version, ghost_version_of, main_setup_label
-    from .record import variant_lines
-    now = pd.Timestamp.now(tz="America/New_York")
-    cur = current_version("GHOST")
-    return build_record(closed, now, pv, label, version_of=ghost_version_of, current=cur,
-                        title=f"{main_setup_label('GHOST')} (GHOST {cur})",
-                        extras=variant_lines(getattr(runtime, "shadows", None), now, pv, label))
+    from .record import day_record
+    feeds = list(getattr(runtime, "live_feeds", None) or {}) or ["NQ"]
+    return day_record(runtime, pd.Timestamp.now(tz="America/New_York"),
+                      "NQ" if "NQ" in feeds else feeds[0])
 
 
 def _why(runtime) -> str:

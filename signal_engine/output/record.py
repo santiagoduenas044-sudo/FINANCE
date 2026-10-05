@@ -89,15 +89,17 @@ def _line(label: str, trades: list, pv: float, fee: float = 0.0) -> str:
 
 def build_record(closed: list, now, pv: float, position: str, last: int = 8,
                  version_of=None, current: str | None = None, title: str | None = None,
-                 extras: list[str] | None = None) -> str:
+                 extras: list[str] | None = None, who: str | None = None,
+                 older_label: str = "Versiones anteriores ({names}), aparte") -> str:
     """Markdown for Discord. `closed`: closed PaperTrades; `pv`: $ per point
     of the position the operator trades (5 MNQ = 10).
 
     With `version_of` (trade -> "v4") and `current` ("v4"), today / this week
     / total count ONLY the version running now (as the dashboard does); the
     older versions get one line of their own, so their trades never inflate
-    the current strategy's record. `title` names it ("GHOST · v4 IMÁN 15");
-    `extras` are lines added at the end (the parallel variants' day)."""
+    the current strategy's record. `title` names it ("Set up 1 · IMÁN 15"),
+    `who` says which bot runs it ("GHOST v4"); `extras` are lines added
+    before the last trades (every set up's day)."""
     trades = sorted((t for t in closed if t.closed_at is not None), key=lambda t: _ts(t.closed_at))
     older: list = []
     if version_of is not None and current is not None:
@@ -108,9 +110,11 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
     today = [t for t in trades if trading_day(t.closed_at) == day]
     week = [t for t in trades if trading_day(t.closed_at) >= week0]
     fee = commission_per_trade(position)
-    head = f"{title} · {position}" if title else position
-    lines = [f"📒 **Récord · {head}** (${pv:g} por punto, simulado"
-             + (f", comisión ${fee:,.2f} por trade" if fee else "") + ")",
+    unit = (f"(${pv:g} por punto, simulado"
+            + (f", comisión ${fee:,.2f} por trade" if fee else "") + ")")
+    head = (f"📒 **{title}**" + (f" · {who}" if who else "") + f" · {position} {unit}"
+            if title else f"📒 **Récord · {position}** {unit}")
+    lines = [head,
              _line(f"Hoy {day:%d-%b}", today, pv, fee), _line("Esta semana", week, pv, fee)]
     if trades:
         pts = [t.pnl_points for t in trades]
@@ -127,14 +131,14 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
     if older:
         names = sorted({version_of(t) for t in older})
         opts = [t.pnl_points for t in older]
-        lines.append(f"_Versiones anteriores ({', '.join(names)}), aparte:_ {_n(len(opts))} · "
+        lines.append(f"_{older_label.format(names=', '.join(names))}:_ {_n(len(opts))} · "
                      f"neto {usd(sum(opts), pv)}{after_fees(opts, pv, fee)}")
     if extras:
         lines.append("")
         lines.extend(extras)
     if trades:
         lines.append("")
-        lines.append("**Últimos trades**")
+        lines.append("**Últimos trades" + (f" · {title.split(' · ')[0]}" if title else "") + "**")
         for t in trades[-last:][::-1]:
             num = (t.context or {}).get("idea_number")
             side = "COMPRA" if t.direction == "LONG" else "VENTA"
@@ -171,3 +175,76 @@ def variant_lines(shadows, now, pv: float, position: str) -> list[str]:
     if out:
         out.insert(0, "**Los otros set ups** (en papel, mismo mercado)")
     return out
+
+
+def setup_lines(rows: list[dict]) -> list[str]:
+    """Every set up in one block, in number order: what it did today and
+    its total, in dollars after commissions (rows: api/bots.setup_rows),
+    and which one did best today."""
+    def after(rec, fee):
+        n = (rec or {}).get("n") or 0
+        return n, ((rec or {}).get("net_usd") or 0.0) - fee * n
+
+    def money(v):
+        return f"{'+' if v >= 0 else '−'}${abs(v):,.0f}"
+
+    out, best = [], None
+    for r in rows:
+        fee = r.get("fee") or 0.0
+        tn, tv = after(r.get("today"), fee)
+        an, av = after(r.get("total"), fee)
+        total = f"total {_n(an)} {money(av)}" if an else "sin trades todavía"
+        if not r.get("on") and r.get("kind") != "main":
+            out.append(f"⚪ {r['label']}: apagado · {total}")
+            continue
+        mark = "➖" if not tn else ("✅" if tv > 0 else "🛑" if tv < 0 else "➖")
+        today = f"hoy {_n(tn)} {money(tv)}" if tn else "hoy sin trades"
+        out.append(f"{mark} **{r['label']}**: {today} · {total}")
+        if tn and tv > 0 and (best is None or tv > best[1]):
+            best = (r["label"], tv)
+    if not out:
+        return []
+    out.insert(0, "📋 **Todos los set ups** (en papel, mismo mercado, con comisiones)")
+    if best:
+        out.append(f"🏆 Mejor de hoy: **{best[0]}** {money(best[1])}")
+    return out
+
+
+def all_setup_rows(runtime, now) -> list[dict]:
+    """The set ups' control table (GHOST's and ORBIT's), or [] if it
+    cannot be read; the record goes out either way."""
+    try:
+        from ..api.bots import ghost_card, orbit_card, setup_rows
+        now = pd.Timestamp(now)
+        now = now.tz_localize("America/New_York") if now.tzinfo is None else \
+            now.tz_convert("America/New_York")
+        bots = [ghost_card(runtime, now)]
+        try:
+            bots.append(orbit_card(None, now))
+        except Exception:  # noqa: BLE001 - GHOST's set ups still count
+            pass
+        return setup_rows(bots)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def day_record(runtime, now, symbol: str = "NQ") -> str:
+    """The day's message (and !record): Set up 1 (GHOST's strategy in use)
+    in detail, then every set up's day and total, then the last trades."""
+    from ..runtime.engine import position_usd_per_point
+    from ..versions import current_version, ghost_version_of, main_setup_label
+    try:
+        pv = runtime._point_values(symbol)
+    except Exception:  # noqa: BLE001
+        pv = position_usd_per_point(runtime.registry, runtime.data_engine.cfg.ghost, symbol)
+    label, per_pt = next(iter(pv.items())) if pv else (f"1 punto {symbol}", 1.0)
+    cur = current_version("GHOST")
+    tracker = getattr(runtime, "paper_tracker", None)
+    rows = all_setup_rows(runtime, now)
+    extras = setup_lines(rows) if rows else variant_lines(
+        getattr(runtime, "shadows", None), now, per_pt, label)
+    return build_record(list(tracker.closed_trades) if tracker is not None else [], now,
+                        per_pt, label, version_of=ghost_version_of, current=cur,
+                        title=main_setup_label("GHOST"), who=f"GHOST {cur}",
+                        older_label="Antes, GHOST con otras versiones ({names})",
+                        extras=extras)

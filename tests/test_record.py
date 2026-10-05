@@ -69,13 +69,14 @@ def test_daily_record_once_after_the_flat():
     rt._maybe_daily_record("NQ", _t("2026-09-30 16:56"))
     assert len(sent) == 2                                     # next day, again once
     e = build_discord_payload(OutputEvent.from_daily_record(sent[0][1], sent[0][0]))["embeds"][0]
-    assert "Cierre del día" in e["title"] and "Récord" in e["description"]
+    assert e["title"] == "🔔 Cierre del día · 29-Sep" and "Set up 1 · IMÁN 15" in e["description"]
+    assert e["footer"]["text"].startswith("Trading simulado en papel")
 
 
 def test_record_command_on_discord():
     rt = _runtime(_tracker(), [])
     out = build_reply("!record", rt)
-    assert out.startswith("📒 **Récord · Set up 1 · IMÁN 15 (GHOST v4) · 5 MNQ**")
+    assert out.startswith("📒 **Set up 1 · IMÁN 15** · GHOST v4 · 5 MNQ ($10 por punto")
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
@@ -105,12 +106,12 @@ def test_day_message_counts_only_the_version_running_now():
     text = build_record(tr.closed_trades, now, 10.0, "5 MNQ", version_of=ghost_version_of,
                         current="v4", title="GHOST v4 IMÁN 15",
                         extras=variant_lines([(spec, shadow)], now, 10.0, "5 MNQ"))
-    assert text.startswith("📒 **Récord · GHOST v4 IMÁN 15 · 5 MNQ**")
+    assert text.startswith("📒 **GHOST v4 IMÁN 15** · 5 MNQ")
     assert "Hoy 29-Sep:** 1 trade · 1 ✅" in text and "perdido $0" in text and "**neto +$20**" in text
     assert "Total desde 29-Sep:** 1 trade · gana 100%" in text and "peor caída" not in text
     assert "_Versiones anteriores (v2, v3), aparte:_ 2 trades · neto +$500" in text
     assert "∥ **IMÁN 1**: hoy 2 trades −$230 · total 3 trades +$520" in text
-    last = text.split("**Últimos trades**")[1]
+    last = text.split("**Últimos trades · GHOST v4 IMÁN 15**")[1]
     assert last.count("\n") == 1                     # only IMÁN 15's trade is listed
 
 
@@ -119,4 +120,28 @@ def test_daily_record_uses_the_current_version(tmp_path):
     tr = _tracker()
     rt = _runtime(tr, sent)
     rt._maybe_daily_record("NQ", _t("2026-09-29 16:57"))
-    assert "Set up 1 · IMÁN 15 (GHOST v4)" in sent[0][1] and "Versiones anteriores" in sent[0][1]
+    assert "**Set up 1 · IMÁN 15** · GHOST v4" in sent[0][1]
+    assert "_Antes, GHOST con otras versiones (v2, v3):_" in sent[0][1]
+
+
+def test_every_set_up_in_the_day_message():
+    from signal_engine.output.record import setup_lines
+    rows = [
+        {"setup": 1, "label": "Set up 1 · IMÁN 15", "kind": "main", "on": True, "fee": 5.2,
+         "today": {"n": 1, "net_usd": 295.0}, "total": {"n": 4, "net_usd": 645.0}},
+        {"setup": 2, "label": "Set up 2 · APERTURA", "kind": "main", "on": True, "fee": 0.0,
+         "today": {"n": 0, "net_usd": 0.0}, "total": {"n": 3, "net_usd": 55.0}},
+        {"setup": 4, "label": "Set up 4 · IMÁN 1 NOCHE", "kind": "variant", "on": True,
+         "fee": 5.2, "today": {"n": 3, "net_usd": 1985.0}, "total": {"n": 24, "net_usd": 1340.0}},
+        {"setup": 6, "label": "Set up 6 · APERTURA 30", "kind": "variant", "on": True,
+         "fee": 0.0, "today": {"n": 1, "net_usd": -120.0}, "total": {"n": 1, "net_usd": -120.0}},
+        {"setup": 8, "label": "Set up 8 · CLÁSICO", "kind": "variant", "on": False, "fee": 5.2,
+         "today": {"n": 0}, "total": {"n": 0}},
+    ]
+    lines = setup_lines(rows)
+    assert lines[0].startswith("📋 **Todos los set ups**")
+    assert "✅ **Set up 1 · IMÁN 15**: hoy 1 trade +$290 · total 4 trades +$624" in lines
+    assert "➖ **Set up 2 · APERTURA**: hoy sin trades · total 3 trades +$55" in lines
+    assert "🛑 **Set up 6 · APERTURA 30**: hoy 1 trade −$120 · total 1 trade −$120" in lines
+    assert "⚪ Set up 8 · CLÁSICO: apagado · sin trades todavía" in lines
+    assert lines[-1] == "🏆 Mejor de hoy: **Set up 4 · IMÁN 1 NOCHE** +$1,969"

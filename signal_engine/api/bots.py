@@ -391,17 +391,21 @@ def setup_rows(bots: list[dict]) -> list[dict]:
     doing now, today and its total (the main ones: the version in use)."""
     rows = []
     for b in bots:
+        # $ per trade still to take off: GHOST's records are before commissions,
+        # ORBIT's already after them
+        fee = (b.get("fee_per_trade") or 0.0) if b["name"] == "GHOST" else 0.0
         if b.get("setup"):
             main = b.get("main") or {}
             now = (b.get("now") or [{}])[0].get("text", "")
             rows.append({"setup": b["setup"], "label": b.get("setup_label") or b["name"],
                          "bot": b["name"], "kind": "main", "on": b.get("status") == "ONLINE",
+                         "fee": fee,
                          "now": now, "open_usd": b.get("open_usd"),
                          "today": main.get("today") or b.get("today"),
                          "total": main.get("total") or b.get("total")})
         for v in b.get("variants") or []:
             rows.append({"setup": v.get("setup") or 99, "label": v["name"], "bot": b["name"],
-                         "kind": "variant", "id": v["id"], "on": v["enabled"],
+                         "kind": "variant", "id": v["id"], "on": v["enabled"], "fee": fee,
                          "now": v.get("now", ""), "open_usd": v.get("open_usd"),
                          "today": v.get("today"), "total": v.get("total")})
     return sorted(rows, key=lambda r: r["setup"])

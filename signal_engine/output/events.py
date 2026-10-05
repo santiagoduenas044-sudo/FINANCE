@@ -169,7 +169,7 @@ class OutputEvent:
             kind=kind,
             dedup_key=f"{idea.get('zone_id', '')}:{idea.get('event', '')}",
             title=f"IDEA #{idea.get('number', '?')}",
-            disclaimer="Simulated paper trading — not financial advice.",
+            disclaimer="Trading simulado en papel — no es consejo financiero.",
             status_payload=dict(idea),
             image_png=image_png,
         )
@@ -191,7 +191,7 @@ class OutputEvent:
             kind="daily_record",
             dedup_key=f"daily_record:{day}",
             title="RÉCORD",
-            disclaimer="Simulated paper trading — not financial advice.",
+            disclaimer="Trading simulado en papel — no es consejo financiero.",
             status_payload={"text": text, "day": day},
         )
 
@@ -203,7 +203,7 @@ class OutputEvent:
             kind="note",
             dedup_key=f"note:{key}",
             title=title,
-            disclaimer="Simulated paper trading — not financial advice.",
+            disclaimer="Trading simulado en papel — no es consejo financiero.",
             status_payload={"text": text, "color": color},
             image_png=image_png,
         )
@@ -215,7 +215,7 @@ class OutputEvent:
             kind="day_done",
             dedup_key=f"day_done:{payload.get('day', '')}",
             title="FIN DEL DÍA",
-            disclaimer="Simulated paper trading — not financial advice.",
+            disclaimer="Trading simulado en papel — no es consejo financiero.",
             status_payload=dict(payload),
         )
 

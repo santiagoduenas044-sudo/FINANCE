@@ -14,6 +14,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
+from datetime import date
 
 from ..config.schema import DiscordOutputConfig
 from ..ghost.narrative import render_thesis
@@ -144,7 +145,11 @@ def build_discord_payload(event: OutputEvent) -> dict:
                       event.disclaimer)
     if event.kind == "daily_record":
         p = event.status_payload or {}
-        return _embed("🔔 Cierre del día", p.get("text", ""), 0x3498DB, event.disclaimer)
+        try:
+            when = " · " + date.fromisoformat(str(p.get("day"))[:10]).strftime("%d-%b")
+        except (ValueError, TypeError):
+            when = ""
+        return _embed(f"🔔 Cierre del día{when}", p.get("text", ""), 0x3498DB, event.disclaimer)
     if event.kind == "signal":
         return _build_signal_payload(event)
 
