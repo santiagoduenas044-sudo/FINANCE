@@ -177,60 +177,9 @@ def variant_lines(shadows, now, pv: float, position: str) -> list[str]:
     return out
 
 
-def setup_lines(rows: list[dict]) -> list[str]:
-    """Every set up in one block, in number order: what it did today and
-    its total, in dollars after commissions (rows: api/bots.setup_rows),
-    and which one did best today."""
-    def after(rec, fee):
-        n = (rec or {}).get("n") or 0
-        return n, ((rec or {}).get("net_usd") or 0.0) - fee * n
-
-    def money(v):
-        return f"{'+' if v >= 0 else '−'}${abs(v):,.0f}"
-
-    out, best = [], None
-    for r in rows:
-        fee = r.get("fee") or 0.0
-        tn, tv = after(r.get("today"), fee)
-        an, av = after(r.get("total"), fee)
-        total = f"total {_n(an)} {money(av)}" if an else "sin trades todavía"
-        if not r.get("on") and r.get("kind") != "main":
-            out.append(f"⚪ {r['label']}: apagado · {total}")
-            continue
-        mark = "➖" if not tn else ("✅" if tv > 0 else "🛑" if tv < 0 else "➖")
-        today = f"hoy {_n(tn)} {money(tv)}" if tn else "hoy sin trades"
-        out.append(f"{mark} **{r['label']}**: {today} · {total}")
-        if tn and tv > 0 and (best is None or tv > best[1]):
-            best = (r["label"], tv)
-    if not out:
-        return []
-    out.insert(0, "📋 **Todos los set ups** (en papel, mismo mercado, con comisiones)")
-    if best:
-        out.append(f"🏆 Mejor de hoy: **{best[0]}** {money(best[1])}")
-    return out
-
-
-def all_setup_rows(runtime, now) -> list[dict]:
-    """The set ups' control table (GHOST's and ORBIT's), or [] if it
-    cannot be read; the record goes out either way."""
-    try:
-        from ..api.bots import ghost_card, orbit_card, setup_rows
-        now = pd.Timestamp(now)
-        now = now.tz_localize("America/New_York") if now.tzinfo is None else \
-            now.tz_convert("America/New_York")
-        bots = [ghost_card(runtime, now)]
-        try:
-            bots.append(orbit_card(None, now))
-        except Exception:  # noqa: BLE001 - GHOST's set ups still count
-            pass
-        return setup_rows(bots)
-    except Exception:  # noqa: BLE001
-        return []
-
-
-def day_record(runtime, now, symbol: str = "NQ") -> str:
-    """The day's message (and !record): Set up 1 (GHOST's strategy in use)
-    in detail, then every set up's day and total, then the last trades."""
+def _setup1_record(runtime, now, symbol: str = "NQ") -> str:
+    """Set up 1's own record (GHOST's strategy in use) with its parallel set
+    ups: the fallback when the full day message cannot be built."""
     from ..runtime.engine import position_usd_per_point
     from ..versions import current_version, ghost_version_of, main_setup_label
     try:
@@ -240,11 +189,136 @@ def day_record(runtime, now, symbol: str = "NQ") -> str:
     label, per_pt = next(iter(pv.items())) if pv else (f"1 punto {symbol}", 1.0)
     cur = current_version("GHOST")
     tracker = getattr(runtime, "paper_tracker", None)
-    rows = all_setup_rows(runtime, now)
-    extras = setup_lines(rows) if rows else variant_lines(
-        getattr(runtime, "shadows", None), now, per_pt, label)
+    extras = variant_lines(getattr(runtime, "shadows", None), now, per_pt, label)
     return build_record(list(tracker.closed_trades) if tracker is not None else [], now,
                         per_pt, label, version_of=ghost_version_of, current=cur,
                         title=main_setup_label("GHOST"), who=f"GHOST {cur}",
                         older_label="Antes, GHOST con otras versiones ({names})",
                         extras=extras)
+
+
+# --------------------------------------------------------------------------- #
+# The day's message: every set up, grouped by bot, saying plainly whether it
+# won or lost (from api/bots.trade_log: every closed trade of every set up).
+# --------------------------------------------------------------------------- #
+_WHY_ES = {"TP1": "TP1", "TP2": "objetivo", "TP3": "objetivo", "STOP": "stop",
+           "EOD": "cierre del día", "INVALIDATION": "invalidado", "CANCELLED": "cancelado"}
+_BOT_ICON = {"GHOST": "👻", "ORBIT": "🛰️"}
+
+
+def _money(v: float) -> str:
+    return f"{'+' if v >= 0 else '−'}${abs(v):,.0f}"
+
+
+def _verdict(v: float, he: bool = True) -> str:
+    """GANÓ +$290 / PERDIÓ −$350 / QUEDÓ EN $0 (GANARON… for `he=False`)."""
+    if abs(v) < 0.5:
+        return "QUEDÓ EN $0" if he else "QUEDARON EN $0"
+    word = ("GANÓ" if v > 0 else "PERDIÓ") if he else ("GANARON" if v > 0 else "PERDIERON")
+    return f"{word} {_money(v)}"
+
+
+def _tmark(t: dict) -> str:
+    pts = t.get("pts") or 0.0
+    return "✅" if pts > 0.01 else ("🛑" if pts < -0.01 else "➖")
+
+
+def _why(t: dict) -> str:
+    why = str(t.get("why") or "")
+    pts = t.get("pts") or 0.0
+    if why.upper() == "STOP" and pts > 0.01:
+        return "stop en ganancia"
+    if why.upper() == "STOP" and abs(pts) <= 0.01:
+        return "breakeven"
+    return _WHY_ES.get(why.upper(), why.lower() or "cerrado")
+
+
+def _hm(iso) -> str:
+    try:
+        return pd.Timestamp(iso).tz_convert("America/New_York").strftime("%H:%M")
+    except (ValueError, TypeError):
+        return "--:--"
+
+
+def day_message(log: dict, now) -> str:
+    """Discord text of the day's close. `log`: api/bots.trade_log(...).
+    Dollars are after commissions for every set up; Set up 1 and 2 count
+    only the version each bot uses now."""
+    now = pd.Timestamp(now)
+    now = now.tz_localize("America/New_York") if now.tzinfo is None else \
+        now.tz_convert("America/New_York")
+    day = now.date().isoformat()
+    trades = log.get("trades") or []
+    setups = []
+    for so in log.get("sources") or []:
+        if not so.get("setup"):
+            continue
+        mine = [t for t in trades if t["src"] == so["id"]
+                and (so.get("kind") != "main" or t.get("version") == so.get("current"))]
+        setups.append({**so, "label": so.get("setup_label") or so["name"], "trades": mine,
+                       "on": so.get("kind") == "main" or so.get("enabled", True)})
+    setups.sort(key=lambda s: s["setup"])
+    mains = [s for s in setups if s.get("kind") == "main"]
+    main_today = [t for s in mains for t in s["trades"] if t["day"] == day]
+    main_usd = sum(t["net_usd"] for t in main_today)
+
+    if main_today:
+        lines = [f"**Hoy los bots principales {_verdict(main_usd, he=False)}** "
+                 f"({' y '.join(s['label'].split(' · ')[0] for s in mains)}, con comisiones)"]
+    else:
+        lines = ["**Hoy los bots principales no hicieron trades** "
+                 f"({' y '.join(s['label'].split(' · ')[0] for s in mains)})"]
+    best = None
+    for bot in ("GHOST", "ORBIT"):
+        group = [s for s in setups if s["bot"] == bot]
+        if not group:
+            continue
+        lines += ["", f"{_BOT_ICON.get(bot, '•')} **{bot}**"]
+        for s in group:
+            today = [t for t in s["trades"] if t["day"] == day]
+            alln = len(s["trades"])
+            allv = sum(t["net_usd"] for t in s["trades"])
+            wins = sum(1 for t in s["trades"] if (t.get("pts") or 0) > 0.01)
+            total = (f"total {_money(allv)} en {_n(alln)} · gana {wins / alln:.0%}"
+                     if alln else "todavía sin trades")
+            if not s["on"]:
+                lines.append(f"⚪ {s['label']} — apagado · {total}")
+                continue
+            if today:
+                v = sum(t["net_usd"] for t in today)
+                w = sum(1 for t in today if _tmark(t) == "✅")
+                lo = sum(1 for t in today if _tmark(t) == "🛑")
+                mark = "✅" if v >= 0.5 else ("🛑" if v <= -0.5 else "➖")
+                lines.append(f"{mark} **{s['label']}** — hoy **{_verdict(v)}** "
+                             f"({_n(len(today))}: {w} ✅ {lo} 🛑)")
+                if v > 0 and (best is None or v > best[1]):
+                    best = (s["label"], v)
+            else:
+                lines.append(f"➖ **{s['label']}** — hoy sin trades")
+            lines.append(f"↳ {total}")
+    if best:
+        lines += ["", f"🏆 Mejor de hoy: **{best[0]}** {_verdict(best[1])}"]
+    lines += ["", "**Trades de hoy de los principales**"]
+    if main_today:
+        label = {s["id"]: s["label"].split(" · ")[0] for s in mains}
+        for t in sorted(main_today, key=lambda t: t.get("closed_at") or ""):
+            side = "COMPRA" if t.get("side") == "LONG" else "VENTA"
+            lines.append(f"{_tmark(t)} {_hm(t.get('closed_at'))} · {label[t['src']]} · {side} "
+                         f"{(t.get('entry') or 0):,.2f} → {(t.get('exit') or 0):,.2f} · "
+                         f"{_why(t)} · **{_verdict(t['net_usd'])}**")
+    else:
+        lines.append("_ninguno hoy_")
+    pos = next((s.get("position") for s in mains if s.get("position")), "")
+    lines += ["", f"_Todo en papel, en dólares ya con comisiones{' · ' + pos if pos else ''}. "
+                  "Los set ups en paralelo avisaron cada trade en su momento._"]
+    return "\n".join(lines)
+
+
+def day_record(runtime, now, symbol: str = "NQ") -> str:
+    """The day's message for GHOST's process (16:55 and !record). Falls back
+    to Set up 1's own record if the other set ups cannot be read."""
+    try:
+        from ..api.bots import trade_log
+        return day_message(trade_log(runtime), now)
+    except Exception:  # noqa: BLE001
+        return _setup1_record(runtime, now, symbol)

@@ -48,6 +48,33 @@ case "${1:-}" in
     fi
     ;;
   discord)
+    if [ "${2:-}" = "comandos" ]; then
+      # The command bot (!record, !setups, !status…) is a Discord bot of its
+      # own, apart from the webhooks. Its token is typed here, on the Mac, and
+      # goes only into .env (never printed).
+      cat <<'TXT'
+Comandos de Discord (!record, !setups, !status…): es un bot aparte de los avisos.
+ 1. En https://discord.com/developers/applications -> New Application (nombre: GHOST).
+ 2. Menú "Bot": prende "Message Content Intent" y guarda (Save Changes).
+ 3. En la misma página: "Reset Token" -> "Copy".
+ 4. Menú "OAuth2" -> "URL Generator": marca "bot"; abajo marca "Send Messages",
+    "Read Message History" y "Attach Files". Abre la URL que sale y agrega
+    el bot a tu servidor.
+TXT
+      printf "Pega el token aquí (no se ve al escribir) y presiona Enter: "
+      IFS= read -rs _tok || true; echo
+      _tok="$(printf '%s' "${_tok:-}" | tr -d '[:space:]')"
+      if [ -z "$_tok" ]; then echo "No llegó ningún token; no cambié nada."; exit 1; fi
+      touch "$REPO_DIR/.env"
+      grep -v -E '^[[:space:]]*(export[[:space:]]+)?DISCORD_BOT_TOKEN=' "$REPO_DIR/.env" > "$REPO_DIR/.env.tmp" || true
+      printf 'DISCORD_BOT_TOKEN=%s\n' "$_tok" >> "$REPO_DIR/.env.tmp"
+      mv "$REPO_DIR/.env.tmp" "$REPO_DIR/.env"; chmod 600 "$REPO_DIR/.env"
+      echo "==> paquete de Discord"; "$REPO_DIR/.venv/bin/python" -m pip install --quiet -r "$REPO_DIR/requirements.txt" || true
+      launchctl kickstart -k "$DOMAIN/$LABEL" 2>/dev/null || true
+      echo "Listo: token guardado y bot reiniciado. En ~20 s escribe !ayuda en Discord."
+      echo "En la página: Sistema -> Comandos de Discord dice si quedó conectado."
+      exit 0
+    fi
     # Phase 15c: standalone diagnostic. Reports what the running process would
     # see without sending anything. Never prints the webhook value itself.
     cd "$REPO_DIR"
@@ -80,6 +107,12 @@ print("cfg.output.discord.enabled (YAML) =", cfg.output.discord.enabled)
 print("$" + webhook_env + " set in this shell =", bool(os.environ.get(webhook_env)))
 d = OutputDispatcher.from_config(cfg)
 print("adapters attached =", [a.name for a in d.adapters])
+print("DISCORD_BOT_TOKEN (comandos !record) set =", bool(os.environ.get("DISCORD_BOT_TOKEN", "").strip()))
+try:
+    import discord  # noqa: F401
+    print("paquete discord.py instalado = True")
+except ImportError:
+    print("paquete discord.py instalado = False  (bash deploy/macos/ctl.sh update)")
 if d.adapters:
     a = d.adapters[0]
     print("  config.enabled =", a.config.enabled)
@@ -205,6 +238,6 @@ PYEOF
     esac
     ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord [comandos]|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
     exit 2;;
 esac

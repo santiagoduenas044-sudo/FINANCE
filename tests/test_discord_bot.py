@@ -252,3 +252,26 @@ def test_status_against_a_real_runtime(engine, registry):
     out = build_reply("!status", rt)
     assert "ONLINE" in out and "win rate 100%" in out
     assert "✅" in build_reply("!trades", rt)
+
+
+def test_commands_typed_on_a_phone_still_count():
+    from signal_engine.output.discord_bot import command_of
+    for typed in ("!record", "!Récord", "!récord", "! record", "¡record", "!RECORD.",
+                  "​!record", "!Record hoy"):
+        assert command_of(typed) == "record", typed
+    assert command_of("!Setups") == "setups"
+    assert command_of("record") is None and command_of("!algo") is None
+    assert command_of("") is None and command_of("!") is None
+
+
+def test_dashboard_says_why_commands_do_not_answer(monkeypatch):
+    from fastapi.testclient import TestClient
+    from signal_engine.api.app import create_app
+    from signal_engine.config.schema import EngineConfig
+    from signal_engine.data.engine import DataEngine
+    from tests.test_bot_runtime import _runtime
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    assert start_command_bot(object()) is None
+    rt = _runtime(DataEngine(EngineConfig.load()))
+    d = TestClient(create_app(rt)).get("/api/discord/commands").json()
+    assert d["state"] == "sin_token" and d["answered"] == 0

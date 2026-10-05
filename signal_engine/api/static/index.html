@@ -227,6 +227,7 @@ main { padding: 12px 28px 48px; width: 100%; max-width: 1560px; }
   letter-spacing: .05em; vertical-align: 1px; margin-left: 6px; }
 .badge.good { background: var(--good-dim); color: var(--good); }
 .badge.warn { background: var(--amber-dim); color: var(--amber); }
+.badge.bad { background: var(--critical-dim); color: var(--critical); }
 .rail { position: relative; height: 6px; border-radius: 6px; margin: 18px 0 8px;
   background: linear-gradient(90deg, rgba(255, 93, 112, .35), var(--panel-3) 42%, rgba(47, 208, 140, .35)); }
 .rail .mk { position: absolute; top: -5px; width: 4px; height: 16px; border-radius: 3px; background: var(--ink-1);
@@ -937,6 +938,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
         <div class="upd-log" id="upd-log"></div>
         <p class="foot">Baja la última versión de GitHub y reinicia el bot solo (tarda ~20 s). No se puede
           reiniciar mientras corre un backtest, porque lo cortaría.</p></div></div>
+    <div class="card mb"><h3>Comandos de Discord <span class="r" id="dc-state"></span></h3>
+      <div class="body"><div id="dc-body" class="foot" style="margin-top:0">Revisando…</div></div></div>
     <div class="card mb owner-only"><h3>Página web y usuarios <span class="r" id="us-state"></span></h3>
       <div class="body">
         <p class="foot" style="margin-top:0">Para abrir el dashboard desde internet, cada persona entra con <b>usuario y
@@ -1782,8 +1785,30 @@ $("pl-copy").onclick = async () => {
   catch { $("pl-url").select(); $("pl-msg").textContent = "Selecciónalo y cópialo."; }
 };
 
+const DC_ES = {
+  conectado: ["good", "Conectado"], conectando: ["warn", "Conectando…"],
+  sin_token: ["bad", "Sin configurar"], sin_paquete: ["bad", "Falta instalar"],
+  token_malo: ["bad", "Token no válido"], falta_permiso: ["bad", "Falta un permiso"], error: ["bad", "Se cayó"] };
+const DC_FIX = {
+  sin_token: "Los comandos (<b>!record</b>, <b>!setups</b>, <b>!status</b>…) necesitan un bot de Discord aparte de los avisos. En la Mac corre <span class=\"mono\">bash deploy/macos/ctl.sh discord comandos</span>: te explica los pasos y te pide el token (se escribe solo en la Mac).",
+  sin_paquete: "Falta el paquete de Discord. Toca <b>Buscar actualización e instalar</b> arriba; si sigue igual, en la Mac: <span class=\"mono\">bash deploy/macos/ctl.sh update</span>.",
+  token_malo: "Discord rechazó el token. Crea uno nuevo (Developer Portal → tu app → Bot → Reset Token) y guárdalo con <span class=\"mono\">bash deploy/macos/ctl.sh discord comandos</span>.",
+  falta_permiso: "En el Developer Portal → tu app → Bot, prende <b>Message Content Intent</b> y guarda. Después toca <b>Solo reiniciar</b>.",
+  error: "La conexión se cayó. Toca <b>Solo reiniciar</b>; si vuelve a pasar, mira <span class=\"mono\">bash deploy/macos/ctl.sh logs</span>.",
+  conectando: "Está entrando a Discord; tarda unos segundos." };
+async function dcLoad() {
+  let d;
+  try { d = await api("/api/discord/commands"); } catch (e) { $("dc-body").textContent = "No pude leer el estado."; return; }
+  const [dot, txt] = DC_ES[d.state] || ["", d.state];
+  $("dc-state").innerHTML = `<span class="badge ${dot}">${esc(txt)}</span>`;
+  $("dc-body").innerHTML = d.state === "conectado"
+    ? `Conectado como <b>${esc(d.user || "bot")}</b>${d.channel ? " · solo responde en un canal" : ""}. Escribe <b>!record</b>, <b>!setups</b>, <b>!status</b> o <b>!ayuda</b> en Discord.
+       ${d.answered ? `Ha respondido ${d.answered} ${d.answered === 1 ? "comando" : "comandos"} desde que arrancó.` : "Todavía no ha respondido ningún comando desde que arrancó."}
+       ${d.other_channel ? `<br><b>Ojo:</b> ${d.other_channel} ${d.other_channel === 1 ? "comando llegó" : "comandos llegaron"} de otro canal y no ${d.other_channel === 1 ? "lo contestó" : "los contestó"}: escribe en el canal configurado.` : ""}`
+    : (DC_FIX[d.state] || "");
+}
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";

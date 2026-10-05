@@ -20,6 +20,7 @@ import io
 import logging
 import os
 import threading
+import unicodedata
 
 import pandas as pd
 
@@ -27,6 +28,12 @@ from .record import (after_fees, commission_per_trade, exit_label,
                      trading_day, usd, won_lost)
 
 log = logging.getLogger("signal_engine.output.discord_bot")
+
+# How the command bot is doing, for the dashboard (Sistema): why !record
+# answers or not. state: sin_token | sin_paquete | conectando | conectado |
+# token_malo | falta_permiso | error
+STATUS: dict = {"state": "sin_token", "user": None, "channel": None,
+                "answered": 0, "last_command_at": None, "other_channel": 0}
 
 TOKEN_ENV = "DISCORD_BOT_TOKEN"
 CHANNEL_ENV = "DISCORD_BOT_CHANNEL_ID"
@@ -179,14 +186,32 @@ _HANDLERS = {"setups": _setups, "status": _status, "trades": _trades, "why": _wh
              "orbit": _orbit, "verse": _verse, "fact": _fact, "help": lambda _rt: HELP}
 
 
+def _plain(word: str) -> str:
+    """'!Récord' -> '!record': no accents, no case (phones add both)."""
+    word = unicodedata.normalize("NFKD", word.lower())
+    return "".join(c for c in word if not unicodedata.combining(c))
+
+
+_PLAIN_ALIASES = {_plain(k): v for k, v in _ALIASES.items()}
+
+
+def command_of(content: str) -> str | None:
+    """Which command a message is, as typed on a phone: '!record', '!Récord',
+    '! record', '¡record', '!record.' all count. None when it is not one."""
+    text = "".join(c for c in (content or "") if c not in "\u200b\u200c\u200d\ufeff").strip()
+    if not text or text[0] not in "!¡":
+        return None
+    words = text[1:].strip().split()
+    if not words:
+        return None
+    return _PLAIN_ALIASES.get("!" + _plain(words[0]).rstrip(".,;:!?"))
+
+
 def build_reply(content: str, runtime) -> str | None:
     """The reply to a message, or None when it is not one of our commands.
     Unknown `!` commands are ignored rather than answered, so the bot stays
     quiet in a server where other bots share the prefix."""
-    words = (content or "").strip().split()
-    if not words:
-        return None
-    name = _ALIASES.get(words[0].lower())
+    name = command_of(content)
     if name is None:
         return None
     try:
@@ -199,8 +224,7 @@ def build_reply(content: str, runtime) -> str | None:
 def build_files(content: str, runtime) -> list[bytes]:
     """Charts that go with a reply: !status shows each open trade (or the
     market right now when flat)."""
-    words = (content or "").strip().split()
-    if not words or _ALIASES.get(words[0].lower()) != "status":
+    if command_of(content) != "status":
         return []
     try:
         return list(runtime.status_charts())[:3]
@@ -229,16 +253,19 @@ def start_command_bot(runtime, *, logger: logging.Logger | None = None
     lg = logger or log
     token = os.environ.get(TOKEN_ENV, "").strip()
     if not token:
+        STATUS["state"] = "sin_token"
         lg.info("Discord command bot disabled: $%s not set.", TOKEN_ENV)
         return None
     try:
         import discord  # noqa: F401 - optional dependency
     except ImportError:
+        STATUS["state"] = "sin_paquete"
         lg.warning("Discord command bot disabled: discord.py is not installed "
                    "(pip install -r requirements.txt).")
         return None
 
     channel_id = _channel_filter()
+    STATUS.update(state="conectando", channel=channel_id)
 
     async def _main() -> None:
         import discord
@@ -250,6 +277,7 @@ def start_command_bot(runtime, *, logger: logging.Logger | None = None
 
         @client.event
         async def on_ready() -> None:
+            STATUS.update(state="conectado", user=str(client.user))
             lg.info("Discord command bot connected as %s%s", client.user,
                     f" (channel {channel_id} only)" if channel_id else "")
 
@@ -258,9 +286,13 @@ def start_command_bot(runtime, *, logger: logging.Logger | None = None
             if message.author.bot:
                 return
             if channel_id is not None and message.channel.id != channel_id:
+                if command_of(message.content):
+                    STATUS["other_channel"] += 1      # typed in a channel it ignores
                 return
             reply = build_reply(message.content, runtime)
             if reply:
+                STATUS["answered"] += 1
+                STATUS["last_command_at"] = pd.Timestamp.now(tz="UTC").isoformat()
                 pngs = await asyncio.to_thread(build_files, message.content, runtime)
                 files = [discord.File(io.BytesIO(png), filename=f"grafica{i + 1}.png")
                          for i, png in enumerate(pngs)]
@@ -277,11 +309,14 @@ def start_command_bot(runtime, *, logger: logging.Logger | None = None
         try:
             asyncio.run(_main())
         except discord.LoginFailure:
+            STATUS["state"] = "token_malo"
             lg.error("Discord command bot: login failed — $%s is invalid.", TOKEN_ENV)
         except discord.PrivilegedIntentsRequired:
+            STATUS["state"] = "falta_permiso"
             lg.error("Discord command bot: enable 'Message Content Intent' in the "
                      "Developer Portal (Bot tab), then restart.")
         except Exception as exc:  # noqa: BLE001
+            STATUS["state"] = "error"
             lg.error("Discord command bot stopped (%s).", type(exc).__name__)
 
     t = threading.Thread(target=_run, name="discord-command-bot", daemon=True)

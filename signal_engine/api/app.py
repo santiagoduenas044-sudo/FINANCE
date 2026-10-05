@@ -231,6 +231,12 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             "daily_realized_pnl": runtime.daily_realized_pnl,
         }
 
+    @app.get("/api/discord/commands")
+    def discord_commands() -> dict:
+        """Whether !record, !setups… can answer, and why not (never the token)."""
+        from ..output.discord_bot import STATUS
+        return dict(STATUS)
+
     @app.get("/api/health")
     def get_health() -> dict:
         """Unauthenticated, secret-free liveness/readiness probe for systemd,
