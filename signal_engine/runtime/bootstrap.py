@@ -209,6 +209,10 @@ def build_runtime(
             os.environ.get("BOT_NEWS", "on").strip().lower() not in ("off", "0", "false"):
         from ..news import NewsCalendar
         runtime.news = NewsCalendar()
+    # the morning Bible verse and midday curious fact (BOT_VERSICULOS / BOT_DATOS)
+    if data_dir is None:
+        from ..output.inspiration import DailyNotes
+        runtime.daily_notes = DailyNotes(DEFAULT_PAPER_DIR.parent / "inspiration.json")
     # parallel paper variants (config/shadows.yaml); BOT_SHADOWS=off disables
     if ghost is not None and data_dir is None and \
             os.environ.get("BOT_SHADOWS", "on").strip().lower() not in ("off", "0", "false"):

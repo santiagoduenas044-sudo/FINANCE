@@ -112,6 +112,7 @@ class BotRuntime:
     shadows: list = field(default_factory=list, init=False)
     # economic calendar (signal_engine/news.py), shared with the shadows
     news: object = field(default=None, init=False)
+    daily_notes: object = field(default=None, init=False)   # verse + curious fact (output/inspiration.py)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -388,6 +389,26 @@ class BotRuntime:
             self._update_discord_health()
         except Exception as exc:  # noqa: BLE001
             log.warning("trade notification failed (%s)", type(exc).__name__)
+
+    def maybe_send_daily_notes(self, now: datetime | None = None) -> int:
+        """The morning verse and the midday curious fact on Discord (once a
+        day each, see output/inspiration.py). Called from the service tick;
+        returns how many were sent. Never raises."""
+        if self.daily_notes is None or self.output_dispatcher is None:
+            return 0
+        try:
+            due = self.daily_notes.due(now or datetime.now(timezone.utc))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("daily notes failed (%s)", type(exc).__name__)
+            return 0
+        for kind, title, text in due:
+            try:
+                self.output_dispatcher.publish_note(
+                    title=title, text=text, color=0xF7811E if kind == "verse" else 0x7B96FF,
+                    key=f"{kind}:{pd.Timestamp(now or datetime.now(timezone.utc)).date()}")
+            except Exception as exc:  # noqa: BLE001
+                log.warning("daily note %s failed (%s)", kind, type(exc).__name__)
+        return len(due)
 
     def maybe_send_status_digest(self, now: datetime | None = None) -> bool:
         """Push a periodic 'where we stand' summary so the operator can confirm

@@ -99,6 +99,21 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .sbv { margin-left: auto; font: 600 12px var(--sans); white-space: nowrap; color: var(--ink-2); }
 .sbbtn { margin-top: 2px; padding: 9px 12px; border-radius: 10px; font-weight: 600; font-size: 12.5px; color: var(--on-accent);
   background: linear-gradient(180deg, var(--amber-2), var(--amber)); box-shadow: 0 6px 16px -8px rgba(247, 129, 30, .8); }
+.sbuser { display: flex; align-items: center; gap: 10px; padding: 10px 8px 0; border-top: 1px solid var(--line); }
+.sbuser .av { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: none; font-weight: 700;
+  color: var(--on-accent); background: linear-gradient(145deg, var(--amber-2), var(--amber)); text-transform: uppercase; }
+.sbuser .who { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.2; }
+.sbuser .who b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sbuser .who small { font-size: 11.5px; color: var(--ink-3); }
+.sbuser button { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: var(--ink-3); }
+.sbuser button:hover { background: var(--veil-2); color: var(--critical); }
+.sbuser svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+body.viewer .ctl, body.viewer .owner-only { display: none !important; }
+.users-t td { vertical-align: middle; }
+.ufrm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: end; margin-top: 12px; }
+.ufrm label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--ink-3); }
+.ufrm input, .ufrm select { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--rule); background: var(--panel-2);
+  color: var(--ink-1); font: 13px var(--sans); min-width: 0; }
 .themebtn { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; color: var(--ink-2); font-size: 13px; }
 .themebtn:hover { background: var(--veil); color: var(--ink-1); }
 .themebtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -614,7 +629,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   /* menú solo con íconos */
   .shell { grid-template-columns: 76px minmax(0, 1fr); }
   .sidebar { padding: 18px 10px; align-items: center; }
-  .sidebar .brand .wm, .tabs .lb, .tabs kbd, .sbcard, .themebtn span { display: none; }
+  .sidebar .brand .wm, .tabs .lb, .tabs kbd, .sbcard, .themebtn span, .sbuser .who { display: none; }
+  .sbuser { flex-direction: column; padding: 10px 0 0; }
   .brand { padding: 0; }
   .tabs button { justify-content: center; padding: 11px; }
   .board { grid-template-columns: minmax(0, 1fr); }
@@ -627,7 +643,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   .sidebar { position: fixed; inset: auto 0 0 0; height: auto; flex-direction: row; gap: 0; align-items: stretch;
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); border-right: 0; border-top: 1px solid var(--rule); z-index: 30;
     background: var(--glass); backdrop-filter: saturate(160%) blur(18px); -webkit-backdrop-filter: saturate(160%) blur(18px); }
-  .sidebar .brand, .sbfill, .sbcard { display: none; }
+  .sidebar .brand, .sbfill, .sbcard, .sbuser { display: none !important; }
   .tabs { flex-direction: row; flex: 1; gap: 0; }
   .tabs button, .themebtn { flex: 1; flex-direction: column; gap: 3px; padding: 6px 2px; font-size: 10.5px; border-radius: 10px;
     justify-content: center; align-items: center; min-width: 0; }
@@ -661,6 +677,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   .tile .fig { font-size: 24px; } .now .big { font-size: 34px; }
   .g-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .g-2 { grid-template-columns: minmax(0, 1fr); }
   .opt { display: none; }
+  .ufrm { grid-template-columns: minmax(0, 1fr); }
   /* en el celular, lo que está pasando va antes que la gráfica */
   .board { display: flex; flex-direction: column-reverse; }
 }
@@ -688,6 +705,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
     <div class="sbrow"><span class="dot" id="sb-orbit-dot"></span>ORBIT<span class="sbv" id="sb-orbit">—</span></div>
     <button type="button" class="sbbtn" data-go="bots">Ver central de bots →</button>
   </div>
+  <div class="sbuser" id="sb-user" hidden><span class="av" id="sb-av">·</span><span class="who"><b id="sb-name"></b><small id="sb-role"></small></span>
+    <button type="button" id="sb-out" title="Cerrar sesión" aria-label="Cerrar sesión"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg></button></div>
   <button type="button" class="themebtn" id="theme-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span id="theme-t">Modo oscuro</span></button>
 </aside>
 <div class="mainwrap">
@@ -917,6 +936,19 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
         <div class="upd-log" id="upd-log"></div>
         <p class="foot">Baja la última versión de GitHub y reinicia el bot solo (tarda ~20 s). No se puede
           reiniciar mientras corre un backtest, porque lo cortaría.</p></div></div>
+    <div class="card mb owner-only"><h3>Página web y usuarios <span class="r" id="us-state"></span></h3>
+      <div class="body">
+        <p class="foot" style="margin-top:0">Para abrir el dashboard desde internet, cada persona entra con <b>usuario y
+          contraseña</b>. <b>owner</b> puede todo; <b>viewer</b> solo mira (no inicia ni detiene el bot, no actualiza).
+          Con el primer usuario la página queda cerrada: el resto entra por <span class="mono">/login</span>.</p>
+        <div class="scroll" style="max-height:none"><table class="users-t" id="us-table"></table></div>
+        <form class="ufrm" id="us-form" autocomplete="off">
+          <label>Usuario <input id="us-name" autocapitalize="none" spellcheck="false" required></label>
+          <label>Contraseña (8+) <input id="us-pass" type="password" autocomplete="new-password" required minlength="8"></label>
+          <label>Rol <select id="us-role"><option value="viewer">viewer · solo mirar</option><option value="owner">owner · todo</option></select></label>
+          <button class="pbtn on" type="submit">Guardar usuario</button>
+        </form>
+        <p class="foot" id="us-msg"></p></div></div>
     <div class="card mb"><h3>Práctica para un amigo <span class="r" id="pl-state"></span></h3>
       <div class="body">
         <p class="foot" style="margin-top:0">Un link que abre <b>solo la pantalla de Práctica</b> (repetición de velas con
@@ -958,6 +990,10 @@ async function api(path, opts = {}) {
   const o = { ...opts, headers: { ...(opts.headers || {}) } };
   if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
   const r = await fetch(path, o);
+  if (r.status === 401 && !SOLO && !path.startsWith("/api/me")) {
+    location.href = "/login?next=" + encodeURIComponent(location.pathname);
+    throw new Error("Hay que entrar con usuario y contraseña.");
+  }
   if (!r.ok) {
     let why = "";
     try { why = (await r.json()).detail || ""; } catch {}
@@ -1742,7 +1778,7 @@ $("pl-copy").onclick = async () => {
 };
 
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";
@@ -2673,6 +2709,53 @@ function prLog() {
     : `<li class="empty" style="display:block">Sin trades todavía. Dale Play y entra con B o S.</li>`;
 }
 
+/* ═══════════════════════════ sesión y usuarios ═══════════════════════════ */
+async function loadMe() {
+  try { S.me = await api("/api/me"); } catch { S.me = null; }
+  const me = S.me || {};
+  document.body.classList.toggle("viewer", me.role === "viewer");
+  $("sb-user").hidden = !me.user;
+  if (me.user) {
+    $("sb-name").textContent = me.user;
+    $("sb-av").textContent = (me.user[0] || "·");
+    $("sb-role").textContent = me.role === "owner" ? (me.via === "token" ? "dueño · link con clave" : "owner") : "viewer · solo mirar";
+  }
+}
+$("sb-out").onclick = async () => {
+  try { localStorage.removeItem("ghost.token"); } catch {}
+  try { await fetch("/api/logout", { method: "POST" }); } catch {}
+  location.href = "/login";
+};
+async function renderUsers() {
+  if (S.me && S.me.role !== "owner") return;
+  let d;
+  try { d = await api("/api/users"); } catch (e) { $("us-msg").textContent = "⚠ " + e.message; return; }
+  const us = d.users || [];
+  $("us-state").textContent = us.length ? `${us.length} ${us.length === 1 ? "usuario" : "usuarios"}` : "sin usuarios";
+  $("us-table").innerHTML = us.length ? `<thead><tr><th>Usuario</th><th>Rol</th><th>Desde</th><th></th></tr></thead><tbody>` +
+    us.map(u => `<tr><td><b>${esc(u.user)}</b></td><td>${u.role === "owner" ? '<span class="badge warn">owner</span>' : '<span class="badge good">viewer</span>'}</td>
+      <td class="t">${esc(u.created || "")}</td><td style="text-align:right"><button class="pbtn" type="button" data-del="${esc(u.user)}">Borrar</button></td></tr>`).join("") + "</tbody>"
+    : `<tbody><tr><td class="zero">Todavía no hay usuarios. ${d.token ? "Hoy se entra con el link con clave." : "<b>Hoy el dashboard está abierto a quien llegue a él.</b>"}</td></tr></tbody>`;
+  if (!us.length) $("us-role").value = "owner";
+}
+$("us-form").onsubmit = async e => {
+  e.preventDefault();
+  $("us-msg").textContent = "Guardando…";
+  try {
+    await api("/api/users", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: $("us-name").value.trim(), password: $("us-pass").value, role: $("us-role").value }) });
+    $("us-msg").textContent = `✅ Guardado. Ya puede entrar en ${location.origin}/login`;
+    $("us-pass").value = ""; $("us-name").value = "";
+    await loadMe(); renderUsers();
+  } catch (err) { $("us-msg").textContent = "⚠ " + err.message; }
+};
+$("us-table").addEventListener("click", async e => {
+  const b = e.target.closest("[data-del]");
+  if (!b || !confirm(`¿Borrar el usuario ${b.dataset.del}?`)) return;
+  try { await api(`/api/users/${encodeURIComponent(b.dataset.del)}/delete`, { method: "POST" }); renderUsers(); }
+  catch (err) { $("us-msg").textContent = "⚠ " + err.message; }
+});
+
 /* ═══════════════════════════ PANEL · indicadores ═══════════════════════════ */
 const KICON = {
   today: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M15 9.5c0-1.2-1.3-2-3-2s-3 .8-3 2 1.3 1.8 3 2.2 3 1 3 2.3-1.3 2-3 2-3-.8-3-2"/>',
@@ -2783,6 +2866,7 @@ async function refresh(force = false) {
     setView("practice");
     return;
   }
+  await loadMe();
   initChart();
   await pollSymbols();
   await refresh(true);

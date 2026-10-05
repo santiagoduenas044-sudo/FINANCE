@@ -39,6 +39,8 @@ _ALIASES = {
     "!record": "record", "!récord": "record", "!historial": "record",
     "!why": "why", "!mercado": "why", "!porque": "why",
     "!orbit": "orbit", "!apertura": "orbit",
+    "!versiculo": "verse", "!versículo": "verse", "!palabra": "verse",
+    "!dato": "fact", "!curioso": "fact",
     "!help": "help", "!ayuda": "help",
 }
 
@@ -49,6 +51,7 @@ HELP = (
     "`!trades` — últimos trades cerrados y su resultado\n"
     "`!why` / `!mercado` — qué está viendo el bot ahora y por qué\n"
     "`!orbit` — el bot ORBIT (estrategia APERTURA): caja de hoy, trade abierto y récord\n"
+    "`!versiculo` — la palabra del día · `!dato` — un dato curioso\n"
     "`!help` / `!ayuda` — esta lista"
 )
 
@@ -159,8 +162,20 @@ def _orbit(_runtime) -> str:
     return OpeningRangeBot(STORE_DIR, settings=settings(), name=bot_name()).record_text()
 
 
+def _verse(_rt) -> str:
+    from .inspiration import verse_text
+    return "📖 **Palabra del día**\n" + verse_text(pd.Timestamp.now(tz="America/New_York").date())
+
+
+def _fact(_rt) -> str:
+    """A random fact (the scheduled one is the day's; asking again gives another)."""
+    import random
+    from .inspiration import FACTS
+    return "💡 **Dato curioso**\n" + random.choice(FACTS)
+
+
 _HANDLERS = {"status": _status, "trades": _trades, "why": _why, "record": _record,
-             "orbit": _orbit, "help": lambda _rt: HELP}
+             "orbit": _orbit, "verse": _verse, "fact": _fact, "help": lambda _rt: HELP}
 
 
 def build_reply(content: str, runtime) -> str | None:

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f5f7">
+<title>GHOST · Entrar</title>
+<link rel="icon" type="image/png" href="/static/ghost-64.png">
+<link rel="apple-touch-icon" href="/static/ghost-180.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<script>try { if (localStorage.getItem("ghost.theme") === "dark") document.documentElement.dataset.theme = "dark"; } catch (e) {}</script>
+<style>
+:root { color-scheme: light; --bg: #f4f5f7; --panel: #ffffff; --panel-2: #f7f8fa; --rule: rgba(16, 24, 40, .1);
+  --ink-1: #111827; --ink-2: #4b5563; --ink-3: #6b7280; --amber: #e46d0e; --amber-2: #ff9a3c; --on-accent: #fff;
+  --critical: #dc2626; --critical-dim: rgba(220, 38, 38, .08); }
+:root[data-theme="dark"] { color-scheme: dark; --bg: #06070a; --panel: #0c0f14; --panel-2: #131720;
+  --rule: rgba(255, 255, 255, .09); --ink-1: #f4f5f7; --ink-2: #a3a9b6; --ink-3: #7a8291; --amber: #f08a2c;
+  --amber-2: #ffb066; --on-accent: #1d1005; --critical: #ff5d70; --critical-dim: rgba(255, 93, 112, .12); }
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: var(--bg); }
+body { font: 15px/1.5 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--ink-1);
+  display: grid; place-items: center; min-height: 100vh; padding: 24px 16px; }
+.box { width: 100%; max-width: 400px; background: var(--panel); border: 1px solid var(--rule); border-radius: 20px;
+  padding: 32px 28px 28px; box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 16px 40px -18px rgba(16, 24, 40, .18); }
+.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; }
+.brand img { width: 46px; height: 46px; border-radius: 14px; object-fit: cover; border: 2px solid #f7811e; }
+.brand b { display: block; font-size: 19px; }
+.brand small { color: var(--ink-3); font-size: 12.5px; }
+h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -.02em; }
+p.sub { margin: 0 0 22px; color: var(--ink-3); font-size: 14px; }
+label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin: 14px 0 6px; }
+input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--rule); background: var(--panel-2);
+  color: var(--ink-1); font: inherit; outline: none; }
+input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(247, 129, 30, .18); }
+button { width: 100%; margin-top: 22px; padding: 13px; border: 0; border-radius: 12px; font: 600 15px Inter, sans-serif;
+  color: var(--on-accent); background: linear-gradient(180deg, var(--amber-2), var(--amber)); cursor: pointer;
+  box-shadow: 0 10px 22px -10px rgba(247, 129, 30, .9); }
+button:disabled { opacity: .6; cursor: wait; }
+.err { margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; color: var(--critical);
+  background: var(--critical-dim); }
+.err:empty { display: none; }
+.foot { margin-top: 18px; text-align: center; color: var(--ink-3); font-size: 12px; }
+</style>
+</head>
+<body>
+<form class="box" id="f" autocomplete="on">
+  <div class="brand"><img src="/static/ghost.png" alt=""><span><b>GHOST</b><small>NQ · paper trading</small></span></div>
+  <h1>Entrar</h1>
+  <p class="sub">Escribe tu usuario y contraseña.</p>
+  <label for="u">Usuario</label>
+  <input id="u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <label for="p">Contraseña</label>
+  <input id="p" name="password" type="password" autocomplete="current-password" required>
+  <button id="go" type="submit">Entrar</button>
+  <div class="err" id="err" role="alert"></div>
+  <div class="foot">Paper trading · ninguna orden es real</div>
+</form>
+<script>
+const f = document.getElementById("f"), err = document.getElementById("err"), go = document.getElementById("go");
+f.onsubmit = async e => {
+  e.preventDefault();
+  err.textContent = ""; go.disabled = true;
+  try {
+    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: document.getElementById("u").value, password: document.getElementById("p").value }) });
+    if (!r.ok) { let d = ""; try { d = (await r.json()).detail; } catch (x) {} throw new Error(d || "No se pudo entrar."); }
+    try { localStorage.removeItem("ghost.token"); } catch (x) {}
+    const next = new URLSearchParams(location.search).get("next") || "/";
+    location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+  } catch (x) { err.textContent = x.message; go.disabled = false; }
+};
+</script>
+</body>
+</html>

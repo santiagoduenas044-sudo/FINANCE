@@ -166,7 +166,45 @@ PYEOF
       *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs|probar [discord] [DESDE [HASTA]] [detalle]>";;
     esac
     ;;
+  web)
+    # La página web: usuarios con contraseña y publicarla en internet con
+    # Tailscale Funnel (https://<esta-mac>.<tailnet>.ts.net, gratis, sin abrir puertos).
+    cd "$REPO_DIR"
+    PY="$REPO_DIR/.venv/bin/python"
+    TS="$(command -v tailscale 2>/dev/null || true)"
+    [ -z "$TS" ] && [ -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ] && TS=/Applications/Tailscale.app/Contents/MacOS/Tailscale
+    port="$(_get BOT_PORT)"; [ -z "$port" ] && port="8000"
+    _users() { PYTHONPATH="$REPO_DIR" "$PY" -c "from pathlib import Path; from signal_engine.api.accounts import Accounts; print(len(Accounts(Path('$REPO_DIR')).users()))"; }
+    _need_ts() { [ -n "$TS" ] || { echo "No encuentro Tailscale. Instala la app de Tailscale en esta Mac."; exit 1; }; }
+    case "${2:-}" in
+      usuario)
+        [ -n "${3:-}" ] || { echo "uso: bash deploy/macos/ctl.sh web usuario NOMBRE [owner|viewer]"; exit 2; }
+        if [ -n "${4:-}" ]; then PYTHONPATH="$REPO_DIR" "$PY" -m signal_engine.api.accounts add "$3" "$4"
+        else PYTHONPATH="$REPO_DIR" "$PY" -m signal_engine.api.accounts add "$3"; fi;;
+      usuarios) PYTHONPATH="$REPO_DIR" "$PY" -m signal_engine.api.accounts list;;
+      borrar)
+        [ -n "${3:-}" ] || { echo "uso: bash deploy/macos/ctl.sh web borrar NOMBRE"; exit 2; }
+        PYTHONPATH="$REPO_DIR" "$PY" -m signal_engine.api.accounts remove "$3";;
+      on)
+        _need_ts
+        if [ "$(_users)" = "0" ]; then
+          echo "Primero crea tu usuario (la página quedaría abierta a cualquiera):"
+          echo "  bash deploy/macos/ctl.sh web usuario TU_NOMBRE owner"; exit 1
+        fi
+        echo "Publicando el dashboard (puerto $port) con Tailscale Funnel…"
+        "$TS" funnel --bg "$port"
+        echo; "$TS" funnel status
+        echo; echo "Abre la dirección https://… de arriba desde cualquier celular o compu y entra con tu usuario.";;
+      off)
+        _need_ts
+        "$TS" funnel --https=443 off && echo "La página ya no está publicada en internet (Tailscale sigue funcionando).";;
+      status)
+        _need_ts
+        echo "Usuarios: $(_users)"; "$TS" funnel status;;
+      *) echo "uso: bash deploy/macos/ctl.sh web <usuario NOMBRE [owner|viewer]|usuarios|borrar NOMBRE|on|off|status>";;
+    esac
+    ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|ghost porque|probar|orbit on|off|status|logs>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
     exit 2;;
 esac

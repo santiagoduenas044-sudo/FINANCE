@@ -10,6 +10,7 @@ URLs, no tokens) — see signal_engine/runtime/engine.py.
 """
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import time
@@ -28,6 +29,7 @@ from ..live.movers import MoversService
 from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .lab import LabError, LabManager
+from .accounts import COOKIE, SESSION_DAYS, AccountError, Accounts, Throttle
 from .practice import PracticeKey, write_env_value
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
@@ -40,7 +42,9 @@ _VALID_ACTIONS = {"start", "pause", "stop"}
 # health check (for load balancers / systemd / uptime probes) and the static
 # UI shell itself (the browser then sends the token on the /api/* calls).
 _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
-_AUTH_EXEMPT_EXACT = {"/", "/practica"}
+_AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me"}
+# what a read-only user (role viewer) may not even read
+_OWNER_ONLY_GET = ("/api/practice/link", "/api/users")
 
 
 def _is_auth_exempt(path: str) -> bool:
@@ -90,20 +94,117 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             allow_headers=["*"],
         )
 
-    # -- Auth placeholder: bearer token, enforced only when configured ----- #
-    # Local mode ships with auth DISABLED (loopback only). Remote mode REQUIRES
-    # a token (ServerSettings.validate()). The token value is read from the
-    # environment — never hard-coded, never returned in any response.
+    # -- Acceso: token del dueño, usuarios con contraseña o llave de práctica - #
+    # Sin token y sin usuarios el dashboard queda abierto (modo local, como
+    # siempre). Con cualquiera de los dos, todo /api/* pide identificarse:
+    #   * el token (DASHBOARD_TOKEN, header Bearer o ?token=) = dueño;
+    #   * la cookie de sesión de /login = el rol de ese usuario (owner/viewer);
+    #   * la llave de práctica = solo las velas de la práctica.
+    # El token nunca aparece en una respuesta.
+    accounts = Accounts(Path(backtests.root))
+    app.state.accounts = accounts
+    throttle, throttle_all = Throttle(5, 900), Throttle(30, 900)
+
+    def auth_on() -> bool:
+        return settings.auth_enabled or accounts.has_users()
+
+    def identity(request: Request) -> tuple[str, str, str] | None:
+        """(role, name, via) of whoever made the request, or None."""
+        token = _extract_token(request)
+        if settings.auth_token and token and hmac.compare_digest(token, settings.auth_token):
+            return ("owner", "dueño", "token")
+        s = accounts.verify(request.cookies.get(COOKIE))
+        return (s[1], s[0], "session") if s else None
+
     @app.middleware("http")
     async def _auth_gate(request: Request, call_next):
-        if settings.auth_enabled and not _is_auth_exempt(request.url.path):
-            token = _extract_token(request)
-            # the practice key (a friend) opens only the bar replay, read-only
-            if token != settings.auth_token and \
-                    not practice.allows(token, request.method, request.url.path):
-                return JSONResponse(status_code=401,
-                                    content={"detail": "unauthorized: missing or invalid token"})
+        path = request.url.path
+        if not auth_on():
+            # never public without a lock: Tailscale Funnel marks what comes from internet
+            if request.headers.get("tailscale-funnel-request") and not path.startswith("/static"):
+                return JSONResponse(status_code=403, content={"detail": (
+                    "Esta página todavía no tiene usuarios: crea uno en la Mac antes de "
+                    "publicarla (bash deploy/macos/ctl.sh web usuario NOMBRE).")})
+            return await call_next(request)
+        if not _is_auth_exempt(path):
+            who = identity(request)
+            if who is None:
+                # the practice key (a friend) opens only the bar replay, read-only
+                if not practice.allows(_extract_token(request), request.method, path):
+                    return JSONResponse(status_code=401,
+                                        content={"detail": "unauthorized: missing or invalid token"})
+            elif who[0] != "owner" and (request.method not in ("GET", "HEAD")
+                                        or path.startswith(_OWNER_ONLY_GET)):
+                return JSONResponse(status_code=403, content={
+                    "detail": "Tu usuario es de solo lectura: esto lo hace el dueño."})
         return await call_next(request)
+
+    def _https(request: Request) -> bool:
+        host = (request.headers.get("host") or "").split(":")[0]
+        return (request.url.scheme == "https" or host.endswith(".ts.net")
+                or request.headers.get("x-forwarded-proto", "").lower() == "https")
+
+    @app.post("/api/login")
+    async def login(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+              or (request.client.host if request.client else "?"))
+        if throttle.blocked(ip) or throttle_all.blocked("*"):
+            raise HTTPException(status_code=429, detail=(
+                "Demasiados intentos fallidos. Espera 15 minutos y vuelve a intentar."))
+        name = str(body.get("user", "")).strip()
+        role = accounts.check(name, str(body.get("password", "")))
+        if role is None:
+            throttle.fail(ip)
+            throttle_all.fail("*")
+            raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
+        throttle.ok(ip)
+        resp = JSONResponse({"user": name, "role": role})
+        resp.set_cookie(COOKIE, accounts.issue(name), max_age=SESSION_DAYS * 86400, httponly=True,
+                        samesite="lax", secure=_https(request), path="/")
+        return resp
+
+    @app.post("/api/logout")
+    def logout() -> JSONResponse:
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(COOKIE, path="/")
+        return resp
+
+    @app.get("/api/me")
+    def me(request: Request) -> dict:
+        who = identity(request)
+        return {"auth": auth_on(), "users": accounts.has_users(),
+                "user": who[1] if who else None, "role": who[0] if who else
+                ("owner" if not auth_on() else None), "via": who[2] if who else None}
+
+    @app.get("/api/users")
+    def list_users() -> dict:
+        return {"users": accounts.listing(), "token": settings.auth_enabled}
+
+    @app.post("/api/users")
+    async def save_user(request: Request) -> dict:
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        try:
+            accounts.add(str(body.get("user", "")), str(body.get("password", "")),
+                         str(body.get("role", "viewer")))
+        except AccountError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {"users": accounts.listing()}
+
+    @app.post("/api/users/{name}/delete")
+    def delete_user(name: str) -> dict:
+        try:
+            if not accounts.remove(name):
+                raise HTTPException(status_code=404, detail="Ese usuario no existe.")
+        except AccountError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {"users": accounts.listing()}
 
     @app.get("/api/status")
     def get_status() -> dict:
@@ -446,16 +547,16 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     def practice_link() -> dict:
         key = practice.get()
         return {"active": bool(key), "path": f"/practica?token={key}" if key else None,
-                "protected": settings.auth_enabled}
+                "protected": auth_on()}
 
     @app.post("/api/practice/link")
     def practice_new_link() -> dict:
         # without the owner's token the whole dashboard is open: a friend with
         # network access would see everything, so no link until it is locked
-        if not settings.auth_enabled:
+        if not auth_on():
             raise HTTPException(status_code=409, detail=(
-                "El dashboard no tiene clave (DASHBOARD_TOKEN): cualquiera que llegue a él "
-                "lo vería todo. Ponle clave primero."))
+                "El dashboard no tiene clave (DASHBOARD_TOKEN) ni usuarios: cualquiera que "
+                "llegue a él lo vería todo. Ponle clave o crea un usuario primero."))
         return {"active": True, "path": f"/practica?token={practice.new()}", "protected": True}
 
     @app.post("/api/system/lock")
@@ -511,6 +612,10 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         @app.get("/")
         def index() -> FileResponse:
             return FileResponse(STATIC_DIR / "index.html")
+
+        @app.get("/login")
+        def login_page() -> FileResponse:
+            return FileResponse(STATIC_DIR / "login.html")
 
         @app.get("/practica")
         def practice_page() -> FileResponse:
