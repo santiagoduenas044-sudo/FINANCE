@@ -151,6 +151,18 @@ def current_version(bot: str) -> str:
     return BOT_VERSIONS[bot][-1][0]
 
 
+# Every strategy that trades (for real or in parallel) is a numbered "set up".
+# The bots themselves are 1 and 2; the parallel ones carry their number in
+# config/shadows.yaml (`setup:`).
+MAIN_SETUP = {"GHOST": 1, "ORBIT": 2}
+
+
+def main_setup_label(bot: str) -> str:
+    """"Set up 1 · IMÁN 15": the bot's number and the code it trades now."""
+    code = version_title(bot, current_version(bot)).split(" · ")[0]
+    return f"Set up {MAIN_SETUP[bot]} · {code}"
+
+
 def version_by_date(bot: str, when) -> str:
     """The version that was current on `when`'s ET date (for untagged trades)."""
     ts = pd.Timestamp(when)

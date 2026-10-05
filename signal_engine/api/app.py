@@ -530,11 +530,36 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         if bot not in ("ghost", "orbit") or \
                 variant_id not in {sp.id for sp in sh.load_specs(bot)}:
             raise HTTPException(status_code=404, detail="no existe esa variante")
+        spec = next(sp for sp in sh.load_specs(bot) if sp.id == variant_id)
+        was = sh.is_on(bot, spec, base)
         if bot == "ghost":
             sh.switch_ghost_shadow(runtime, variant_id, on, base)
         else:
             sh.set_on("orbit", variant_id, on, base)
+        if was != bool(on) and sh.alerts_on():
+            _say_switch(bot, spec, bool(on))
         return {"bot": bot, "id": variant_id, "on": on}
+
+    def _say_switch(bot: str, spec, on: bool) -> None:
+        """"🟢 Set up 3 · IMÁN 1 encendido" in the bot's Discord channel."""
+        try:
+            if bot == "ghost":
+                disp = getattr(runtime, "output_dispatcher", None)
+                publish = disp.publish_note if disp is not None else None
+            else:
+                from ..subbots.orbit import make_publisher
+                publish = make_publisher()
+            if publish is None:
+                return
+            publish(title=f"{'🟢' if on else '⚪'} {spec.label} {'encendido' if on else 'apagado'}",
+                    text=(f"{spec.about}\nCorre en paralelo, en papel, y avisa aquí cada "
+                          "entrada y salida." if on else
+                          "Ya no opera ni avisa. Su récord se guarda; se puede volver a "
+                          "encender desde la página (Bots)."),
+                    color=0x3498DB if on else 0x95A5A6,
+                    key=f"switch:{bot}:{spec.id}:{int(time.time())}")
+        except Exception as exc:  # noqa: BLE001 - a message never blocks the switch
+            logging.getLogger(__name__).warning("switch note failed (%s)", type(exc).__name__)
 
     # -- Práctica para un amigo ---------------------------------------------- #
     @app.get("/api/practice/datasets")

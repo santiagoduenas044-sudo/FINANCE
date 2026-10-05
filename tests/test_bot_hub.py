@@ -161,7 +161,7 @@ def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
     ghost = c.get("/api/bots").json()["bots"][0]
     v = {x["id"]: x for x in ghost["variants"]}
     assert v["zonas_1m"]["enabled"] and v["zonas_1m"]["running"]
-    assert not v["setups_clasicos"]["enabled"] and v["setups_clasicos"]["now"] == "Apagada."
+    assert not v["setups_clasicos"]["enabled"] and v["setups_clasicos"]["now"] == "Apagado."
     vers = {x["version"]: x for x in ghost["versions"]}
     assert vers["v1"]["variant"] == "setups_clasicos" and vers["v1"]["variant_on"] is False
     assert vers["v2"]["variant_on"] is True and vers["v4"]["current"]
@@ -272,8 +272,10 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     assert st["IMÁN 15"]["live"]["n"] == 1                        # not the 1-minute trades
     real = [p for p in st["IMÁN 1"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
-                     "name": "GHOST v2 · en vivo", "n": 2, "net_usd": 100.0 * pv}]
+                     "name": "GHOST v2 (antes)", "n": 2, "net_usd": 100.0 * pv}]
     assert st["IMÁN 1"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
+    assert st["IMÁN 1"]["live"]["detail"][-1]["name"].startswith("Set up 3")
+    assert st["IMÁN 15"]["setups"] == [1] and st["IMÁN 1"]["setups"] == [3]
     assert st["IMÁN 1 NOCHE"]["live"]["n"] == 1
     assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
     assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None

@@ -113,6 +113,8 @@ class BotRuntime:
     # economic calendar (signal_engine/news.py), shared with the shadows
     news: object = field(default=None, init=False)
     daily_notes: object = field(default=None, init=False)   # verse + curious fact (output/inspiration.py)
+    # "Set up 1 · IMÁN 15": put on this bot's own Discord messages (None = none)
+    setup_tag: str | None = field(default=None, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
     # an honest delayed-vs-simulated distinction. No trading logic reads this.
@@ -259,7 +261,9 @@ class BotRuntime:
             self.news.refresh()                  # at most every few hours; never raises
         if self.shadows:
             from .shadows import run_ghost_shadows
-            run_ghost_shadows(self.shadows, symbol, tf_bars, now, decision_time, news=self.news)
+            from .shadows import alerts_on
+            run_ghost_shadows(self.shadows, symbol, tf_bars, now, decision_time, news=self.news,
+                              notify=self._shadow_alert if alerts_on() else None)
 
         self.last_run_at = now
         self._log(RuntimeEvent(kind="CYCLE", timestamp=now,
@@ -319,7 +323,7 @@ class BotRuntime:
                 log.info("DISCORD SEND signal_id=%.8s… instrument=%s direction=%s",
                          signal.signal_id, signal.instrument,
                          getattr(paper_trade, "direction", "?"))
-                td = paper_trade.to_dict()
+                td = self._tag(paper_trade.to_dict())
                 ctx_d = td.get("context") or {}
                 png = None
                 if bars is not None and ctx_d.get("zone_bottom") is not None:
@@ -337,6 +341,22 @@ class BotRuntime:
                             type(exc).__name__, signal.signal_id)
                 self._set_component(ComponentStatus.DOWN, "discord", str(exc))
 
+    def _shadow_alert(self, spec, rt, kind: str, trade) -> None:
+        """A parallel set up entered or exited: tell Discord ("Set up 3 —
+        COMPRA NQ"), priced at the set up's own position."""
+        if self.output_dispatcher is None:
+            return
+        from .shadows import alert_note
+        pv = rt._point_values(trade.instrument) or self._point_values(trade.instrument)
+        closed = getattr(getattr(rt, "paper_tracker", None), "closed_trades", None)
+        title, text, color = alert_note(spec.label, kind, trade, pv, closed,
+                                        about=getattr(spec, "about", ""))
+        self.output_dispatcher.publish_note(title=title, text=text, color=color,
+                                            key=f"setup:{spec.id}:{trade.signal_id}:{kind}")
+
+    def _tag(self, d: dict) -> dict:
+        return {**d, "setup_tag": self.setup_tag} if self.setup_tag else d
+
     def _notify_trade_updates(self, symbol: str, just_closed: list,
                               before_r: dict[str, float],
                               before_tp1: set[str] | None = None,
@@ -352,7 +372,7 @@ class BotRuntime:
             if ncfg.trade_closed:
                 for t in just_closed:
                     self.output_dispatcher.publish_trade_closed(
-                        t.to_dict(), self._close_chart(bars, t, symbol))
+                        self._tag(t.to_dict()), self._close_chart(bars, t, symbol))
             if ncfg.trade_progress:
                 for t in self.paper_tracker.open_trades:
                     if not t.is_open or t.instrument != symbol:
@@ -369,8 +389,8 @@ class BotRuntime:
                             and t.signal_id in before_r
                             and t.signal_id not in before_tp1):
                         pv = self._point_values(symbol)
-                        self.output_dispatcher.publish_trade_tp1(
-                            {**t.to_dict(), "position_label": next(iter(pv)) if pv else None})
+                        self.output_dispatcher.publish_trade_tp1(self._tag(
+                            {**t.to_dict(), "position_label": next(iter(pv)) if pv else None}))
             if ncfg.stop_moves and before_stop:
                 for t in self.paper_tracker.open_trades:
                     old = before_stop.get(t.signal_id)
@@ -383,7 +403,7 @@ class BotRuntime:
                     if not just_tp1:
                         num = (t.context or {}).get("idea_number")
                         self.output_dispatcher.publish_stop_moved(
-                            t.to_dict(), old, self._trade_chart(
+                            self._tag(t.to_dict()), old, self._trade_chart(
                                 bars, t, (f"IDEA #{num} · " if num is not None else "")
                                 + f"{symbol} · stop movido a {t.stop:,.2f}"))
             self._update_discord_health()
@@ -776,6 +796,8 @@ class BotRuntime:
             if not ctx.execution.bars.empty else None
         for ev in events:
             ev["usd_per_point"] = self._point_values(symbol)
+            if self.setup_tag:
+                ev["setup_tag"] = self.setup_tag
             st = by_id.get(ev.get("zone_id"))
             if ev.get("event") == "idea" and st is not None and zone_det is not None:
                 # The full conditional plan, so the heads-up reads as
@@ -896,13 +918,13 @@ class BotRuntime:
                 return
             self._record_sent = day
             from ..output.record import build_record, variant_lines
-            from ..versions import current_version, ghost_version_of, version_title
+            from ..versions import current_version, ghost_version_of, main_setup_label
             pv = self._point_values(symbol)
             label, per_pt = next(iter(pv.items())) if pv else (f"1 punto {symbol}", 1.0)
             cur = current_version("GHOST")
             text = build_record(list(self.paper_tracker.closed_trades), t, per_pt, label,
                                 version_of=ghost_version_of, current=cur,
-                                title=f"GHOST {cur} {version_title('GHOST', cur).split(' · ')[0]}",
+                                title=f"{main_setup_label('GHOST')} (GHOST {cur})",
                                 extras=variant_lines(getattr(self, "shadows", None), t, per_pt,
                                                      label))
             self.output_dispatcher.publish_daily_record(text, day)

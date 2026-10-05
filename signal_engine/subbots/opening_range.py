@@ -133,8 +133,10 @@ class OpeningRangeBot:
 
     def __init__(self, store_dir: str | Path, *, settings: OrbSettings | None = None,
                  publish: Callable[..., None] | None = None,
-                 chart: Callable[..., bytes | None] | None = None, name: str = "ORBIT"):
+                 chart: Callable[..., bytes | None] | None = None, name: str = "ORBIT",
+                 title: str | None = None):
         self.name = name
+        self.title = title or name       # in its messages: "Set up 2 · APERTURA"
         self.s = settings or OrbSettings()
         self.dir = Path(store_dir)
         self.state_file = self.dir / "apertura_state.json"
@@ -252,7 +254,7 @@ class OpeningRangeBot:
             else:
                 st.done = True
                 if not quiet:
-                    self._note(f"⏭️ {self.name} — ruptura perdida",
+                    self._note(f"⏭️ {self.title} — ruptura perdida",
                                "La ruptura pasó mientras el bot no tenía datos al día; "
                                "no la persigo. Mañana otra vez.", 0x95A5A6, f"missed:{day}")
 
@@ -269,7 +271,7 @@ class OpeningRangeBot:
         if hm > s.last_entry:
             st.done = True
             if not quiet:
-                self._note(f"😴 {self.name} — hoy no hubo ruptura",
+                self._note(f"😴 {self.title} — hoy no hubo ruptura",
                            f"Ninguna vela de 5 min cerró fuera de la caja "
                            f"({_px(st.lo)} – {_px(st.hi)}) antes de las {s.last_entry}. "
                            "Sin trade hoy.", 0x95A5A6, f"none:{day}")
@@ -292,17 +294,17 @@ class OpeningRangeBot:
         width = (st.hi - st.lo) if st.hi is not None else 0.0
         if st.bars < s.range_minutes * 0.8 or width <= 0:
             st.done = True
-            msg = (f"📦 {self.name} — hoy no opera ({when})",
+            msg = (f"📦 {self.title} — hoy no opera ({when})",
                    f"Faltan velas de 9:30 a {box_end} ({st.bars} de {s.range_minutes}); "
                    "sin caja completa no hay trade.")
         elif width > s.max_range:
             st.done = True
-            msg = (f"📦 {self.name} — hoy no opera ({when})",
+            msg = (f"📦 {self.title} — hoy no opera ({when})",
                    f"Caja de {width:.1f} pts ({_px(st.lo)} – {_px(st.hi)}): más de "
                    f"{s.max_range:.0f} pts, demasiado grande.")
         else:
             risk = (width + 5) * s.usd_per_point * s.contracts
-            msg = (f"📦 {self.name} — caja lista ({when})",
+            msg = (f"📦 {self.title} — caja lista ({when})",
                    f"**9:30–{box_end}:** máximo **{_px(st.hi)}** · mínimo **{_px(st.lo)}** "
                    f"· {width:.1f} pts\n"
                    f"🟢 **Compra** si una vela de 5 min cierra arriba de {_px(st.hi)}\n"
@@ -341,9 +343,9 @@ class OpeningRangeBot:
                 f"({s.target_mult * risk:.1f} pts, {_usd(s.target_mult * risk * pv)})\n"
                 f"Al {s.be_at:.0%} del camino el stop sube a entrada +{s.be_plus:g}. "
                 f"Cierra a las {s.flat_at} si no toca nada. {s.position}, en papel.")
-        self._note(f"{'🟢' if long else '🔴'} {self.name} — {side} NQ", text,
+        self._note(f"{'🟢' if long else '🔴'} {self.title} — {side} NQ", text,
                    0x00C851 if long else 0xFF4444, f"open:{t['id']}",
-                   image=self._chart(bars, t, f"{self.name} · APERTURA · {side} {_px(entry)}"))
+                   image=self._chart(bars, t, f"{self.title} · {side} {_px(entry)}"))
 
     def _manage(self, t: dict, ts, bar, bars, quiet: bool) -> None:
         long = t["long"]
@@ -362,11 +364,11 @@ class OpeningRangeBot:
             t["be_done"] = True
             t["stop"] = t["entry"] + (self.s.be_plus if long else -self.s.be_plus)
             if not quiet:
-                self._note(f"🔒 {self.name} — stop a BE+2",
+                self._note(f"🔒 {self.title} — stop a BE+2",
                            f"El precio recorrió el {self.s.be_at:.0%} del camino al objetivo. "
                            f"Stop movido a {_px(t['stop'])}: este trade ya no puede perder. "
                            f"Objetivo {_px(tgt)}.", 0x2ECC71, f"be:{t['id']}",
-                           image=self._chart(bars, t, f"{self.name} · stop a BE+2 "
+                           image=self._chart(bars, t, f"{self.title} · stop a BE+2 "
                                                       f"{_px(t['stop'])}"))
 
     def _close(self, t: dict, price: float, ts, why: str, bars, quiet: bool) -> None:
@@ -390,9 +392,9 @@ class OpeningRangeBot:
                 f"**{pts:+.2f} pts · {_usd(usd)}** con {n} {sym} "
                 f"(ya descontados {cost:g} pts de comisión y deslizamiento)\n"
                 + self.summary_line())
-        self._note(f"{mark} {self.name} — cerrado: {why}", text,
+        self._note(f"{mark} {self.title} — cerrado: {why}", text,
                    0x2ECC71 if usd > 0 else 0xE74C3C, f"close:{t['id']}",
-                   image=self._chart(bars, done, f"{self.name} · {side} · {why} {pts:+.2f} pts"))
+                   image=self._chart(bars, done, f"{self.title} · {side} · {why} {pts:+.2f} pts"))
 
     # ------------------------------------------------------------------ #
     # messages
@@ -423,10 +425,10 @@ class OpeningRangeBot:
 
     def summary_line(self) -> str:
         if not self.closed:
-            return f"Récord {self.name}: sin trades todavía."
+            return f"Récord {self.title}: sin trades todavía."
         usd = [t["usd"] for t in self.closed]
         wins = sum(1 for u in usd if u > 0)
-        return (f"Récord {self.name}: {len(usd)} trades · ganó {wins} ({wins / len(usd):.0%}) · "
+        return (f"Récord {self.title}: {len(usd)} trades · ganó {wins} ({wins / len(usd):.0%}) · "
                 f"total **{_usd(sum(usd))}**")
 
     def record_text(self, last: int = 10) -> str:

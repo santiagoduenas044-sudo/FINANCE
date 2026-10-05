@@ -1,5 +1,6 @@
-# Variants that run IN PARALLEL with each bot: same live market, their own
-# paper trades, no Discord messages. They exist to compare, day by day, how
+# Variants that run IN PARALLEL with each bot ("set ups"): same live market,
+# their own paper trades, and their own Discord alerts when they enter and
+# exit (BOT_AVISOS_SETUPS=off silences them). They exist to compare, day by day, how
 # another version of a strategy would have done next to the one the bot
 # really trades. Their results show in the dashboard (Bots tab).
 #
@@ -8,26 +9,32 @@
 # To add one, copy a block and change it (then update the bot). Its record
 # stays in data_store/shadows/ even while it is off.
 #
+# setup: the set up's number ("Set up 3"), shown everywhere instead of a long
+#        name. 1 is GHOST and 2 is ORBIT (the bots themselves); never reuse one.
+# name:  the strategy's short code (versions.py STRATEGIES).
 # ghost: strategy = a file in config/strategies/ ("legacy" = default.yaml),
 #        overrides = changes on top, version = the GHOST version it replays.
 # orbit: settings = changes to APERTURA's rules (opening_range.OrbSettings).
 
 ghost:
   - id: setups_clasicos
-    name: "CLÁSICO · setups clásicos"
+    setup: 8
+    name: "CLÁSICO"
     about: "La primera versión (v1): ruptura de apertura, barrida de liquidez y VWAP en velas de 5 min."
     strategy: legacy
     version: v1
     enabled: false
 
   - id: zonas_1m
-    name: "IMÁN 1 · zonas 1 min de día"
+    setup: 3
+    name: "IMÁN 1"
     about: "La versión de 1 min tal cual corría (v2): zonas de 5 min, entrada con vela de 1 min, BE+2 al 70 %, 9:30–15:30."
     strategy: zones_1m
     version: v2
 
   - id: zonas_1m_noche
-    name: "IMÁN 1 NOCHE · zonas 1 min día y noche"
+    setup: 4
+    name: "IMÁN 1 NOCHE"
     about: "La misma versión de 1 min, también de noche (como v3)."
     strategy: zones_1m
     version: v3
@@ -37,7 +44,8 @@ ghost:
         last_entry_time: "16:15"
 
   - id: zonas_15m_noticias
-    name: "IMÁN 15 CALMA · sin noticias"
+    setup: 5
+    name: "IMÁN 15 CALMA"
     about: "La versión principal, pero sin entrar de 10 min antes a 15 min después de una noticia fuerte de EE.UU. (CPI, empleo, FOMC…)."
     strategy: zones
     overrides:
@@ -46,13 +54,15 @@ ghost:
 
 orbit:
   - id: apertura_30m
-    name: "APERTURA 30 · caja de 30 min"
+    setup: 6
+    name: "APERTURA 30"
     about: "La caja de 9:30 a 10:00 en vez de 9:45; todo lo demás igual."
     settings:
       range_minutes: 30
 
   - id: apertura_tp2
-    name: "APERTURA 2× · objetivo 2×"
+    setup: 7
+    name: "APERTURA 2×"
     about: "La misma caja de 15 min con el objetivo a 2× el stop en vez de 1.5×."
     settings:
       target_mult: 2.0

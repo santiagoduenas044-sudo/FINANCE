@@ -85,13 +85,15 @@ def yahoo_bars() -> pd.DataFrame:
 
 def build_bot(publish=None, store_dir: Path = STORE_DIR) -> OpeningRangeBot:
     from ..output.trade_chart import render_trade_png
+    from ..versions import main_setup_label
     return OpeningRangeBot(store_dir, settings=settings(), publish=publish or make_publisher(),
-                           chart=render_trade_png, name=bot_name())
+                           chart=render_trade_png, name=bot_name(),
+                           title=main_setup_label("ORBIT"))
 
 
 def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
     """One poll. False when the data could not be read (retried next time).
-    `shadows`: parallel APERTURA variants fed the same bars (silent)."""
+    `shadows`: parallel APERTURA set ups fed the same bars."""
     try:
         bars = fetch()
     except Exception as exc:  # noqa: BLE001 - a bad poll must never stop the bot
@@ -106,10 +108,26 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
     return True
 
 
-def build_shadows(base: Path | None = None, current: list | None = None) -> list:
-    """[(spec, OpeningRangeBot)] for the ORBIT variants in config/shadows.yaml
+def setup_publisher(publish, spec_id: str):
+    """What a parallel set up says on Discord: its entries, its stop to BE+2
+    and its exits (not the daily box, which ORBIT itself already tells).
+    None when there is nowhere to say it or BOT_AVISOS_SETUPS=off."""
+    from ..runtime.shadows import alerts_on
+    if publish is None or not alerts_on():
+        return None
+
+    def say(*, key="", **kw):
+        if str(key).split(":")[0] in ("open", "close", "be"):
+            publish(key=f"setup:{spec_id}:{key}", **kw)
+    return say
+
+
+def build_shadows(base: Path | None = None, current: list | None = None,
+                  publish=None) -> list:
+    """[(spec, OpeningRangeBot)] for the ORBIT set ups in config/shadows.yaml
     that are switched on (dashboard, Bots tab): ORBIT's own rules with the
-    listed changes, their own folder, no messages. `current`: the running
+    listed changes, their own folder, their entries and exits on Discord
+    through `publish` ("Set up 6 · APERTURA 30"). `current`: the running
     ones, kept as they are (their day state lives in memory too)."""
     from dataclasses import replace
     from ..runtime.shadows import SHADOWS_DIR, is_on, load_specs, store_dir
@@ -124,15 +142,20 @@ def build_shadows(base: Path | None = None, current: list | None = None) -> list
             continue
         try:
             rules = replace(settings(), **(spec.settings or {}))
+            chart = None
+            if publish is not None:
+                from ..output.trade_chart import render_trade_png as chart
             out.append((spec, OpeningRangeBot(store_dir("orbit", spec.id, base),
-                                              settings=rules, name=spec.name)))
+                                              settings=rules, name=spec.name,
+                                              title=spec.label, chart=chart,
+                                              publish=setup_publisher(publish, spec.id))))
             if current is not None:
-                log.info("variante %s encendida", spec.name)
+                log.info("%s encendido", spec.label)
         except (TypeError, ValueError) as exc:
             log.warning("variante %s no arrancó (%s)", spec.id, exc)
     for sid, (sp, _b) in running.items():
         if sid not in {x.id for x, _ in out}:
-            log.info("variante %s apagada", sp.name)
+            log.info("%s apagado", sp.label)
     return out
 
 
@@ -265,11 +288,11 @@ def main() -> int:
                 color=0x3498DB, key=f"online:{int(time.time())}")
     except Exception:  # noqa: BLE001
         pass
-    shadows = build_shadows()
+    shadows = build_shadows(publish=publish)
     if shadows:
-        log.info("variantes en paralelo: %s", ", ".join(sp.name for sp, _ in shadows))
+        log.info("set ups en paralelo: %s", ", ".join(sp.label for sp, _ in shadows))
     while not stop["now"]:
-        shadows = build_shadows(current=shadows)      # follows the dashboard switches
+        shadows = build_shadows(current=shadows, publish=publish)   # follows the dashboard switches
         run_once(bot, shadows=shadows)
         for _ in range(POLL_SECONDS):
             if stop["now"]:

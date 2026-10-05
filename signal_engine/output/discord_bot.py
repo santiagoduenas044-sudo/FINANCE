@@ -41,6 +41,7 @@ _ALIASES = {
     "!orbit": "orbit", "!apertura": "orbit",
     "!versiculo": "verse", "!versículo": "verse", "!palabra": "verse",
     "!dato": "fact", "!curioso": "fact",
+    "!setups": "setups", "!setup": "setups", "!sets": "setups",
     "!help": "help", "!ayuda": "help",
 }
 
@@ -50,6 +51,7 @@ HELP = (
     "`!record` / `!récord` — récord en dólares: hoy, semana, total y últimos trades\n"
     "`!trades` — últimos trades cerrados y su resultado\n"
     "`!why` / `!mercado` — qué está viendo el bot ahora y por qué\n"
+    "`!setups` — todos los set ups: prendido o apagado, qué hace, hoy y total\n"
     "`!orbit` — el bot ORBIT (estrategia APERTURA): caja de hoy, trade abierto y récord\n"
     "`!versiculo` — la palabra del día · `!dato` — un dato curioso\n"
     "`!help` / `!ayuda` — esta lista"
@@ -121,12 +123,12 @@ def _record(runtime) -> str:
     tracker = getattr(runtime, "paper_tracker", None)
     closed = list(tracker.closed_trades) if tracker is not None else []
     label, pv = _position(runtime)
-    from ..versions import current_version, ghost_version_of, version_title
+    from ..versions import current_version, ghost_version_of, main_setup_label
     from .record import variant_lines
     now = pd.Timestamp.now(tz="America/New_York")
     cur = current_version("GHOST")
     return build_record(closed, now, pv, label, version_of=ghost_version_of, current=cur,
-                        title=f"GHOST {cur} {version_title('GHOST', cur).split(' · ')[0]}",
+                        title=f"{main_setup_label('GHOST')} (GHOST {cur})",
                         extras=variant_lines(getattr(runtime, "shadows", None), now, pv, label))
 
 
@@ -174,7 +176,12 @@ def _fact(_rt) -> str:
     return "💡 **Dato curioso**\n" + random.choice(FACTS)
 
 
-_HANDLERS = {"status": _status, "trades": _trades, "why": _why, "record": _record,
+def _setups(runtime) -> str:
+    from ..api.bots import overview, setups_text
+    return setups_text(overview(runtime).get("setups") or [])
+
+
+_HANDLERS = {"setups": _setups, "status": _status, "trades": _trades, "why": _why, "record": _record,
              "orbit": _orbit, "verse": _verse, "fact": _fact, "help": lambda _rt: HELP}
 
 

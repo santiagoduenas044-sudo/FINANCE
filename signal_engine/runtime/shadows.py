@@ -3,14 +3,15 @@
 A GHOST shadow is a second, silent BotRuntime with its own strategy config and
 its own paper tracker (data_store/shadows/<id>/). The live runtime hands it
 the same bars after each of its own cycles, so both judge exactly the same
-market. It sends nothing to Discord and never touches the real record.
-ORBIT's shadows are extra APERTURA rule sets run by the ORBIT process
-(subbots/orbit.py) the same way.
+market. It never touches the real record; its entries and exits go to
+Discord as "Set up N" notes (see `trade_events`). ORBIT's shadows are extra
+APERTURA rule sets run by the ORBIT process (subbots/orbit.py) the same way.
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -35,6 +36,21 @@ class ShadowSpec:
     settings: dict = field(default_factory=dict)   # orbit: OrbSettings changes
     version: str | None = None           # the bot version it reproduces (versions.py)
     enabled: bool = True                 # default; the dashboard switch overrides it
+    setup: int | None = None             # its number: "Set up 3"
+
+    @property
+    def code(self) -> str:
+        return str(self.name).split(" · ")[0]
+
+    @property
+    def label(self) -> str:
+        """"Set up 3 · IMÁN 1": the short name used everywhere."""
+        return f"Set up {self.setup} · {self.code}" if self.setup else self.code
+
+
+def alerts_on() -> bool:
+    """Discord alerts for the set ups' entries and exits (BOT_AVISOS_SETUPS=off)."""
+    return os.environ.get("BOT_AVISOS_SETUPS", "on").strip().lower() not in ("off", "0", "false")
 
 
 # --------------------------------------------------------------------------- #
@@ -146,12 +162,31 @@ def switch_ghost_shadow(runtime, spec_id: str, on: bool, base: Path = SHADOWS_DI
     return True
 
 
+def trade_events(tracker, before_open: set, before_closed: int) -> list[tuple[str, object]]:
+    """[("open"|"close", PaperTrade)] that happened in `tracker` since the
+    snapshot (open signal ids, number of closed trades). A trade that opened
+    and closed on the same bar gives both."""
+    if tracker is None:
+        return []
+    closed = tracker.closed_trades[before_closed:]
+    opened = {t.signal_id: t for t in list(tracker.open_trades) + list(closed)
+              if t.signal_id not in before_open}
+    return [("open", t) for t in opened.values()] + [("close", t) for t in closed]
+
+
+def _snapshot(tracker) -> tuple[set, int]:
+    if tracker is None:
+        return set(), 0
+    return {t.signal_id for t in tracker.open_trades}, len(tracker.closed_trades)
+
+
 def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_time=None,
-                      news=None) -> None:
+                      news=None, notify=None) -> None:
     """Feed one closed bar's context to every shadow (the live runtime's
     own bars, so the variants judge the same market). Bars that close after
     `decision_time` (a still-forming 5m/15m candle) are cut, and a variant
-    whose own candle has not changed since last time is not run again."""
+    whose own candle has not changed since last time is not run again.
+    `notify(spec, rt, kind, trade)` hears every entry and exit."""
     if decision_time is not None:
         tf_bars = {tf: df[df.index <= decision_time] for tf, df in tf_bars.items()}
     for spec, rt in shadows:
@@ -166,6 +201,58 @@ def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_t
             rt._shadow_last_bar = last
             rt.news = news
             rt.now_fn = lambda _now=now: _now
+            tracker = getattr(rt, "paper_tracker", None)
+            before = _snapshot(tracker)
             rt.run_cycle(symbol, tf_bars)
+            if notify is not None:
+                for kind, trade in trade_events(tracker, *before):
+                    try:
+                        notify(spec, rt, kind, trade)
+                    except Exception as exc:  # noqa: BLE001 - a message never stops a cycle
+                        log.warning("set up %s alert failed (%s)", spec.id, type(exc).__name__)
         except Exception as exc:  # noqa: BLE001
             log.warning("shadow %s cycle failed (%s)", spec.id, type(exc).__name__)
+
+
+def _px(x) -> str:
+    return f"{x:,.2f}" if x is not None else "—"
+
+
+def alert_note(label: str, kind: str, trade, pv: dict | None, closed: list | None = None,
+               about: str = "") -> tuple[str, str, int]:
+    """(title, text, color) of a set up's Discord note when it enters
+    ("open") or exits ("close"). `pv`: {"5 MNQ": 10.0} for the dollars;
+    `closed`: all its closed trades, for the running record line."""
+    from ..output.record import _mark, _n, after_fees, commission_per_trade, exit_label, usd
+    position, per_pt = next(iter((pv or {}).items()), ("", 0.0))
+    long = trade.direction == "LONG"
+    side = "COMPRA" if long else "VENTA"
+    sym = trade.instrument
+
+    def money(pts: float) -> str:
+        return f", {usd(pts, per_pt)}" if per_pt else ""
+
+    if kind == "open":
+        risk = abs(trade.entry - trade.stop)
+        target = trade.tp2 if trade.tp2 is not None else trade.tp1
+        lines = [f"**Entrada** {_px(trade.entry)} · **Stop** {_px(trade.stop)} "
+                 f"({risk:.1f} pts{money(-risk)})"]
+        if target is not None:
+            reward = abs(target - trade.entry)
+            lines[0] += f" · **Objetivo** {_px(target)} ({reward:.1f} pts{money(reward)})"
+        lines.append(f"{label} en paralelo, en papel"
+                     + (f" con {position}" if position else "") + ". " + (about or ""))
+        return (f"{'🟢' if long else '🔴'} {label} — {side} {sym}",
+                "\n".join(x.strip() for x in lines), 0x00C851 if long else 0xFF4444)
+    pts = trade.pnl_points
+    why = exit_label(trade)
+    lines = [f"{side} {_px(trade.entry)} → {_px(trade.exit_price)} · **{why}**",
+             f"**{pts:+.2f} pts{(' · ' + usd(pts, per_pt)) if per_pt else ''}**"
+             + (f" con {position}" if position else "")]
+    allp = [t.pnl_points for t in closed or []]
+    if allp and per_pt:
+        wins = sum(1 for p in allp if p > 0.01)
+        lines.append(f"Récord {label}: {_n(len(allp))} · ganó {wins} · total {usd(sum(allp), per_pt)}"
+                     + after_fees(allp, per_pt, commission_per_trade(position)))
+    return (f"{_mark(pts)} {label} — cerrado: {why} {pts:+.2f} pts", "\n".join(lines),
+            0x2ECC71 if pts > 0.01 else (0x95A5A6 if pts >= -0.01 else 0xE74C3C))

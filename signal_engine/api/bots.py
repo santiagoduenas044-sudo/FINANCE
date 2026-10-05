@@ -15,8 +15,8 @@ from pathlib import Path
 import pandas as pd
 
 from ..output.record import commission_per_trade
-from ..versions import (BOT_VERSIONS, STRATEGIES, current_version, ghost_version_of,
-                        orbit_version_of, version_title)
+from ..versions import (BOT_VERSIONS, MAIN_SETUP, STRATEGIES, current_version,
+                        ghost_version_of, main_setup_label, orbit_version_of, version_title)
 
 NY = "America/New_York"
 log = logging.getLogger(__name__)
@@ -103,13 +103,14 @@ def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None
         s_closed = [t for t in (tr.closed_trades if tr is not None else [])
                     if t.closed_at is not None and t.instrument == sym]
         on = is_on("ghost", spec, base)
-        now_txt = "Apagada." if not on else ("Encendiéndose…" if rt is None else "Sin trade abierto.")
+        now_txt = "Apagado." if not on else ("Encendiéndose…" if rt is None else "Sin trade abierto.")
         if s_open and rt is not None:
             t = s_open[0]
             now_txt = (f"{'Compra' if t.direction == 'LONG' else 'Venta'} abierta en {_px(t.entry)}"
                        f" · va {t.pnl_points:+.2f} pts ({_usd(t.pnl_points * pv)})")
         out.append({
-            "id": spec.id, "name": spec.name, "about": spec.about, "version": spec.version,
+            "id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
+            "about": spec.about, "version": spec.version,
             "enabled": on, "running": rt is not None, "now": now_txt,
             "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2)
             if s_open and rt is not None else None,
@@ -189,7 +190,8 @@ def ghost_card(runtime, now: pd.Timestamp, shadows_dir: Path | None = None) -> d
     variants = ghost_variants(runtime, sym, pv, today, shadows_dir)
     return {
         "variants": variants,
-        "name": "GHOST", "color": "gold",
+        "name": "GHOST", "color": "gold", "setup": MAIN_SETUP["GHOST"],
+        "setup_label": main_setup_label("GHOST"),
         "strategy": version_title("GHOST", current_version("GHOST")).split(" · ")[0],
         "position": label,
         "status": status, "state": state, "symbol": sym,
@@ -239,9 +241,10 @@ def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
             now_txt = "Todavía no ha corrido (arranca con ORBIT)."
         on = is_on("orbit", spec, shadows_dir or SHADOWS_DIR)
         if not on:
-            now_txt = "Apagada."
+            now_txt = "Apagado."
         usd = [float(c.get("usd", 0)) for c in bot.closed]
-        out.append({"id": spec.id, "name": spec.name, "about": spec.about, "now": now_txt,
+        out.append({"id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
+                    "about": spec.about, "now": now_txt,
                     "version": spec.version, "enabled": on,
                     "open_usd": open_usd,
                     "today": _record([float(c.get("usd", 0)) for c in bot.closed
@@ -256,6 +259,7 @@ def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | No
     store_dir = Path(store_dir or STORE_DIR)
     s = settings()
     base = {"name": bot_name(), "color": "violet", "strategy": "APERTURA",
+            "setup": MAIN_SETUP["ORBIT"], "setup_label": main_setup_label("ORBIT"),
             "position": s.position, "fee_per_trade": commission_per_trade(s.position),
             "variants": orbit_variants(shadows_dir, now)}
     state_file = store_dir / "apertura_state.json"
@@ -375,9 +379,46 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
             bots.append(_broken(name, color, exc))
     totals = {b["name"]: b["total"]["net_usd"] or 0 for b in bots}
     return _clean({"now": now.isoformat(), "commit": commit or {}, "bots": bots,
+                   "setups": setup_rows(bots),
                    "strategies": strategy_cards(bots, lab_dir),
                    "combined_usd": round(sum(totals.values()), 2),
                    "news": news_today(getattr(runtime, "news", None), now)})
+
+
+def setup_rows(bots: list[dict]) -> list[dict]:
+    """The set ups' control table: every strategy that trades (the bots
+    themselves and their parallel set ups) in number order, with what it is
+    doing now, today and its total (the main ones: the version in use)."""
+    rows = []
+    for b in bots:
+        if b.get("setup"):
+            main = b.get("main") or {}
+            now = (b.get("now") or [{}])[0].get("text", "")
+            rows.append({"setup": b["setup"], "label": b.get("setup_label") or b["name"],
+                         "bot": b["name"], "kind": "main", "on": b.get("status") == "ONLINE",
+                         "now": now, "open_usd": b.get("open_usd"),
+                         "today": main.get("today") or b.get("today"),
+                         "total": main.get("total") or b.get("total")})
+        for v in b.get("variants") or []:
+            rows.append({"setup": v.get("setup") or 99, "label": v["name"], "bot": b["name"],
+                         "kind": "variant", "id": v["id"], "on": v["enabled"],
+                         "now": v.get("now", ""), "open_usd": v.get("open_usd"),
+                         "today": v.get("today"), "total": v.get("total")})
+    return sorted(rows, key=lambda r: r["setup"])
+
+
+def setups_text(rows: list[dict]) -> str:
+    """!setups on Discord: one line per set up."""
+    def money(rec):
+        if not rec or not rec.get("n"):
+            return "sin trades"
+        return f"{rec['n']} {'trade' if rec['n'] == 1 else 'trades'} {_usd(rec['net_usd'])}"
+    out = ["📋 **Set ups** (en papel · mismo mercado)"]
+    for r in rows:
+        dot = "🟢" if r["on"] else "⚪"
+        out.append(f"{dot} **{r['label']}** ({r['bot']}) · hoy {money(r['today'])} · "
+                   f"total {money(r['total'])}\n　{r['now'] or ('Apagado.' if not r['on'] else '')}")
+    return "\n".join(out)
 
 
 def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
@@ -397,7 +438,8 @@ def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
                 if v is None or (not v["n"] and not v.get("current")):
                     continue
                 parts.append({"kind": "real", "bot": bot, "version": vid,
-                              "name": f"{bot} {vid} · en vivo{' (ahora)' if v.get('current') else ''}",
+                              "name": (f"Set up {MAIN_SETUP[bot]} · {bot} {vid} (ahora)"
+                                       if v.get("current") else f"{bot} {vid} (antes)"),
                               "n": v["n"], "net_usd": v["net_usd"]})
         on = []
         for sid in st.get("shadows") or []:
@@ -406,7 +448,7 @@ def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
             bot, v = variants[sid]
             on.append(v["enabled"])
             parts.append({"kind": "paper", "bot": bot, "variant": sid,
-                          "name": f"en paralelo{'' if v['enabled'] else ' (apagada)'}",
+                          "name": f"Set up {v.get('setup') or '?'}{'' if v['enabled'] else ' (apagado)'}",
                           "enabled": v["enabled"],
                           "n": v["total"]["n"], "net_usd": v["total"]["net_usd"]})
         status = st["status"]
@@ -416,7 +458,11 @@ def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
         if parts:
             live = {"n": sum(p["n"] for p in parts),
                     "net_usd": round(sum(p["net_usd"] or 0 for p in parts), 2), "detail": parts}
-        card = {**st, "status": status, "live": live}
+        setups = [MAIN_SETUP[bot] for bot, vids in (st.get("real") or {}).items()
+                  if bot in MAIN_SETUP and current_version(bot) in vids]
+        setups += [variants[sid][1].get("setup") for sid in st.get("shadows") or []
+                   if sid in variants and variants[sid][1].get("setup")]
+        card = {**st, "status": status, "live": live, "setups": setups}
         if st.get("lab_prefix"):
             card["lab_run"] = lab_summary(lab, st["lab_prefix"])
         out.append(card)
@@ -519,6 +565,7 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
     label, pv = next(iter(pos.items())) if pos else (f"1 punto {sym}", 1.0)
     fee = commission_per_trade(label)
     sources.append({"id": "ghost", "bot": "GHOST", "kind": "main", "name": "GHOST",
+                    "setup": MAIN_SETUP["GHOST"], "setup_label": main_setup_label("GHOST"),
                     "position": label, "fee": fee,
                     "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["GHOST"]],
                     "current": current_version("GHOST")})
@@ -532,7 +579,8 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
             d = store_dir("ghost", spec.id, base) / "paper"
             tr = PaperTradeTracker(store_dir=d) if d.exists() else None
         src = f"ghost:{spec.id}"
-        sources.append({"id": src, "bot": "GHOST", "kind": "variant", "name": spec.name,
+        sources.append({"id": src, "bot": "GHOST", "kind": "variant", "name": spec.label,
+                        "setup": spec.setup,
                         "about": spec.about, "enabled": is_on("ghost", spec, base),
                         "position": label, "fee": fee})
         trades += _ghost_rows(tr, sym, pv, fee, src, version=spec.version or "paralelo")
@@ -541,6 +589,7 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
     s = settings()
     odir = Path(orbit_dir or STORE_DIR)
     sources.append({"id": "orbit", "bot": "ORBIT", "kind": "main", "name": bot_name(),
+                    "setup": MAIN_SETUP["ORBIT"], "setup_label": main_setup_label("ORBIT"),
                     "position": s.position, "fee": 0,
                     "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["ORBIT"]],
                     "current": current_version("ORBIT")})
@@ -548,7 +597,8 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
         trades += _orbit_rows(OpeningRangeBot(odir, settings=s), "orbit")
     for spec in load_specs("orbit"):
         src = f"orbit:{spec.id}"
-        sources.append({"id": src, "bot": "ORBIT", "kind": "variant", "name": spec.name,
+        sources.append({"id": src, "bot": "ORBIT", "kind": "variant", "name": spec.label,
+                        "setup": spec.setup,
                         "about": spec.about, "enabled": is_on("orbit", spec, base),
                         "position": s.position, "fee": 0})
         d = store_dir("orbit", spec.id, base)

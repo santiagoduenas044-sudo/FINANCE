@@ -75,7 +75,7 @@ def test_daily_record_once_after_the_flat():
 def test_record_command_on_discord():
     rt = _runtime(_tracker(), [])
     out = build_reply("!record", rt)
-    assert out.startswith("📒 **Récord · GHOST v4 IMÁN 15 · 5 MNQ**")
+    assert out.startswith("📒 **Récord · Set up 1 · IMÁN 15 (GHOST v4) · 5 MNQ**")
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
@@ -119,4 +119,4 @@ def test_daily_record_uses_the_current_version(tmp_path):
     tr = _tracker()
     rt = _runtime(tr, sent)
     rt._maybe_daily_record("NQ", _t("2026-09-29 16:57"))
-    assert "GHOST v4 IMÁN 15" in sent[0][1] and "Versiones anteriores" in sent[0][1]
+    assert "Set up 1 · IMÁN 15 (GHOST v4)" in sent[0][1] and "Versiones anteriores" in sent[0][1]

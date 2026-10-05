@@ -703,6 +703,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
     <div class="sbh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg><b>Tus bots</b></div>
     <div class="sbrow"><span class="dot" id="sb-ghost-dot"></span>GHOST<span class="sbv" id="sb-ghost">—</span></div>
     <div class="sbrow"><span class="dot" id="sb-orbit-dot"></span>ORBIT<span class="sbv" id="sb-orbit">—</span></div>
+    <div class="sbrow"><span class="dot" id="sb-setups-dot"></span>Set ups<span class="sbv" id="sb-setups">—</span></div>
     <button type="button" class="sbbtn" data-go="bots">Ver central de bots →</button>
   </div>
   <div class="sbuser" id="sb-user" hidden><span class="av" id="sb-av">·</span><span class="who"><b id="sb-name"></b><small id="sb-role"></small></span>
@@ -762,7 +763,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
       <div class="sum" id="hub-sum"></div>
     </div>
     <div class="newsbar" id="hub-news" hidden></div>
-    <div class="card mb" id="hub-sumcard" hidden><h3>Resumen <span class="r">cada bot y sus versiones en paralelo</span></h3>
+    <div class="card mb" id="hub-sumcard" hidden><h3>Set ups <span class="r">en papel · avisan en Discord al entrar y salir</span></h3>
       <div class="scroll" style="max-height:none"><table class="sumt" id="hub-table"></table></div></div>
     <div class="bots" id="hub-bots"><div class="card"><div class="empty">Cargando…</div></div></div>
     <div class="card"><h3>Estrategias <span class="r">en vivo, en estudio y descartadas por el laboratorio</span></h3>
@@ -1406,18 +1407,21 @@ function renderBots() {
     : `<span class="zero">sin trades</span>`) + (open != null ? `<span class="sub">abierto ${usd0(open)}</span>` : "");
   const dotc = b => b.color === "violet" ? "var(--violet)" : "var(--amber)";
   $("hub-sumcard").hidden = false;
-  $("hub-table").innerHTML = `<thead><tr><th>Bot</th><th>Estrategia</th><th class="hide-s">Tamaño</th><th class="hide-s">Estado</th>
-      <th class="hide-s">Laboratorio (5 años)</th><th>En papel</th></tr></thead><tbody>` + d.bots.map(b => {
-    const main = b.main || { title: b.strategy, total: b.total };
-    const row = `<tr class="go" data-hist="${b.name.toLowerCase()}${main.version ? "@" + main.version : ""}"><td><span class="who"><i style="background:${dotc(b)}"></i>${esc(b.name)}</span><span class="sub">principal · avisa en Discord</span></td>
-      <td>${esc(main.version ? main.version + " · " + main.title : main.title)}</td><td class="hide-s t">${esc(b.position)}</td>
-      <td class="hide-s">${esc(STATE_ES[b.state] || b.state)}</td><td class="lab hide-s">${esc(labOf(b.name))}</td>
-      <td class="t">${paper(main.total, b.open_usd)}</td></tr>`;
-    return row + (b.variants || []).map(v => `<tr class="child go ${v.enabled ? "" : "off"}" data-hist="${b.name.toLowerCase()}:${esc(v.id)}">
-      <td><span class="who"><i style="background:${dotc(b)};opacity:.5"></i>${esc(b.name)}</span><span class="sub">en paralelo · ${v.enabled ? "prendida" : "apagada"}</span></td>
-      <td>${esc(v.name)}</td><td class="hide-s t">${esc(b.position)}</td>
-      <td class="hide-s">${v.enabled ? (v.open_usd != null ? "Operando" : "Prendida") : "Apagada"}</td>
-      <td class="lab hide-s">${esc(labOf(b.name, v.id))}</td><td class="t">${paper(v.total, v.open_usd)}</td></tr>`).join("");
+  const byBot = Object.fromEntries(d.bots.map(b => [b.name, b]));
+  $("hub-table").innerHTML = `<thead><tr><th>Set up</th><th class="hide-s">Bot</th><th class="hide-s">Ahora</th>
+      <th>Hoy</th><th>Total</th><th class="hide-s">Laboratorio (5 años)</th><th style="text-align:center">On</th></tr></thead><tbody>` + (d.setups || []).map(r => {
+    const b = byBot[r.bot] || {}, bot = r.bot.toLowerCase();
+    const sel = r.kind === "main" ? bot + (b.main?.version ? "@" + b.main.version : "") : `${bot}:${r.id}`;
+    const state = r.kind === "main" ? (STATE_ES[b.state] || b.state) : !r.on ? "Apagado" : r.open_usd != null ? "Operando" : "Prendido";
+    const [num, ...code] = r.label.split(" · ");
+    return `<tr class="go ${r.on ? "" : "off"}" data-hist="${esc(sel)}">
+      <td><span class="who"><i style="background:${dotc(b)}${r.kind === "main" ? "" : ";opacity:.55"}"></i>${esc(num)}</span><span class="sub"><b>${esc(code.join(" · "))}</b> · ${esc(state)}</span></td>
+      <td class="hide-s t">${esc(r.bot)}${r.kind === "main" ? "" : " · paralelo"}</td>
+      <td class="hide-s" style="max-width:280px;font-size:13px;color:var(--ink-2)">${esc(r.now || "—")}</td>
+      <td class="t">${paper(r.today, r.open_usd)}</td><td class="t">${paper(r.total)}</td>
+      <td class="lab hide-s">${esc(labOf(r.bot, r.kind === "main" ? null : r.id))}</td>
+      <td style="text-align:center">${r.kind === "main" ? '<span class="badge good">principal</span>'
+        : `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(r.id)}" aria-pressed="${r.on}" aria-label="${r.on ? "Apagar" : "Encender"} ${esc(r.label)}"></button>`}</td></tr>`;
   }).join("") + "</tbody>";
   const nw = d.news || {};
   $("hub-news").hidden = false;
@@ -1445,10 +1449,10 @@ function renderBots() {
           v.current && b.open_usd != null ? `<span class="pa ${cls(b.open_usd)}">abierto ${usd0(b.open_usd)}</span>` : ""}</td>
         <td style="text-align:center">${v.current ? '<span class="badge good">principal</span>'
           : v.variant ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.variant)}" aria-pressed="${v.variant_on}"
-              aria-label="${v.variant_on ? "Apagar" : "Encender"} ${esc(v.version)} en paralelo"></button>` : '<span class="zero">—</span>'}</td></tr>`).join("");
+              aria-label="${v.variant_on ? "Apagar" : "Encender"} ${esc(v.version)} como set up"></button>` : '<span class="zero">—</span>'}</td></tr>`).join("");
     return `<div class="card bot ${b.color === "violet" ? "violet" : ""}">
       <div class="hd"><span class="av">${b.name === "GHOST" ? '<img src="/static/ghost.png" alt="">' : esc(b.name[0])}</span>
-        <div><div class="nm">${esc(b.name)}</div><div class="st">${esc(b.strategy)} · ${esc(b.position)} · papel</div></div>
+        <div><div class="nm">${esc(b.name)}</div><div class="st">${esc(b.setup_label || b.strategy)} · ${esc(b.position)} · papel</div></div>
         <div class="r"><span class="state ${esc(b.state)}"><span class="dot ${b.state === "trading" || b.state === "scanning" ? "ok" : b.state === "off" ? "bad" : b.state === "stale" || b.state === "paused" ? "warn" : ""}"></span>${STATE_ES[b.state] || esc(b.state)}</span>
           <span class="beat">${b.heartbeat ? "latido " + ago(b.heartbeat) : ""}</span></div></div>
       <div class="kpis">
@@ -1466,7 +1470,7 @@ function renderBots() {
       <h4>Versiones</h4>
       <div class="vers scroll"><table><thead><tr><th></th><th>Qué cambió</th><th class="hide-s">Desde</th>
         <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th>
-        <th style="text-align:center">En paralelo</th></tr></thead>
+        <th style="text-align:center">Como set up</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
     </div>`;
   }).join("");
@@ -1481,7 +1485,7 @@ function renderBots() {
       return `<button type="button" class="det" data-hist="${esc(sel)}">· ${esc(p.name)}: ${p.n} ${p.n === 1 ? "trade" : "trades"} · <span class="${cls(p.n ? p.net_usd : null)}">${p.n ? usd0(p.net_usd) : "—"}</span> ›</button>`;
     }).join("");
     return `<div class="strat"><div class="t1"><span class="stag ${SK[st.status] || "gone"}">${esc(st.status)}</span>
-        <b class="code">${esc(st.code || st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span></div>
+        <b class="code">${esc(st.code || st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span>${(st.setups || []).map(n => `<span class="btag labt">Set up ${n}</span>`).join("")}</div>
       <span class="sname">${esc(st.name)}</span>
       <p>${esc(st.text)}</p>
       <div class="lab">Laboratorio: ${esc(st.lab)}${lr ? `<div class="labrun">Última prueba: ${lr.passed} de ${lr.variants} variantes ✔${best ? `<br>Mejor: ${esc(best.name.split(" · ").slice(1).join(" · "))} · ${best.n} trades · <span class="${cls(best.net_usd)}">${usd0(best.net_usd)}</span>${best.test_avg != null ? ` · ${usd0(best.test_avg)}/trade en 2024–26` : ""}` : ""}</div>` : ""}${
@@ -1500,7 +1504,7 @@ function lastStrip(b) {
 }
 
 function parTable(b) {
-  const vs = b.variants || [];
+  const vs = (b.variants || []).slice().sort((x, y) => (x.setup || 99) - (y.setup || 99));
   if (!vs.length) return "";
   const R = 'style="text-align:right"';
   const bot = b.name === "GHOST" ? "ghost" : "orbit";
@@ -1514,10 +1518,10 @@ function parTable(b) {
       <td class="num" ${R}>${a.n || "—"}</td>
       <td class="num hide-s" ${R}>${a.n ? Math.round(a.win_rate * 100) + "%" : "—"}</td></tr>`;
   const mainNow = (b.now.find(l => l.kind === "trade") || {}).text || "Sin trade abierto.";
-  return `<h4>En paralelo · mismo mercado, solo papel · prende las que quieras</h4>
-    <div class="vers scroll"><table class="par-t"><thead><tr><th>Versión</th><th style="text-align:right">Hoy</th>
+  return `<h4>Set ups · en papel, avisan en Discord · prende los que quieras</h4>
+    <div class="vers scroll"><table class="par-t"><thead><tr><th>Set up</th><th style="text-align:right">Hoy</th>
       <th style="text-align:right">Total</th><th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
-      <tbody>${row(b.main ? `${b.main.version} · ${b.main.title}` : b.strategy, "", mainNow,
+      <tbody>${row(b.setup_label || (b.main ? `${b.main.version} · ${b.main.title}` : b.strategy), "", mainNow,
         b.main?.today || b.today, b.main?.total || b.total, b.open_usd, true)}
       ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false, v)).join("")}</tbody></table></div>`;
 }
@@ -1560,11 +1564,12 @@ function hSources() {
     if (so.kind === "main") {
       out.push({ sel: so.id, label: "Todo lo real", sub: so.position, group: "real", about:
         `${so.name}: todos sus trades reales (los que avisó en Discord), de todas sus versiones.` });
-      for (const v of so.versions.slice().reverse()) out.push({ sel: `${so.id}@${v.version}`, label: `${v.version} · ${v.title.split(" · ")[0]}`,
+      for (const v of so.versions.slice().reverse()) out.push({ sel: `${so.id}@${v.version}`,
+        label: v.version === so.current && so.setup_label ? so.setup_label : `${v.version} · ${v.title.split(" · ")[0]}`,
         group: "real", about: `${so.name} ${v.version} — ${v.title}${v.version === so.current ? " (la que usa ahora)" : ""}.` });
     } else {
-      out.push({ sel: so.id, label: so.name.split(" · ")[0], group: "par", off: !so.enabled,
-        about: `En paralelo (solo papel, sin Discord) — ${so.name}${so.enabled ? "" : " · apagada"}. ${so.about || ""}` });
+      out.push({ sel: so.id, label: so.name, group: "par", off: !so.enabled,
+        about: `${so.name}: en papel, mismo mercado, avisa en Discord${so.enabled ? "" : " (apagado)"}. ${so.about || ""}` });
     }
   }
   return out;
@@ -1584,7 +1589,7 @@ function renderHistory() {
   let lastGroup = null;
   $("h-src").innerHTML = srcs.map(x => {
     const n = hTrades(x.sel).length;
-    const head = x.group !== lastGroup ? `<span class="sep">${x.group === "real" ? "Lo que operó de verdad" : "En paralelo · solo papel"}</span>` : "";
+    const head = x.group !== lastGroup ? `<span class="sep">${x.group === "real" ? "Lo que operó de verdad" : "Set ups en paralelo"}</span>` : "";
     lastGroup = x.group;
     return head + `<button type="button" class="${x.group === "par" ? "par" : ""}" data-sel="${esc(x.sel)}" aria-pressed="${x.sel === H.sel}"
       title="${esc(x.about)}">${esc(x.label)}<span class="n">${n}${x.off ? " · off" : ""}</span></button>`;
@@ -2818,6 +2823,9 @@ function renderKpis() {
 /* la tarjeta de bots del menú lateral */
 function paintSidebar() {
   const d = S.bots;
+  const su = d?.setups || [], on = su.filter(r => r.on).length;
+  if ($("sb-setups")) { $("sb-setups").innerHTML = su.length ? `<span class="zero">${on} de ${su.length} prendidos</span>` : "—";
+    $("sb-setups-dot").className = "dot " + (on ? "ok" : ""); }
   for (const [key, name] of [["ghost", "GHOST"], ["orbit", "ORBIT"]]) {
     const b = d?.bots?.find(x => x.name === name || (key === "orbit" && x.color === "violet"));
     const dot = $(`sb-${key}-dot`), v = $(`sb-${key}`);

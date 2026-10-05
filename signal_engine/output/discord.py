@@ -381,12 +381,17 @@ def _targets_line(tp1, final, ref=None, per_point: dict | None = None, *,
 
 # Short on purpose: a signal is read in a few seconds on a phone. Every line is
 # a number to act on; the rules behind them live in the strategy, not the text.
+def _tag(p: dict) -> str:
+    """"Set up 1 · IMÁN 15 · " before a bot's own titles (empty without a tag)."""
+    return f"{p['setup_tag']} · " if p.get("setup_tag") else ""
+
+
 def _build_trade_idea_payload(event: OutputEvent) -> dict:
     p = event.status_payload or {}
     num, sym = p.get("number", "?"), p.get("symbol", "?")
     side = _side(p.get("direction", "LONG"))
     if event.kind == "trade_idea_cancelled":
-        return _embed(f"⚪ IDEA #{num} CANCELADA — {sym}",
+        return _embed(f"⚪ {_tag(p)}IDEA #{num} CANCELADA — {sym}",
                       f"{p.get('reason', 'sin reacción').capitalize()}. Sin entrada.\n"
                       f"(Era la posible {side} en la zona {_px(p.get('bottom'))} – "
                       f"{_px(p.get('top'))}; no tiene que ver con otras ideas abiertas.)",
@@ -399,7 +404,7 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
         lines.append(_targets_line(plan["tp1"], plan.get("final"), p.get("mid"),
                                    p.get("usd_per_point")))
     lines.append("⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún.")
-    return _embed(f"🟡 IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
+    return _embed(f"🟡 {_tag(p)}IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
                   _IDEA_COLOR, event.disclaimer)
 
 
@@ -411,8 +416,8 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
     side = _side(direction)
     entry, stop = p.get("entry"), p.get("stop")
     mid = ctx.get("zone_mid", entry)
-    title = (f"⚡ SEÑAL DIRECTA #{num} — {side} · {sym}" if ctx.get("idea_direct")
-             else f"🟢 IDEA #{num} — {side} · {sym}")
+    title = (f"⚡ {_tag(p)}SEÑAL DIRECTA #{num} — {side} · {sym}" if ctx.get("idea_direct")
+             else f"🟢 {_tag(p)}IDEA #{num} — {side} · {sym}")
     risk = abs(mid - stop) if mid is not None and stop is not None else None
     lines = [f"✅ **Entra ahora {_px(entry)}** · óptima {_px(mid)}",
              f"🛑 SL {_px(stop)}" + (f" · ~{risk:.0f} pts{_usd(risk, ctx.get('usd_per_point'))}"
@@ -445,7 +450,7 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
                   for s, pv in sorted((ctx.get("usd_per_point") or {}).items(),
                                       key=lambda kv: kv[1]))
     return _embed(
-        f"{mark} IDEA #{num} — {label} · {pts:+.2f} pts",
+        f"{mark} {_tag(p)}IDEA #{num} — {label} · {pts:+.2f} pts",
         f"{_px(p.get('entry'))} → {_px(p.get('exit_price'))}{usd}",
         _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
         event.disclaimer)
@@ -454,7 +459,7 @@ def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
 def _build_trade_tp1_payload(event: OutputEvent) -> dict:
     p = event.status_payload or {}
     num = (p.get("context") or {}).get("idea_number")
-    name = f"IDEA #{num}" if num is not None else p.get("setup", "trade")
+    name = _tag(p) + (f"IDEA #{num}" if num is not None else p.get("setup", "trade"))
     entry, tp1 = p.get("entry"), p.get("tp1")
     gained = abs(tp1 - entry) if entry is not None and tp1 is not None else None
     frac = p.get("partial_fraction") or 0
@@ -495,7 +500,7 @@ def _build_day_done_payload(event: OutputEvent) -> dict:
 def _build_stop_moved_payload(event: OutputEvent) -> dict:
     p = event.status_payload or {}
     num = (p.get("context") or {}).get("idea_number")
-    name = f"IDEA #{num}" if num is not None else p.get("setup", "trade")
+    name = _tag(p) + (f"IDEA #{num}" if num is not None else p.get("setup", "trade"))
     entry, stop = p.get("entry"), p.get("stop")
     long = p.get("direction", "LONG") == "LONG"
     locked = (stop - entry) if long else (entry - stop)

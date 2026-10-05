@@ -150,8 +150,8 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
 
 
 def variant_lines(shadows, now, pv: float, position: str) -> list[str]:
-    """One line per parallel variant switched on: what it did today (paper
-    only, no Discord of its own) and its total, so the day's message
+    """One line per parallel set up switched on: what it did today (paper
+    only) and its total, so the day's message
     compares them with the main version."""
     fee = commission_per_trade(position)
     day = trading_day(now)
@@ -163,11 +163,11 @@ def variant_lines(shadows, now, pv: float, position: str) -> list[str]:
         closed = [t for t in tr.closed_trades if t.closed_at is not None]
         today = [t.pnl_points for t in closed if trading_day(t.closed_at) == day]
         allp = [t.pnl_points for t in closed]
-        name = str(getattr(spec, "name", spec)).split(" · ")[0]
+        name = getattr(spec, "label", None) or str(getattr(spec, "name", spec)).split(" · ")[0]
         now_txt = f"hoy {_n(len(today))} {usd(sum(today), pv)}" if today else "hoy sin trades"
         tot = f" · total {_n(len(allp))} {usd(sum(allp), pv)}" if allp else ""
         net = after_fees(allp, pv, fee) if allp else ""
         out.append(f"∥ **{name}**: {now_txt}{tot}{net}")
     if out:
-        out.insert(0, "**En paralelo** (solo papel, mismo mercado)")
+        out.insert(0, "**Los otros set ups** (en papel, mismo mercado)")
     return out
