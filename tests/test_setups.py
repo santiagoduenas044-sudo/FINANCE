@@ -133,3 +133,52 @@ def test_control_table_lists_every_set_up_in_order():
     text = setups_text(rows)
     assert "🟢 **Set up 1 · IMÁN 15** (GHOST) · hoy 2 trades +$150" in text
     assert "⚪ **Set up 3 · IMÁN 1**" in text
+
+
+def test_ghost_set_up_alerts_carry_a_chart(tmp_path):
+    """Set ups 3, 4, 5 and 9 send their entry and exit with a chart, like Set up 1."""
+    from types import MethodType, SimpleNamespace
+    from signal_engine.config.schema import EngineConfig
+    from signal_engine.runtime.engine import BotRuntime
+
+    idx = pd.date_range(T0 - pd.Timedelta(minutes=59), periods=60, freq="1min")
+    one = pd.DataFrame({"open": 20_000.0, "high": 20_010.0, "low": 19_990.0,
+                        "close": 20_000.0}, index=idx)
+    spec = ShadowSpec(id="zonas_1m_noche", name="IMÁN 1 NOCHE", setup=4)
+    shadow = _FakeRuntime(tmp_path)
+    shadow._point_values = lambda s: {"5 MNQ": 10.0}
+    sent = []
+    main = SimpleNamespace(data_engine=SimpleNamespace(cfg=EngineConfig.load(strategy="zones")),
+                           output_dispatcher=SimpleNamespace(
+                               publish_note=lambda **kw: sent.append(kw)),
+                           _point_values=lambda s: {"5 MNQ": 10.0})
+    for name in ("_shadow_alert", "_shadow_chart", "_trade_chart", "_close_chart"):
+        setattr(main, name, MethodType(getattr(BotRuntime, name), main))
+    main._close_title = BotRuntime._close_title
+    run_ghost_shadows([(spec, shadow)], "NQ", {"1m": one}, T0, notify=main._shadow_alert)
+    shadow.paper_tracker.update_symbol("NQ", _bar(1.0, 1.0, -1.0, -1.0),
+                                       T0 + pd.Timedelta(minutes=1))
+    trade = shadow.paper_tracker.closed_trades[-1]
+    main._shadow_alert(spec, shadow, "close", trade)
+    assert [s["key"].rsplit(":", 1)[-1] for s in sent] == ["open", "close"]
+    assert all(s["image"] and s["image"].startswith(b"\x89PNG") for s in sent)
+
+
+def test_a_set_up_alert_without_bars_still_goes_out():
+    from types import MethodType, SimpleNamespace
+    from signal_engine.config.schema import EngineConfig
+    from signal_engine.runtime.engine import BotRuntime
+
+    sent = []
+    main = SimpleNamespace(data_engine=SimpleNamespace(cfg=EngineConfig.load(strategy="zones")),
+                           output_dispatcher=SimpleNamespace(
+                               publish_note=lambda **kw: sent.append(kw)),
+                           _point_values=lambda s: None)
+    for name in ("_shadow_alert", "_shadow_chart", "_trade_chart"):
+        setattr(main, name, MethodType(getattr(BotRuntime, name), main))
+    shadow = SimpleNamespace(_point_values=lambda s: None, paper_tracker=None)
+    trade = PaperTradeTracker().open_trade(signal_id="x", instrument="NQ", direction="SHORT",
+                                           setup="zone_retrace", entry=1.0, stop=2.0,
+                                           take_profits=[0.0], opened_at=T0)
+    main._shadow_alert(ShadowSpec(id="z", name="IMÁN 1", setup=3), shadow, "open", trade)
+    assert len(sent) == 1 and sent[0]["image"] is None

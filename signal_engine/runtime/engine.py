@@ -351,8 +351,26 @@ class BotRuntime:
         closed = getattr(getattr(rt, "paper_tracker", None), "closed_trades", None)
         title, text, color = alert_note(spec.label, kind, trade, pv, closed,
                                         about=getattr(spec, "about", ""))
+        png = self._shadow_chart(spec, rt, kind, trade)
         self.output_dispatcher.publish_note(title=title, text=text, color=color,
-                                            key=f"setup:{spec.id}:{trade.signal_id}:{kind}")
+                                            key=f"setup:{spec.id}:{trade.signal_id}:{kind}",
+                                            image=png)
+
+    def _shadow_chart(self, spec, rt, kind: str, trade) -> bytes | None:
+        """The set up's own trade drawn like Set up 1's: entry, stop and
+        target, and where it exited. None if it can't be drawn (the message
+        still goes out)."""
+        bars = getattr(rt, "_shadow_bars", None)
+        try:
+            side = "COMPRA" if trade.direction == "LONG" else "VENTA"
+            if kind == "open":
+                return self._trade_chart(bars, trade, f"{spec.label} · {trade.instrument} · "
+                                                      f"{side} · entrada")
+            return self._trade_chart(bars, trade, f"{spec.label} · "
+                                     + self._close_title(trade, trade.instrument))
+        except Exception as exc:  # noqa: BLE001 - a chart is never worth a message
+            log.warning("set up %s chart failed (%s)", spec.id, type(exc).__name__)
+            return None
 
     def _tag(self, d: dict) -> dict:
         return {**d, "setup_tag": self.setup_tag} if self.setup_tag else d
@@ -953,6 +971,11 @@ class BotRuntime:
 
     def _close_chart(self, bars, trade, symbol: str) -> bytes | None:
         """Chart of a closed trade, titled with how it closed."""
+        return self._trade_chart(bars, trade, self._close_title(trade, symbol))
+
+    @staticmethod
+    def _close_title(trade, symbol: str) -> str:
+        """'IDEA #7 · NQ · cerró en objetivo · +50.00 pts'."""
         d = trade.to_dict()
         reason = (d.get("exit_reason") or "").upper()
         pts = d.get("pnl_points") or 0.0
@@ -961,9 +984,8 @@ class BotRuntime:
         if reason == "STOP" and pts >= 0:
             label = "BE+" if pts > 0.01 else "breakeven"
         num = (d.get("context") or {}).get("idea_number")
-        title = (f"IDEA #{num} · " if num is not None else "") + \
+        return (f"IDEA #{num} · " if num is not None else "") + \
             f"{symbol} · cerró en {label} · {pts:+.2f} pts"
-        return self._trade_chart(bars, trade, title)
 
     def status_charts(self) -> list[bytes]:
         """For !status: a chart of each open trade, or of the market right

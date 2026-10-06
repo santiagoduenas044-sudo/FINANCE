@@ -186,7 +186,9 @@ def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_t
     own bars, so the variants judge the same market). Bars that close after
     `decision_time` (a still-forming 5m/15m candle) are cut, and a variant
     whose own candle has not changed since last time is not run again.
-    `notify(spec, rt, kind, trade)` hears every entry and exit."""
+    `notify(spec, rt, kind, trade)` hears every entry and exit; the 1-minute
+    bars it judged (or its own candles) are left in `rt._shadow_bars` so the
+    message can carry a chart."""
     if decision_time is not None:
         tf_bars = {tf: df[df.index <= decision_time] for tf, df in tf_bars.items()}
     for spec, rt in shadows:
@@ -204,6 +206,8 @@ def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_t
             tracker = getattr(rt, "paper_tracker", None)
             before = _snapshot(tracker)
             rt.run_cycle(symbol, tf_bars)
+            one = tf_bars.get("1m")
+            rt._shadow_bars = one if one is not None and not one.empty else bars
             if notify is not None:
                 for kind, trade in trade_events(tracker, *before):
                     try:
