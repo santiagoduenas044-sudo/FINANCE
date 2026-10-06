@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from pathlib import Path
 
@@ -551,6 +552,8 @@ def _ghost_rows(tracker, sym: str, pv: float, fee: float, src: str, version=None
                     "side": t.direction, "entry": t.entry, "exit": t.exit_price,
                     "pts": round(t.pnl_points, 2), "usd": round(usd, 2),
                     "net_usd": round(usd - fee, 2),
+                    # per contract, after commission: what 1 MNQ would have made
+                    "net_pts": round(t.pnl_points - (fee / pv if pv else 0.0), 2),
                     "why": getattr(t.exit_reason, "value", None) or "",
                     "idea": (t.context or {}).get("idea_number")})
     return out
@@ -566,7 +569,7 @@ def _orbit_rows(bot, src: str, version=None) -> list[dict]:
                     "day": c.get("day") or _ny(c["closed_at"]).date().isoformat(),
                     "opened_at": _iso(c.get("opened_at")), "closed_at": _iso(c["closed_at"]),
                     "side": "LONG" if c.get("long") else "SHORT", "entry": c.get("entry"),
-                    "exit": c.get("exit"), "pts": c.get("pts"),
+                    "exit": c.get("exit"), "pts": c.get("pts"), "net_pts": c.get("net_pts"),
                     # ORBIT's dollars already have commission and slippage out
                     "usd": round(usd, 2), "net_usd": round(usd, 2),
                     "why": c.get("why", ""), "size": f"{c.get('contracts', '')} {c.get('symbol', '')}".strip()})
@@ -642,7 +645,64 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
                 rules = s
             trades += _orbit_rows(OpeningRangeBot(d, settings=rules), src, version="paralelo")
     trades.sort(key=lambda t: t["closed_at"] or "")
+    for so in sources:
+        mine = [t for t in trades if t["src"] == so["id"]
+                and (so["kind"] != "main" or t["version"] == so.get("current"))]
+        so["fondeo"] = {**funded_check(mine), "position": so.get("position")}
     return _clean({"sources": sources, "trades": trades})
+
+
+# --------------------------------------------------------------------------- #
+# would this set up survive a funded account? (its own trades only)
+# --------------------------------------------------------------------------- #
+FUNDED_ACCOUNT = os.environ.get("BOT_FONDEO_CUENTA", "25K")
+MNQ_PER_POINT = 2.0
+MIN_TRADES = 20                     # fewer than this: too early to trust
+
+
+def _funded_limit() -> float:
+    try:
+        return float(os.environ.get("BOT_FONDEO_LIMITE", "") or 1500)
+    except ValueError:
+        return 1500.0
+
+
+def funded_check(trades: list[dict], limit: float | None = None) -> dict:
+    """One set up's closed trades (in close order) against a funded account
+    that is lost after `limit` dollars of drawdown (25K: $1,500).
+
+    - worst trade, worst day and the biggest drop from a high, in the
+      dollars of the size it traded (commissions out);
+    - the same drop for 1 MNQ, and how many MNQ fit under the limit with it.
+    Never mixes set ups: the caller passes one set up's trades."""
+    limit = _funded_limit() if limit is None else limit
+    out = {"account": FUNDED_ACCOUNT, "limit_usd": limit, "n": len(trades),
+           "few": len(trades) < MIN_TRADES}
+    if not trades:
+        return {**out, "fits": None}
+
+    def drop(values):
+        eq = peak = dd = 0.0
+        for v in values:
+            eq += v
+            peak = max(peak, eq)
+            dd = max(dd, peak - eq)
+        return dd
+
+    usd = [t.get("net_usd") or 0.0 for t in trades]
+    by_day: dict[str, float] = {}
+    for t, u in zip(trades, usd):
+        by_day[t.get("day") or ""] = by_day.get(t.get("day") or "", 0.0) + u
+    one = [(t.get("net_pts") if t.get("net_pts") is not None else t.get("pts") or 0.0)
+           * MNQ_PER_POINT for t in trades]
+    dd, dd_one = drop(usd), drop(one)
+    return {**out,
+            "worst_trade_usd": round(min(min(usd), 0.0), 2),
+            "worst_day_usd": round(min(min(by_day.values()), 0.0), 2),
+            "max_dd_usd": round(dd, 2),
+            "max_dd_1mnq_usd": round(dd_one, 2),
+            "fits": dd < limit,
+            "mnq": int(limit // dd_one) if dd_one > 0 else None}
 
 
 def news_today(calendar, now) -> dict:

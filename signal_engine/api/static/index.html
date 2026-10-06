@@ -738,6 +738,14 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 .sucard .sv b { font: 700 16px var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sucard .sv small { font: 500 10.5px var(--mono); color: var(--ink-3); }
 .sucard .sf { font: 500 11px var(--mono); color: var(--ink-3); }
+.sucard .sfo { display: flex; flex-direction: column; gap: 3px; padding-top: 9px;
+  border-top: 1px solid var(--rule); font: 500 11px var(--mono); color: var(--ink-2); }
+.sucard .sfo b { font: 700 11.5px var(--sans); color: var(--ink-1); }
+.sucard .sfo b::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+  border-radius: 50%; vertical-align: 1px; background: var(--ink-3); }
+.sucard .sfo.ok b::before { background: var(--good); }
+.sucard .sfo.bad b::before { background: var(--critical); }
+.sucard .sfo small { color: var(--ink-3); font-size: 10.5px; }
 @media (max-width: 760px) { .sugrid { grid-template-columns: minmax(0, 1fr); gap: 10px; } .sucard .sv b { font-size: 15px; } }
 
 /* ── diario (Panel): saludo, resumen del mes, indicadores y calendario ── */
@@ -3204,7 +3212,7 @@ const money2 = v => `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US"
 function jSetups() {                       // [{n, label, id, current, kind}] in number order
   return ((S.tlog || {}).sources || []).filter(so => so.setup)
     .map(so => ({ n: so.setup, label: so.setup_label || so.name, id: so.id, current: so.current, kind: so.kind,
-      on: so.kind === "main" || so.enabled !== false }))
+      on: so.kind === "main" || so.enabled !== false, fo: so.fondeo }))
     .sort((a, b) => a.n - b.n);
 }
 function jOf(su) {                         // the trades of one set up (a bot: only the version it uses now)
@@ -3226,8 +3234,20 @@ function paintSetupGrid() {
     return `<button type="button" class="sucard ${String(s.n) === String(J.sel) ? "on" : ""} ${s.on ? "" : "off"}" data-js="${s.n}">
       <span class="sh"><b>${esc(num)}</b><span>${esc(code.join(" · "))}</span><i>${esc(s.kind === "main" ? (s.id === "orbit" ? "ORBIT" : "GHOST") : (s.id.startsWith("orbit") ? "ORBIT" : "GHOST") + " · paralelo")}${s.on ? "" : " · apagado"}</i></span>
       <span class="sv">${cell("Hoy", T.filter(t => t.day === today))}${cell("Mes", T.filter(t => t.day.startsWith(month)))}${cell("Total", T)}</span>
-      <span class="sf">${T.length ? `gana ${Math.round(w / T.length * 100)}% · prom. ${usd0(sum(T) / T.length)} por trade` : "todavía sin trades cerrados"}</span></button>`;
+      <span class="sf">${T.length ? `gana ${Math.round(w / T.length * 100)}% · prom. ${usd0(sum(T) / T.length)} por trade` : "todavía sin trades cerrados"}</span>${fundedLine(s.fo)}</button>`;
   }).join("");
+}
+// would it survive a funded account? from ITS OWN trades (computed by the server)
+function fundedLine(fo) {
+  if (!fo || !fo.n) return "";
+  const lim = `$${Math.round(fo.limit_usd).toLocaleString("en-US")}`;
+  const neg = v => `−$${Math.round(Math.abs(v)).toLocaleString("en-US")}`;
+  const fit = fo.mnq == null ? "sin caídas todavía" : fo.mnq < 1 ? "ni con 1 MNQ" : `caben ${fo.mnq} MNQ`;
+  const nb = t => t.replace(/ /g, "\u00a0");          // break only between the pieces
+  return `<span class="sfo ${fo.fits ? "ok" : "bad"}" title="Cuenta de fondeo ${esc(fo.account)}: se pierde con ${lim} de caída">
+    <b>${esc(fo.account)}: ${fo.fits ? "aguanta" : "no aguanta"}</b>
+    <span>${[`caída máx ${neg(fo.max_dd_usd)}`, `peor trade ${neg(fo.worst_trade_usd)}`, fit].map(nb).join(" · ")}</span>
+    <small>${fo.few ? `Solo ${fo.n} ${fo.n === 1 ? "trade" : "trades"}: falta ver más. ` : ""}${fo.position ? `Con ${esc(fo.position)}, como corre. ` : ""}Se pierde con ${lim} de caída.</small></span>`;
 }
 function jStats(T) {
   const n = T.length, v = T.reduce((s, t) => s + (t.net_usd || 0), 0);

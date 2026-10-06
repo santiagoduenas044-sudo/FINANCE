@@ -296,6 +296,7 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     assert mine[0]["day"] == "2026-09-25" and mine[0]["usd"] == 40.0 * pv
     ids = {s["id"] for s in log["sources"]}
     assert {"ghost", "orbit", "ghost:zonas_1m", "orbit:apertura_30m"} <= ids
+    assert all("fondeo" in s for s in log["sources"])
 
 
 def test_old_orbit_trades_keep_the_size_they_opened_with(tmp_path):
@@ -337,3 +338,24 @@ def test_catalogue_shows_the_last_lab_run_of_each_new_idea(tmp_path):
     assert muro["best"]["name"].endswith("stop tras EMA 20 · TP 2×") and muro["best"]["net_usd"] == 2240.0
     assert cards["RELLENO"]["lab_run"]["passed"] == 0
     assert cards["TRAMPA"]["lab_run"] is None                       # not tried yet
+
+
+def test_funded_check_reads_one_set_up_against_the_limit():
+    from signal_engine.api.bots import funded_check
+    rows = [{"day": "2026-10-01", "net_usd": 500.0, "net_pts": 50.0},
+            {"day": "2026-10-02", "net_usd": -400.0, "net_pts": -40.0},
+            {"day": "2026-10-02", "net_usd": -300.0, "net_pts": -30.0},
+            {"day": "2026-10-03", "net_usd": 200.0, "net_pts": 20.0}]
+    fo = funded_check(rows, limit=1500)
+    assert fo["n"] == 4 and fo["few"] and fo["fits"]
+    assert fo["worst_trade_usd"] == -400 and fo["worst_day_usd"] == -700
+    assert fo["max_dd_usd"] == 700                     # from +500 down to −200
+    assert fo["max_dd_1mnq_usd"] == 140 and fo["mnq"] == 10   # 70 pts x $2
+
+
+def test_funded_check_says_when_one_trade_breaks_the_account():
+    from signal_engine.api.bots import funded_check
+    rows = [{"day": f"2026-10-0{i}", "net_usd": -1984.0, "net_pts": -198.4} for i in (1, 2, 3)]
+    fo = funded_check(rows, limit=1500)
+    assert not fo["fits"] and fo["max_dd_usd"] == 5952 and fo["mnq"] == 1
+    assert funded_check([], limit=1500)["fits"] is None
