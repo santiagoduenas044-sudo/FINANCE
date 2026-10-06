@@ -446,6 +446,7 @@ tr.best td { background: rgba(var(--good-rgb), .06); }
 .sumt .who { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink-1); white-space: nowrap; }
 .sumt .who i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .sumt .sub { display: block; color: var(--ink-3); font-size: 11.5px; font-weight: 400; margin-top: 2px; }
+.sumt .nowm { display: none; }
 .sumt tr.child td:first-child { padding-left: 30px; }
 tr.go { cursor: pointer; }
 .sumt tr.child .who { font-weight: 500; color: var(--ink-2); }
@@ -675,6 +676,17 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   .ufrm { grid-template-columns: minmax(0, 1fr); }
   /* en el celular, lo que está pasando va antes que la gráfica */
   .board { display: flex; flex-direction: column-reverse; }
+  /* la barra de arriba se va al bajar: deja la pantalla para el contenido */
+  .top { position: relative; padding: 10px 16px 8px; gap: 8px; }
+  .quote { padding: 6px 12px; } .quote .last { font-size: 18px; }
+  .today .v { font-size: 15px; }
+  .ctl button { padding: 8px 10px; font-size: 13px; }
+  /* abajo solo las pestañas; fondo y color se eligen en Sistema → Apariencia */
+  .sidebar .sbacc, .sidebar .themebtn { display: none !important; }
+  .tabs .lb { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+  .hsrc { gap: 5px; } .hsrc button { padding: 5px 9px; font-size: 11.5px; }
+  .hsrc .sep { margin-top: 2px; }
+  .sumt .nowm { display: block; white-space: normal; margin-top: 3px; max-width: 200px; }
 }
 /* ── selector de color de acento ── */
 .accpick { display: flex; align-items: center; gap: 8px; }
@@ -773,7 +785,10 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   .jk .wide .row2 { flex-direction: column; align-items: stretch; }
   .jk svg.jspark { width: 100%; max-width: none; height: 46px; }
   .jk .sub { white-space: normal; }
-  .jk .card { padding: 14px; } .jk { gap: 10px; }
+  .jk .card { padding: 13px 12px; } .jk { gap: 10px; }
+  .jk .k { font-size: 9px; letter-spacing: .1em; }
+  .jk .mid { font-size: 20px; } .jk .sub, .jk .wlk { font-size: 10.5px; }
+  .jk .row2 { gap: 6px; }
   .jk svg.gauge { width: 58px; height: 36px; } .jk svg.ring { width: 42px; height: 42px; }
   .jbar .hsrc { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 2px; scrollbar-width: none; }
   .jbar .hsrc::-webkit-scrollbar { display: none; }
@@ -1617,7 +1632,7 @@ function renderBots() {
   const labOf = (bot, id) => (d.strategies.find(st => id ? (st.shadows || []).includes(id)
     : st.status === "en vivo" && st.bot === bot) || {}).lab || "—";
   const paper = (rec, open) => (rec?.n ? `<b class="${cls(rec.net_usd)}">${usd0(rec.net_usd)}</b><span class="sub">${rec.n} ${rec.n === 1 ? "trade" : "trades"}</span>`
-    : `<span class="zero">sin trades</span>`) + (open != null ? `<span class="sub">abierto ${usd0(open)}</span>` : "");
+    : `<span class="zero">—</span>`) + (open != null ? `<span class="sub">abierto ${usd0(open)}</span>` : "");
   const dotc = b => b.color === "violet" ? "var(--violet)" : "var(--amber)";
   $("hub-sumcard").hidden = false;
   const byBot = Object.fromEntries(d.bots.map(b => [b.name, b]));
@@ -1628,12 +1643,13 @@ function renderBots() {
     const state = r.kind === "main" ? (STATE_ES[b.state] || b.state) : !r.on ? "Apagado" : r.open_usd != null ? "Operando" : "Prendido";
     const [num, ...code] = r.label.split(" · ");
     return `<tr class="go ${r.on ? "" : "off"}" data-hist="${esc(sel)}">
-      <td><span class="who"><i style="background:${dotc(b)}${r.kind === "main" ? "" : ";opacity:.55"}"></i>${esc(num)}</span><span class="sub"><b>${esc(code.join(" · "))}</b> · ${esc(state)}</span></td>
+      <td><span class="who"><i style="background:${dotc(b)}${r.kind === "main" ? "" : ";opacity:.55"}"></i>${esc(num)}</span><span class="sub"><b>${esc(code.join(" · "))}</b> · ${esc(state)}</span>
+        <span class="sub nowm">${esc(r.now || "")}${r.since ? ` · desde el ${esc(r.since)}` : ""}</span></td>
       <td class="hide-s t">${esc(r.bot)}${r.kind === "main" ? "" : " · paralelo"}</td>
-      <td class="hide-s" style="max-width:280px;font-size:13px;color:var(--ink-2)">${esc(r.now || "—")}</td>
+      <td class="hide-s" style="max-width:300px;font-size:13px;color:var(--ink-2)">${esc(r.now || "—")}${r.since ? `<span class="sub">corre desde el ${esc(r.since)}</span>` : ""}</td>
       <td class="t">${paper(r.today, r.open_usd)}</td><td class="t">${paper(r.total)}</td>
       <td class="lab hide-s">${esc(labOf(r.bot, r.kind === "main" ? null : r.id))}</td>
-      <td style="text-align:center">${r.kind === "main" ? '<span class="badge good">principal</span>'
+      <td style="text-align:center">${r.kind === "main" ? '<span class="badge good" title="principal">★</span>'
         : `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(r.id)}" aria-pressed="${r.on}" aria-label="${r.on ? "Apagar" : "Encender"} ${esc(r.label)}"></button>`}</td></tr>`;
   }).join("") + "</tbody>";
   const nw = d.news || {};
@@ -1652,9 +1668,9 @@ function renderBots() {
     const kv = (k, v, sub, c = "") => `<div><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`;
     const bot = b.name === "GHOST" ? "ghost" : "orbit";
     const rows = b.versions.map(v => `<tr class="${v.current ? "cur" : ""}">
-        <td><span class="vtag">${esc(v.version)}</span></td>
-        <td class="vt">${esc(v.title)}${v.current ? ' <span class="badge good">en uso</span>' : ""}<span class="vr">${esc(v.rules)}</span></td>
-        <td class="t hide-s">${esc(v.since.slice(5))}</td>
+        <td><span class="vtag">${esc(v.version.replace("v", "V"))}</span></td>
+        <td class="vt">${esc((v.name || v.title).replace(/^Versión \d+ · /, ""))}${v.current ? ' <span class="badge good">en uso</span>' : ""}<span class="vr">${esc(v.rules)}</span></td>
+        <td class="t hide-s">${esc(v.span || v.since.slice(5))}</td>
         <td class="num" style="text-align:right">${v.n || (v.current && b.open_usd != null ? "0" : "—")}${
           v.current && b.open_usd != null ? '<span class="pa">+1 abierto</span>' : ""}</td>
         <td class="num hide-s" style="text-align:right">${v.n ? Math.round(v.win_rate * 100) + "%" : "—"}</td>
@@ -1681,7 +1697,7 @@ function renderBots() {
       <ul class="feed">${b.now.map(l => `<li class="${esc(l.kind)}"><span class="ico">${ICO[l.kind] || "·"}</span><span>${esc(l.text)}</span></li>`).join("")}</ul>
       ${parTable(b)}
       <h4>Versiones</h4>
-      <div class="vers scroll"><table><thead><tr><th></th><th>Qué cambió</th><th class="hide-s">Desde</th>
+      <div class="vers scroll"><table><thead><tr><th></th><th>Versión</th><th class="hide-s">Cuándo</th>
         <th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th><th style="text-align:right">Neto</th>
         <th style="text-align:center">Como set up</th></tr></thead>
         <tbody>${rows}</tbody></table></div>
@@ -1710,7 +1726,7 @@ function lastStrip(b) {
   if (!S.tlog || !b.main) return "";
   const sel = `${b.name.toLowerCase()}@${b.main.version}`;
   const days = lastDays(sel, 7);
-  return `<h4>Últimos días · ${esc(b.main.version)} <button type="button" class="golink" data-hist="${esc(sel)}">Ver calendario ›</button></h4>
+  return `<h4>Últimos días · ${esc(b.setup_label || b.main.version)} <button type="button" class="golink" data-hist="${esc(sel)}">Ver calendario ›</button></h4>
     <div class="lastdays">${days.length ? days.map(x => `<button type="button" class="ld ${x.usd > 0 ? "win" : x.usd < 0 ? "loss" : ""}" data-hist="${esc(sel)}"
       title="${x.n} trades"><span class="dn">${esc(x.day.slice(8))}/${esc(x.day.slice(5, 7))}</span><span class="v">${k$(x.usd)}</span></button>`).join("")
       : `<span class="zero" style="font-size:12px">Todavía sin trades cerrados en esta versión.</span>`}</div>`;
@@ -1725,15 +1741,15 @@ function parTable(b) {
       data-hist="${main ? bot + (b.main ? "@" + b.main.version : "") : bot + ":" + esc(v.id)}">
       <td class="pn"><span class="tglcell">${v ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.id)}"
           aria-pressed="${v.enabled}" aria-label="${v.enabled ? "Apagar" : "Encender"} ${esc(name)}" title="${esc(about)}"></button>` : ""}
-        <span>${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}</span></span></span></td>
+        <span>${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}${v && v.since ? ` · desde el ${esc(v.since)}` : ""}</span></span></span></td>
       <td class="num ${cls(t.n ? t.net_usd : null)}" ${R}>${t.n ? usd0(t.net_usd) : "—"}${open != null ? `<span class="pa">abierto ${usd0(open)}</span>` : ""}</td>
       <td class="num ${cls(a.n ? a.net_usd : null)}" ${R} style="text-align:right;font-weight:600">${a.n ? usd0(a.net_usd) : "—"}</td>
-      <td class="num" ${R}>${a.n || "—"}</td>
+      <td class="num hide-s" ${R}>${a.n || "—"}</td>
       <td class="num hide-s" ${R}>${a.n ? Math.round(a.win_rate * 100) + "%" : "—"}</td></tr>`;
   const mainNow = (b.now.find(l => l.kind === "trade") || {}).text || "Sin trade abierto.";
   return `<h4>Set ups · en papel, avisan en Discord · prende los que quieras</h4>
     <div class="vers scroll"><table class="par-t"><thead><tr><th>Set up</th><th style="text-align:right">Hoy</th>
-      <th style="text-align:right">Total</th><th style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
+      <th style="text-align:right">Total</th><th class="hide-s" style="text-align:right">Trades</th><th class="hide-s" style="text-align:right">Acierto</th></tr></thead>
       <tbody>${row(b.setup_label || (b.main ? `${b.main.version} · ${b.main.title}` : b.strategy), "", mainNow,
         b.main?.today || b.today, b.main?.total || b.total, b.open_usd, true)}
       ${vs.map(v => row(v.name, v.about, v.now, v.today, v.total, v.open_usd, false, v)).join("")}</tbody></table></div>`;
@@ -1775,11 +1791,11 @@ function hSources() {
   const L = S.tlog || { sources: [] }, out = [];
   for (const so of L.sources.filter(x => x.bot === H.bot)) {
     if (so.kind === "main") {
-      out.push({ sel: so.id, label: "Todo lo real", sub: so.position, group: "real", about:
+      out.push({ sel: so.id, label: "Todas las versiones", sub: so.position, group: "real", about:
         `${so.name}: todos sus trades reales (los que avisó en Discord), de todas sus versiones.` });
       for (const v of so.versions.slice().reverse()) out.push({ sel: `${so.id}@${v.version}`,
-        label: v.version === so.current && so.setup_label ? so.setup_label : `${v.version} · ${v.title.split(" · ")[0]}`,
-        group: "real", about: `${so.name} ${v.version} — ${v.title}${v.version === so.current ? " (la que usa ahora)" : ""}.` });
+        label: v.version === so.current ? `Ahora · ${(v.name || "").replace(/^Versión \d+ · /, "")}` : `${v.name || v.version} · ${v.span || ""}`,
+        group: "real", about: `${so.name} · ${v.name || v.version} (${v.span || ""})${v.version === so.current ? `, la que usa ahora: ${so.setup_label || ""}` : ""}.` });
     } else {
       out.push({ sel: so.id, label: so.name, group: "par", off: !so.enabled,
         about: `${so.name}: en papel, mismo mercado, avisa en Discord${so.enabled ? "" : " (apagado)"}. ${so.about || ""}` });
@@ -3016,7 +3032,8 @@ function jOf(su) {                         // the trades of one set up (a bot: o
 }
 function jTrades(sel = J.sel) {
   const sus = jSetups();
-  const pick = sel === "main" ? sus.filter(s => s.kind === "main") : sus.filter(s => String(s.n) === String(sel));
+  const pick = sel === "main" ? sus.filter(s => s.kind === "main") : sel === "all" ? sus
+    : sus.filter(s => String(s.n) === String(sel));
   return pick.flatMap(jOf).sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
 }
 function jStats(T) {
@@ -3088,14 +3105,14 @@ function renderJournal() {
   const today = fmtDate.format(new Date());
   if (!J.month) J.month = today.slice(0, 7);
   const sus = jSetups();
-  const chip = (sel, label, off) => `<button type="button" class="${sel === "main" ? "" : "par"}" data-js="${sel}" aria-pressed="${String(J.sel) === String(sel)}"
+  const chip = (sel, label, off) => `<button type="button" class="${sel === "main" || sel === "all" ? "" : "par"}" data-js="${sel}" aria-pressed="${String(J.sel) === String(sel)}"
     ${off ? 'title="apagado"' : ""}>${esc(label)}<span class="n">${jTrades(sel).filter(t => t.day.startsWith(J.month)).length}</span></button>`;
-  $("j-src").innerHTML = chip("main", "Principales") + sus.map(s => chip(s.n, s.label.split(" · ")[0], !s.on)).join("");
+  $("j-src").innerHTML = chip("main", "Principales") + chip("all", "Todos") + sus.map(s => chip(s.n, s.label.split(" · ")[0], !s.on)).join("");
   document.querySelectorAll("#j-range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === J.range));
   const all = jTrades(), T = jRangeTrades(all), st = jStats(T);
   const [Y, M] = J.month.split("-").map(Number);
   const per = J.range === "month" ? MONTHS[M - 1] : J.range === "week" ? "esta semana" : "todo";
-  const who = J.sel === "main" ? "Set up 1 y 2" : (sus.find(s => String(s.n) === String(J.sel)) || {}).label || "";
+  const who = J.sel === "main" ? "Set up 1 y 2" : J.sel === "all" ? "todos los set ups" : (sus.find(s => String(s.n) === String(J.sel)) || {}).label || "";
 
   // the banner: the month in review
   const rm = reviewMonth(all), rT = all.filter(t => t.day.startsWith(rm)), rS = jStats(rT);
@@ -3122,7 +3139,7 @@ function renderJournal() {
       <div class="sub">${st.n ? `<span class="pos">+$${Math.round(st.gw).toLocaleString("en-US")}</span> / <span class="neg">−$${Math.round(st.gl).toLocaleString("en-US")}</span>` : "—"}</div></div>` +
     `<div class="card"><span class="k">Días ganadores</span><div class="row2"><div class="mid">${dwr != null ? Math.round(dwr * 100) + "%" : "—"}</div>${gaugeSvg(dwr, "--good")}</div>
       <div class="sub">${st.days.length ? `${st.winDays} de ${st.days.length} días` : "—"}</div></div>` +
-    `<div class="card"><span class="k">Prom. ganado / perdido</span><div class="mid" style="margin-top:10px">${ratio != null ? ratio.toFixed(2) : "—"}</div>
+    `<div class="card"><span class="k">Ganado vs perdido</span><div class="mid" style="margin-top:10px">${ratio != null ? ratio.toFixed(2) : "—"}</div>
       <div class="wlbar">${st.avgW != null || st.avgL != null ? `<i style="flex:${st.avgW || 0}"></i><i style="flex:${st.avgL || 0}"></i>` : ""}</div>
       <div class="wlk"><span class="pos">${st.avgW != null ? "+$" + Math.round(st.avgW).toLocaleString("en-US") : "—"}</span>
         <span class="neg">${st.avgL != null ? "−$" + Math.round(st.avgL).toLocaleString("en-US") : "—"}</span></div></div>`;
@@ -3181,7 +3198,7 @@ const dayName = d => { const x = new Date(d + "T12:00:00Z"); return `${DOW_ES[x.
 function storySlides(month) {
   const T = jTrades().filter(t => t.day.startsWith(month)), st = jStats(T);
   const [Y, M] = month.split("-").map(Number), name = `${MONTHS[M - 1]} ${Y}`;
-  const who = J.sel === "main" ? "Set up 1 y 2" : (jSetups().find(s => String(s.n) === String(J.sel)) || {}).label || "";
+  const who = J.sel === "main" ? "Set up 1 y 2" : J.sel === "all" ? "todos los set ups" : (jSetups().find(s => String(s.n) === String(J.sel)) || {}).label || "";
   const S2 = [];
   S2.push(`<span class="pill2">Resumen del mes</span><h2>${esc(name)}</h2>
     <div class="meta">${st.n} ${st.n === 1 ? "trade" : "trades"} · ${st.days.length} ${st.days.length === 1 ? "día operado" : "días operados"} · ${esc(who)}</div>`);

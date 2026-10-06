@@ -143,6 +143,39 @@ STRATEGIES: list[dict] = [
 ]
 
 
+# What each version is called on the page and in messages: plain words, no codes.
+VERSION_NAMES: dict[tuple[str, str], str] = {
+    ("GHOST", "v1"): "Setups clásicos",
+    ("GHOST", "v2"): "Zonas de 1 minuto",
+    ("GHOST", "v3"): "Zonas de 1 minuto, día y noche",
+    ("GHOST", "v4"): "Zonas de 15 minutos",
+    ("ORBIT", "v1"): "Caja de apertura con 1 MNQ",
+    ("ORBIT", "v2"): "Caja de apertura con 1 NQ",
+    ("ORBIT", "v3"): "Caja de apertura con 5 MNQ",
+}
+_MES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+
+def version_name(bot: str, vid: str) -> str:
+    """"Versión 4 · Zonas de 15 minutos"."""
+    return f"Versión {vid.lstrip('v')} · {VERSION_NAMES.get((bot, vid), version_title(bot, vid))}"
+
+
+def version_span(bot: str, vid: str) -> str:
+    """When it ran: "desde 29 sep", "27–28 sep" or "15–23 sep"."""
+    rows = BOT_VERSIONS[bot]
+    i = next(k for k, r in enumerate(rows) if r[0] == vid)
+    d0 = pd.Timestamp(rows[i][1])
+    if i == len(rows) - 1:
+        return f"desde {d0.day} {_MES[d0.month - 1]}"
+    d1 = max(d0, pd.Timestamp(rows[i + 1][1]) - pd.Timedelta(days=1))
+    if d1 == d0:
+        return f"{d0.day} {_MES[d0.month - 1]}"
+    if d1.month == d0.month:
+        return f"{d0.day}–{d1.day} {_MES[d0.month - 1]}"
+    return f"{d0.day} {_MES[d0.month - 1]} – {d1.day} {_MES[d1.month - 1]}"
+
+
 def version_title(bot: str, vid: str) -> str:
     return next((t for v, _s, t, _r in BOT_VERSIONS[bot] if v == vid), vid)
 

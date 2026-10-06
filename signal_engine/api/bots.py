@@ -16,7 +16,8 @@ import pandas as pd
 
 from ..output.record import commission_per_trade
 from ..versions import (BOT_VERSIONS, MAIN_SETUP, STRATEGIES, current_version,
-                        ghost_version_of, main_setup_label, orbit_version_of, version_title)
+                        ghost_version_of, main_setup_label, orbit_version_of, version_name,
+                        version_span, version_title)
 
 NY = "America/New_York"
 log = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def _versions(bot: str, rows: list[tuple[str, float]], variants: list[dict] = ()
     out = []
     for vid, start, title, rules in BOT_VERSIONS[bot]:
         line = {"version": vid, "since": start, "title": title, "rules": rules,
+                "name": version_name(bot, vid), "span": version_span(bot, vid),
                 **_record([u for v, u in rows if v == vid])}
         if vid in by_version:
             line["variant"] = by_version[vid]["id"]
@@ -84,6 +86,29 @@ def _main_record(bot: str, rows: list[tuple[str, float, bool]]) -> dict:
 # --------------------------------------------------------------------------- #
 # GHOST
 # --------------------------------------------------------------------------- #
+def _since(folder: Path) -> str | None:
+    """'30 sep': when a set up's folder was created (when it started running)."""
+    try:
+        st = Path(folder).stat()
+    except OSError:
+        return None
+    t = pd.Timestamp(getattr(st, "st_birthtime", None) or st.st_ctime, unit="s", tz="UTC").tz_convert(NY)
+    return f"{t.day} {('ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')[t.month - 1]}"
+
+
+def _last_signal(rt, sym: str) -> str | None:
+    """What a GHOST set up last decided: taken, or discarded and why."""
+    last = (getattr(rt, "ghost_last_decision", {}) or {}).get(sym)
+    if not last or not last.get("timestamp"):
+        return None
+    when = _ny(last["timestamp"]).strftime("%d-%b %H:%M")
+    if last.get("action") in ("LONG", "SHORT"):
+        return f"Última señal ({when}): {'compra' if last['action'] == 'LONG' else 'venta'} tomada."
+    why = " · ".join(_REASONS_ES.get(r, r.replace("_", " "))
+                     for r in last.get("no_trade_reasons") or []) or "sin motivo"
+    return f"Última señal ({when}): descartada — {why}."
+
+
 def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None) -> list[dict]:
     """Every GHOST variant in config/shadows.yaml, on or off. A running one is
     read from its live runtime; a switched-off one from its saved record."""
@@ -103,7 +128,9 @@ def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None
         s_closed = [t for t in (tr.closed_trades if tr is not None else [])
                     if t.closed_at is not None and t.instrument == sym]
         on = is_on("ghost", spec, base)
-        now_txt = "Apagado." if not on else ("Encendiéndose…" if rt is None else "Sin trade abierto.")
+        now_txt = "Apagado." if not on else ("Encendiéndose…" if rt is None else
+                   _last_signal(rt, sym) or "Sin señal todavía: ninguna vela ha cumplido sus reglas "
+                                            "desde que arrancó.")
         if s_open and rt is not None:
             t = s_open[0]
             now_txt = (f"{'Compra' if t.direction == 'LONG' else 'Venta'} abierta en {_px(t.entry)}"
@@ -111,6 +138,7 @@ def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None
         out.append({
             "id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
             "about": spec.about, "version": spec.version,
+            "since": _since(store_dir("ghost", spec.id, base)),
             "enabled": on, "running": rt is not None, "now": now_txt,
             "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2)
             if s_open and rt is not None else None,
@@ -244,7 +272,7 @@ def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
             now_txt = "Apagado."
         usd = [float(c.get("usd", 0)) for c in bot.closed]
         out.append({"id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
-                    "about": spec.about, "now": now_txt,
+                    "about": spec.about, "now": now_txt, "since": _since(d),
                     "version": spec.version, "enabled": on,
                     "open_usd": open_usd,
                     "today": _record([float(c.get("usd", 0)) for c in bot.closed
@@ -406,6 +434,7 @@ def setup_rows(bots: list[dict]) -> list[dict]:
         for v in b.get("variants") or []:
             rows.append({"setup": v.get("setup") or 99, "label": v["name"], "bot": b["name"],
                          "kind": "variant", "id": v["id"], "on": v["enabled"], "fee": fee,
+                         "since": v.get("since"),
                          "now": v.get("now", ""), "open_usd": v.get("open_usd"),
                          "today": v.get("today"), "total": v.get("total")})
     return sorted(rows, key=lambda r: r["setup"])
@@ -420,8 +449,9 @@ def setups_text(rows: list[dict]) -> str:
     out = ["📋 **Set ups** (en papel · mismo mercado)"]
     for r in rows:
         dot = "🟢" if r["on"] else "⚪"
+        since = f" · corre desde el {r['since']}" if r.get("since") else ""
         out.append(f"{dot} **{r['label']}** ({r['bot']}) · hoy {money(r['today'])} · "
-                   f"total {money(r['total'])}\n　{r['now'] or ('Apagado.' if not r['on'] else '')}")
+                   f"total {money(r['total'])}{since}\n　{r['now'] or ('Apagado.' if not r['on'] else '')}")
     return "\n".join(out)
 
 
@@ -571,7 +601,8 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
     sources.append({"id": "ghost", "bot": "GHOST", "kind": "main", "name": "GHOST",
                     "setup": MAIN_SETUP["GHOST"], "setup_label": main_setup_label("GHOST"),
                     "position": label, "fee": fee,
-                    "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["GHOST"]],
+                    "versions": [{"version": v, "title": t, "name": version_name("GHOST", v),
+                                  "span": version_span("GHOST", v)} for v, _s, t, _r in BOT_VERSIONS["GHOST"]],
                     "current": current_version("GHOST")})
     trades += _ghost_rows(getattr(runtime, "paper_tracker", None), sym, pv, fee, "ghost")
     running = {sp.id: rt for sp, rt in (getattr(runtime, "shadows", None) or [])}
@@ -595,7 +626,8 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
     sources.append({"id": "orbit", "bot": "ORBIT", "kind": "main", "name": bot_name(),
                     "setup": MAIN_SETUP["ORBIT"], "setup_label": main_setup_label("ORBIT"),
                     "position": s.position, "fee": 0,
-                    "versions": [{"version": v, "title": t} for v, _s, t, _r in BOT_VERSIONS["ORBIT"]],
+                    "versions": [{"version": v, "title": t, "name": version_name("ORBIT", v),
+                                  "span": version_span("ORBIT", v)} for v, _s, t, _r in BOT_VERSIONS["ORBIT"]],
                     "current": current_version("ORBIT")})
     if (odir / "apertura_trades.jsonl").exists():
         trades += _orbit_rows(OpeningRangeBot(odir, settings=s), "orbit")
