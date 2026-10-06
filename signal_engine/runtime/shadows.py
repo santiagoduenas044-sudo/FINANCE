@@ -222,41 +222,41 @@ def _px(x) -> str:
     return f"{x:,.2f}" if x is not None else "—"
 
 
-def alert_note(label: str, kind: str, trade, pv: dict | None, closed: list | None = None,
-               about: str = "") -> tuple[str, str, int]:
+def alert_note(label: str, kind: str, trade, pv: dict | None,
+               closed: list | None = None) -> tuple[str, str, int]:
     """(title, text, color) of a set up's Discord note when it enters
     ("open") or exits ("close"). `pv`: {"5 MNQ": 10.0} for the dollars;
     `closed`: all its closed trades, for the running record line."""
-    from ..output.record import _mark, _n, after_fees, commission_per_trade, exit_label, usd
+    from ..output.record import _mark, _n, commission_per_trade, exit_label, usd
     position, per_pt = next(iter((pv or {}).items()), ("", 0.0))
     long = trade.direction == "LONG"
     side = "COMPRA" if long else "VENTA"
     sym = trade.instrument
 
     def money(pts: float) -> str:
-        return f", {usd(pts, per_pt)}" if per_pt else ""
+        return f" · {usd(pts, per_pt)}" if per_pt else ""
 
     if kind == "open":
         risk = abs(trade.entry - trade.stop)
         target = trade.tp2 if trade.tp2 is not None else trade.tp1
-        lines = [f"**Entrada** {_px(trade.entry)} · **Stop** {_px(trade.stop)} "
-                 f"({risk:.1f} pts{money(-risk)})"]
+        lines = [f"✅ **Entrada {_px(trade.entry)}**",
+                 f"🛑 Stop {_px(trade.stop)} · {risk:.1f} pts{money(-risk)}"]
         if target is not None:
             reward = abs(target - trade.entry)
-            lines[0] += f" · **Objetivo** {_px(target)} ({reward:.1f} pts{money(reward)})"
-        lines.append(f"{label} en paralelo, en papel"
-                     + (f" con {position}" if position else "") + ". " + (about or ""))
-        return (f"{'🟢' if long else '🔴'} {label} — {side} {sym}",
-                "\n".join(x.strip() for x in lines), 0x00C851 if long else 0xFF4444)
+            lines.append(f"🎯 Objetivo {_px(target)} · {reward:.1f} pts{money(reward)}")
+        return (f"{'🟢' if long else '🔴'} {label} — {side} {sym}", "\n".join(lines),
+                0x00C851 if long else 0xFF4444)
     pts = trade.pnl_points
     why = exit_label(trade)
-    lines = [f"{side} {_px(trade.entry)} → {_px(trade.exit_price)} · **{why}**",
-             f"**{pts:+.2f} pts{(' · ' + usd(pts, per_pt)) if per_pt else ''}**"
-             + (f" con {position}" if position else "")]
+    lines = [f"{_px(trade.entry)} → {_px(trade.exit_price)}"
+             + (f" · **{usd(pts, per_pt)}**" if per_pt else "")]
     allp = [t.pnl_points for t in closed or []]
     if allp and per_pt:
         wins = sum(1 for p in allp if p > 0.01)
-        lines.append(f"Récord {label}: {_n(len(allp))} · ganó {wins} · total {usd(sum(allp), per_pt)}"
-                     + after_fees(allp, per_pt, commission_per_trade(position)))
-    return (f"{_mark(pts)} {label} — cerrado: {why} {pts:+.2f} pts", "\n".join(lines),
+        fee = commission_per_trade(position)
+        net = sum(allp) * per_pt - fee * len(allp)
+        lines.append(f"Récord: {_n(len(allp))} · ganó {wins} · "
+                     f"**{'+' if net >= 0 else '−'}${abs(net):,.0f}**"
+                     + (" con comisiones" if fee else ""))
+    return (f"{_mark(pts)} {label} — {why} · {pts:+.2f} pts", "\n".join(lines),
             0x2ECC71 if pts > 0.01 else (0x95A5A6 if pts >= -0.01 else 0xE74C3C))

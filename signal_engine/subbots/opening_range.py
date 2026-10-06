@@ -305,13 +305,10 @@ class OpeningRangeBot:
         else:
             risk = (width + 5) * s.usd_per_point * s.contracts
             msg = (f"📦 {self.title} — caja lista ({when})",
-                   f"**9:30–{box_end}:** máximo **{_px(st.hi)}** · mínimo **{_px(st.lo)}** "
-                   f"· {width:.1f} pts\n"
-                   f"🟢 **Compra** si una vela de 5 min cierra arriba de {_px(st.hi)}\n"
-                   f"🔴 **Venta** si una vela de 5 min cierra abajo de {_px(st.lo)}\n"
-                   f"Stop del otro lado de la caja (≈ {width:.0f} pts o algo más, "
-                   f"≈ {_usd(-risk)} con {s.position}) · objetivo 1.5× el stop · "
-                   f"hasta las {s.last_entry}.")
+                   f"Caja {_px(st.lo)} – {_px(st.hi)} · {width:.1f} pts\n"
+                   f"🟢 Compra si una vela de 5 min cierra arriba de **{_px(st.hi)}**\n"
+                   f"🔴 Venta si cierra abajo de **{_px(st.lo)}**\n"
+                   f"🛑 Stop ≈ {width + 5:.0f} pts · {_usd(-risk)} · hasta las {s.last_entry}")
         if not quiet:
             self._note(*msg, 0x3498DB, f"box:{st.day}")
 
@@ -336,13 +333,10 @@ class OpeningRangeBot:
             return
         pv = s.usd_per_point * s.contracts
         side = "COMPRA" if long else "VENTA"
-        text = (f"La vela de 5 min de las {_hm(pd.Timestamp(p['signal_ts']))} cerró en "
-                f"{_px(p['signal_close'])}, {'arriba' if long else 'abajo'} de la caja.\n"
-                f"**Entrada** {_px(entry)} · **Stop** {_px(stop)} ({risk:.1f} pts, "
-                f"{_usd(-risk * pv)}) · **Objetivo** {_px(target)} "
-                f"({s.target_mult * risk:.1f} pts, {_usd(s.target_mult * risk * pv)})\n"
-                f"Al {s.be_at:.0%} del camino el stop sube a entrada +{s.be_plus:g}. "
-                f"Cierra a las {s.flat_at} si no toca nada. {s.position}, en papel.")
+        text = (f"✅ **Entrada {_px(entry)}**\n"
+                f"🛑 Stop {_px(stop)} · {risk:.1f} pts · {_usd(-risk * pv)}\n"
+                f"🎯 Objetivo {_px(target)} · {s.target_mult * risk:.1f} pts · "
+                f"{_usd(s.target_mult * risk * pv)}")
         self._note(f"{'🟢' if long else '🔴'} {self.title} — {side} NQ", text,
                    0x00C851 if long else 0xFF4444, f"open:{t['id']}",
                    image=self._chart(bars, t, f"{self.title} · {side} {_px(entry)}"))
@@ -365,9 +359,8 @@ class OpeningRangeBot:
             t["stop"] = t["entry"] + (self.s.be_plus if long else -self.s.be_plus)
             if not quiet:
                 self._note(f"🔒 {self.title} — stop a BE+2",
-                           f"El precio recorrió el {self.s.be_at:.0%} del camino al objetivo. "
-                           f"Stop movido a {_px(t['stop'])}: este trade ya no puede perder. "
-                           f"Objetivo {_px(tgt)}.", 0x2ECC71, f"be:{t['id']}",
+                           f"🛑 Stop {_px(t['stop'])}: ya no puede perder\n"
+                           f"🎯 Objetivo {_px(tgt)}", 0x2ECC71, f"be:{t['id']}",
                            image=self._chart(bars, t, f"{self.title} · stop a BE+2 "
                                                       f"{_px(t['stop'])}"))
 
@@ -388,11 +381,8 @@ class OpeningRangeBot:
             return
         mark = "✅" if usd > 0 else ("➖" if abs(net) < 0.5 else "🛑")
         side = "COMPRA" if t["long"] else "VENTA"
-        text = (f"{side} {_px(t['entry'])} → {_px(price)} · **{why}**\n"
-                f"**{pts:+.2f} pts · {_usd(usd)}** con {n} {sym} "
-                f"(ya descontados {cost:g} pts de comisión y deslizamiento)\n"
-                + self.summary_line())
-        self._note(f"{mark} {self.title} — cerrado: {why}", text,
+        text = f"{_px(t['entry'])} → {_px(price)} · **{_usd(usd)}**\n" + self.summary_line()
+        self._note(f"{mark} {self.title} — {why} · {pts:+.2f} pts", text,
                    0x2ECC71 if usd > 0 else 0xE74C3C, f"close:{t['id']}",
                    image=self._chart(bars, done, f"{self.title} · {side} · {why} {pts:+.2f} pts"))
 
@@ -425,11 +415,11 @@ class OpeningRangeBot:
 
     def summary_line(self) -> str:
         if not self.closed:
-            return f"Récord {self.title}: sin trades todavía."
+            return "Récord: sin trades todavía."
         usd = [t["usd"] for t in self.closed]
         wins = sum(1 for u in usd if u > 0)
-        return (f"Récord {self.title}: {len(usd)} trades · ganó {wins} ({wins / len(usd):.0%}) · "
-                f"total **{_usd(sum(usd))}**")
+        return (f"Récord: {len(usd)} {'trade' if len(usd) == 1 else 'trades'} · ganó {wins} · "
+                f"**{_usd(sum(usd))}** con comisiones")
 
     def record_text(self, last: int = 10) -> str:
         """For the !apertura command: totals, worst drop and the last trades."""

@@ -349,8 +349,7 @@ class BotRuntime:
         from .shadows import alert_note
         pv = rt._point_values(trade.instrument) or self._point_values(trade.instrument)
         closed = getattr(getattr(rt, "paper_tracker", None), "closed_trades", None)
-        title, text, color = alert_note(spec.label, kind, trade, pv, closed,
-                                        about=getattr(spec, "about", ""))
+        title, text, color = alert_note(spec.label, kind, trade, pv, closed)
         png = self._shadow_chart(spec, rt, kind, trade)
         self.output_dispatcher.publish_note(title=title, text=text, color=color,
                                             key=f"setup:{spec.id}:{trade.signal_id}:{kind}",

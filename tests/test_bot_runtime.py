@@ -242,8 +242,8 @@ def test_start_sends_discord_notification():
     assert len(transport.calls) == 1
     import json
     payload = json.loads(transport.calls[0])
-    assert "BOT_STARTED" in payload["embeds"][0]["title"] or \
-           payload["embeds"][0]["fields"][0]["value"] == "BOT_STARTED"
+    assert payload["embeds"][0]["title"] == "🟢 GHOST encendido"
+    assert "footer" not in payload["embeds"][0] and "fields" not in payload["embeds"][0]
 
 
 def test_pause_and_stop_also_notify_discord():

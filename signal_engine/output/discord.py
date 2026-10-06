@@ -115,12 +115,22 @@ _STATUS_COLOR = {
     "BOT_ERROR": 0xE74C3C,     # red
 }
 _STATUS_EMOJI = {
-    "BOT_STARTED": "🟢", "BOT_PAUSED": "🟡", "BOT_STOPPED": "🔴", "BOT_ERROR": "🔴",
+    "BOT_STARTED": "🟢", "BOT_PAUSED": "🟡", "BOT_STOPPED": "⚪", "BOT_ERROR": "🔴",
 }
 
 
 def build_discord_payload(event: OutputEvent) -> dict:
-    """Pure function: OutputEvent -> Discord webhook JSON payload (embed)."""
+    """Pure function: OutputEvent -> Discord webhook JSON payload (embed).
+    Only the daily close keeps the "paper trading" footer: on every message
+    it was noise (the whole channel is paper)."""
+    payload = _build_payload(event)
+    if event.kind != "daily_record":
+        for e in payload.get("embeds", []):
+            e.pop("footer", None)
+    return payload
+
+
+def _build_payload(event: OutputEvent) -> dict:
     if event.kind == "runtime_status":
         return _build_runtime_status_payload(event)
     if event.kind == "trade_opened":
@@ -535,23 +545,20 @@ def _build_signal_payload(event: OutputEvent) -> dict:
     return {"embeds": [embed]}
 
 
+_STATUS_ES = {"BOT_STARTED": "encendido", "BOT_PAUSED": "en pausa",
+              "BOT_STOPPED": "apagado", "BOT_ERROR": "con error"}
+
+
 def _build_runtime_status_payload(event: OutputEvent) -> dict:
-    """Bot lifecycle notification (Phase 9) — a distinct, simple embed. Never
-    includes secrets (status_payload is a plain, pre-sanitized dict)."""
+    """"🟢 GHOST encendido": one line. Only a pause or an error says why.
+    Never includes secrets (status_payload is a plain, pre-sanitized dict)."""
     p = event.status_payload or {}
     status = p.get("status", "UNKNOWN")
-    emoji = _STATUS_EMOJI.get(status, "⚪")
-    embed = {
-        "title": f"{emoji} {event.title}",
-        "description": f"**{event.disclaimer}**",
-        "color": _STATUS_COLOR.get(status, 0x95A5A6),
-        "fields": [
-            {"name": "Status", "value": status, "inline": True},
-            {"name": "Timestamp", "value": p.get("timestamp", "-"), "inline": True},
-            {"name": "Detail", "value": p.get("detail") or "-", "inline": False},
-        ],
-        "footer": {"text": event.disclaimer},
-    }
+    embed = {"title": f"{_STATUS_EMOJI.get(status, '⚪')} GHOST "
+                      f"{_STATUS_ES.get(status, status.lower())}",
+             "color": _STATUS_COLOR.get(status, 0x95A5A6)}
+    if status in ("BOT_PAUSED", "BOT_ERROR") and p.get("detail"):
+        embed["description"] = _truncate(p["detail"], _DESCRIPTION_MAX)
     return {"embeds": [embed]}
 
 

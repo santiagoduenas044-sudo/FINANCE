@@ -63,7 +63,7 @@ def test_long_breakout_hits_the_target(tmp_path):
     assert t["pts"] == 31.5 and t["usd"] == pytest.approx((31.5 - 1.02) * 2)
     titles = [m["title"] for m in sent]
     assert titles[0].startswith("📦") and any("COMPRA" in x for x in titles)
-    assert any("stop a BE+2" in x for x in titles) and any("cerrado" in x for x in titles)
+    assert any("stop a BE+2" in x for x in titles) and any("— objetivo · +31.50 pts" in x for x in titles)
 
 
 def test_breakeven_plus_two_after_seventy_percent(tmp_path):
