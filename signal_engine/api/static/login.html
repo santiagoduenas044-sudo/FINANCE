@@ -55,34 +55,64 @@ button:disabled { opacity: .6; cursor: wait; }
 .err { margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; color: var(--critical);
   background: var(--critical-dim); }
 .err:empty { display: none; }
+.swap { margin-top: 16px; text-align: center; font-size: 13.5px; color: var(--ink-2); }
+.swap a { color: var(--amber); font-weight: 600; text-decoration: none; cursor: pointer; }
+.only-up { display: none; } form.up .only-up { display: block; } form.up .only-in { display: none; }
 .foot { margin-top: 18px; text-align: center; color: var(--ink-3); font: 600 10px "JetBrains Mono", monospace; letter-spacing: .18em; text-transform: uppercase; }
 </style>
 </head>
 <body>
 <form class="box" id="f" autocomplete="on">
   <div class="brand"><img src="/static/ghost.png" alt=""><span><b>GHOST</b><small>NQ · paper trading</small></span></div>
-  <h1>Entrar</h1>
-  <p class="sub">Escribe tu usuario y contraseña.</p>
+  <h1 class="only-in">Entrar</h1><h1 class="only-up">Crear cuenta</h1>
+  <p class="sub only-in">Escribe tu usuario y contraseña.</p>
+  <p class="sub only-up">Tu propio usuario para practicar con velas reales y una cuenta de papel. Tu práctica se guarda en tu cuenta.</p>
   <label for="u">Usuario</label>
-  <input id="u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+  <input id="u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required
+    pattern="[A-Za-z0-9._\-]{2,32}" title="2 a 32 letras, números, punto o guion">
   <label for="p">Contraseña</label>
   <input id="p" name="password" type="password" autocomplete="current-password" required>
+  <div class="only-up"><label for="p2">Repite la contraseña</label>
+    <input id="p2" type="password" autocomplete="new-password"></div>
   <button id="go" type="submit">Entrar</button>
   <div class="err" id="err" role="alert"></div>
+  <div class="swap" id="swap" hidden><span class="only-in">¿No tienes cuenta? <a id="to-up">Crea una para practicar</a></span>
+    <span class="only-up">¿Ya tienes cuenta? <a id="to-in">Entra</a></span></div>
   <div class="foot">Paper trading · ninguna orden es real</div>
 </form>
 <script>
 const f = document.getElementById("f"), err = document.getElementById("err"), go = document.getElementById("go");
+const q = new URLSearchParams(location.search), p = document.getElementById("p"), p2 = document.getElementById("p2");
+const up = () => f.classList.contains("up");
+function mode(isUp) {
+  f.classList.toggle("up", isUp);
+  go.textContent = isUp ? "Crear cuenta" : "Entrar";
+  p.autocomplete = isUp ? "new-password" : "current-password";
+  p.minLength = isUp ? 8 : 0; p2.required = isUp; err.textContent = "";
+  document.title = isUp ? "GHOST · Crear cuenta" : "GHOST · Entrar";
+}
+fetch("/api/signup").then(r => r.json()).then(d => {
+  if (!d.open) return;
+  document.getElementById("swap").hidden = false;
+  if (q.get("modo") === "registro") mode(true);
+}).catch(() => {});
+document.getElementById("to-up").onclick = () => mode(true);
+document.getElementById("to-in").onclick = () => mode(false);
 f.onsubmit = async e => {
   e.preventDefault();
-  err.textContent = ""; go.disabled = true;
+  err.textContent = "";
+  if (up() && p.value !== p2.value) { err.textContent = "Las contraseñas no coinciden."; return; }
+  go.disabled = true;
   try {
-    const r = await fetch("/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user: document.getElementById("u").value, password: document.getElementById("p").value }) });
+    const r = await fetch(up() ? "/api/signup" : "/api/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user: document.getElementById("u").value.trim(), password: p.value }) });
     if (!r.ok) { let d = ""; try { d = (await r.json()).detail; } catch (x) {} throw new Error(d || "No se pudo entrar."); }
+    const me = await r.json();
     try { localStorage.removeItem("ghost.token"); } catch (x) {}
-    const next = new URLSearchParams(location.search).get("next") || "/";
-    location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/";
+    let next = q.get("next") || "/";
+    if (!next.startsWith("/") || next.startsWith("//")) next = "/";
+    if (me.role === "practica") next = "/practica";            // a practice account opens the practice screen
+    location.href = next;
   } catch (x) { err.textContent = x.message; go.disabled = false; }
 };
 </script>

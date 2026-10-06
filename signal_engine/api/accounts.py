@@ -3,8 +3,10 @@
 Para publicar el dashboard en internet (Tailscale Funnel) hace falta algo más
 que el token de un link: cada persona entra con su usuario y contraseña.
 
-  * owner  — todo: iniciar/parar el bot, actualizar, crear usuarios.
-  * viewer — solo mirar (todo en modo lectura) y la práctica.
+  * owner    — todo: iniciar/parar el bot, actualizar, crear usuarios.
+  * viewer   — solo mirar (todo en modo lectura) y la práctica.
+  * practica — solo la pantalla de Práctica (y su cuenta de práctica guardada).
+    Es lo que recibe quien se registra solo desde el link (/practica).
 
 Los usuarios viven en data_store/users.json con la contraseña cifrada
 (PBKDF2-SHA256, 390,000 vueltas, sal propia). La sesión es una cookie firmada
@@ -28,7 +30,7 @@ import sys
 import time
 from pathlib import Path
 
-ROLES = ("owner", "viewer")
+ROLES = ("owner", "viewer", "practica")
 ITERATIONS = 390_000
 SESSION_DAYS = 30
 COOKIE = "ghost_session"
@@ -95,13 +97,46 @@ class Accounts:
         if not _NAME.match(name):
             raise AccountError("El usuario debe tener 2 a 32 letras, números, punto, guion o guion bajo.")
         if role not in ROLES:
-            raise AccountError("El rol debe ser owner o viewer.")
+            raise AccountError("El rol debe ser owner, viewer o practica.")
         if len(password or "") < MIN_PASSWORD:
             raise AccountError(f"La contraseña debe tener al menos {MIN_PASSWORD} caracteres.")
         users = self.users()
         users[name] = {"hash": hash_password(password), "role": role,
                        "created": users.get(name, {}).get("created") or time.strftime("%Y-%m-%d")}
         self._write(users)
+
+    def set_role(self, name: str, role: str) -> None:
+        users = self.users()
+        if name not in users:
+            raise AccountError("Ese usuario no existe.")
+        if role not in ROLES:
+            raise AccountError("El rol debe ser owner, viewer o practica.")
+        others = [u for u, d in users.items() if u != name and d.get("role") == "owner"]
+        if users[name].get("role") == "owner" and role != "owner" and not others:
+            raise AccountError("Es el único owner: nombra a otro owner primero.")
+        users[name]["role"] = role
+        self._write(users)
+
+    # -- registro abierto (cualquiera con el link crea su usuario de práctica) #
+    def signup_open(self) -> bool:
+        try:
+            return bool(json.loads((self.dir / "signup.json").read_text()).get("open", True))
+        except (OSError, ValueError):
+            return True
+
+    def set_signup(self, on: bool) -> None:
+        self.dir.mkdir(parents=True, exist_ok=True)
+        (self.dir / "signup.json").write_text(json.dumps({"open": bool(on)}))
+
+    def signup(self, name: str, password: str) -> None:
+        """A new practice-only user. Never replaces an existing one."""
+        if not self.has_users():
+            raise AccountError("La página todavía no tiene dueño: el registro aún no está abierto.")
+        if not self.signup_open():
+            raise AccountError("El registro está cerrado. Pídele una cuenta al dueño.")
+        if (name or "").strip().lower() in {u.lower() for u in self.users()}:
+            raise AccountError("Ese usuario ya existe: elige otro nombre.")
+        self.add(name, password, "practica")
 
     def remove(self, name: str) -> bool:
         users = self.users()

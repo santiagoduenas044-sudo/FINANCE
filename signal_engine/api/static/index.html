@@ -136,6 +136,9 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .sbuser svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 body.viewer .ctl, body.viewer .owner-only { display: none !important; }
 .users-t td { vertical-align: middle; }
+.rolesel { padding: 6px 8px; border-radius: 9px; border: 1px solid var(--rule); background: var(--panel-2); color: var(--ink-1); font: 12.5px var(--sans); }
+.sutgl { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--ink-2); margin: 4px 0 12px; line-height: 1.5; }
+.sutgl .tgl { margin-top: 2px; }
 .ufrm { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: end; margin-top: 12px; }
 .ufrm label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--ink-3); }
 .ufrm input, .ufrm select { padding: 9px 10px; border-radius: 10px; border: 1px solid var(--rule); background: var(--panel-2);
@@ -628,7 +631,8 @@ tr.go { cursor: pointer; }
 }
 /* modo "solo práctica" (/practica, el link para un amigo) */
 body.solo .shell { grid-template-columns: minmax(0, 1fr); }
-body.solo .sidebar, body.solo .top > :not(.tbrand), body.solo #sim-banner { display: none !important; }
+body.solo .sidebar, body.solo .top > :not(.tbrand):not(#solo-user), body.solo #sim-banner { display: none !important; }
+#solo-user { margin-left: auto; gap: 8px; order: 2; } #solo-user button { color: var(--ink-3); font-size: 12.5px; text-decoration: underline; }
 body.solo .tbrand { display: flex; }
 body.solo .brand .wm small { display: block; }
 .plink { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
@@ -903,6 +907,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
     <span class="mark" aria-hidden="true"><img src="/static/ghost.png" alt=""></span>
     <span class="wm"><b>GHOST</b><small>NQ · paper trading</small></span>
   </span>
+  <span class="chip" id="solo-user" hidden><b id="solo-name"></b><button type="button" id="solo-out">Salir</button></span>
   <div class="hello"><h1 id="page-title">Hola</h1><p id="page-sub"></p></div>
   <div class="fill"></div>
   <div class="symtabs" id="symtabs" role="group" aria-label="Instrumento"></div>
@@ -1156,13 +1161,15 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
     <div class="card mb owner-only"><h3>Página web y usuarios <span class="r" id="us-state"></span></h3>
       <div class="body">
         <p class="foot" style="margin-top:0">Para abrir el dashboard desde internet, cada persona entra con <b>usuario y
-          contraseña</b>. <b>owner</b> puede todo; <b>viewer</b> solo mira (no inicia ni detiene el bot, no actualiza).
+          contraseña</b>. <b>owner</b> puede todo; <b>viewer</b> solo mira (no inicia ni detiene el bot, no actualiza);
+          <b>practica</b> solo ve la pantalla de Práctica, con su cuenta guardada.
           Con el primer usuario la página queda cerrada: el resto entra por <span class="mono">/login</span>.</p>
+        <div id="us-signup"></div>
         <div class="scroll" style="max-height:none"><table class="users-t" id="us-table"></table></div>
         <form class="ufrm" id="us-form" autocomplete="off">
           <label>Usuario <input id="us-name" autocapitalize="none" spellcheck="false" required></label>
           <label>Contraseña (8+) <input id="us-pass" type="password" autocomplete="new-password" required minlength="8"></label>
-          <label>Rol <select id="us-role"><option value="viewer">viewer · solo mirar</option><option value="owner">owner · todo</option></select></label>
+          <label>Rol <select id="us-role"><option value="viewer">viewer · solo mirar</option><option value="practica">practica · solo práctica</option><option value="owner">owner · todo</option></select></label>
           <button class="pbtn on" type="submit">Guardar usuario</button>
         </form>
         <p class="foot" id="us-msg"></p></div></div>
@@ -2420,8 +2427,35 @@ const TOOLS = [["cursor", "Cursor (Esc)"], "|", ["segment", "Línea de tendencia
 const PR = { init: false, kl: null, push: null, ds: [], sym: "NQ", bars: [], ptr: -1, tf: "5m", timer: null, busy: false,
   ind: {}, log: [], pos: null, order: null, otype: "mkt", tool: null, toolId: null, magnet: false, hidden: false,
   sel: null, drag: null, restoring: false, ids: {} };
-const lsGet = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+// the practice account (balance, trades, drawings, indicators): kept in the
+// browser and, for a signed-in user, in their account on the server, so it
+// follows them to any phone or computer
+const PRS = { state: null, timer: null };
+async function prLoadState() {
+  try {
+    const r = await fetch("/api/practice/state");
+    if (r.ok) PRS.state = (await r.json()).state || {};
+  } catch {}
+  if (PRS.state && !Object.keys(PRS.state).length) {          // first time: bring what this browser had
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i);
+      if (k && k.startsWith("pr.")) try { PRS.state[k] = JSON.parse(localStorage.getItem(k)); } catch {} }
+    if (Object.keys(PRS.state).length) prSaveState();
+  }
+}
+function prSaveState() {
+  if (!PRS.state) return;
+  clearTimeout(PRS.timer);
+  PRS.timer = setTimeout(() => fetch("/api/practice/state", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state: PRS.state }) }).catch(() => {}), 1200);
+}
+const lsGet = (k, d) => {
+  if (PRS.state && k in PRS.state) return PRS.state[k] ?? d;
+  try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; }
+};
+const lsSet = (k, v) => {
+  try { localStorage.setItem(k, JSON.stringify(v)); } catch {}
+  if (PRS.state && k.startsWith("pr.")) { PRS.state[k] = v; prSaveState(); }
+};
 const tick = p => Math.round(p / TICK) * TICK;
 const money = v => (v == null || !isFinite(v)) ? "—" : `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const kbar = b => ({ timestamp: b.t * 1000, open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v });
@@ -3093,9 +3127,16 @@ async function renderUsers() {
   try { d = await api("/api/users"); } catch (e) { $("us-msg").textContent = "⚠ " + e.message; return; }
   const us = d.users || [];
   $("us-state").textContent = us.length ? `${us.length} ${us.length === 1 ? "usuario" : "usuarios"}` : "sin usuarios";
-  $("us-table").innerHTML = us.length ? `<thead><tr><th>Usuario</th><th>Rol</th><th>Desde</th><th></th></tr></thead><tbody>` +
-    us.map(u => `<tr><td><b>${esc(u.user)}</b></td><td>${u.role === "owner" ? '<span class="badge warn">owner</span>' : '<span class="badge good">viewer</span>'}</td>
-      <td class="t">${esc(u.created || "")}</td><td style="text-align:right"><button class="pbtn" type="button" data-del="${esc(u.user)}">Borrar</button></td></tr>`).join("") + "</tbody>"
+  const prac = us.filter(u => u.role === "practica").length;
+  $("us-signup").innerHTML = `<label class="sutgl"><button class="tgl" type="button" id="us-open" aria-pressed="${!!d.signup_open}"
+      aria-label="Registro abierto"></button><span><b>Registro abierto</b> · cualquiera con el link
+      <span class="mono">${esc(location.origin)}/practica</span> crea su usuario <b>practica</b> (solo la práctica).
+      ${prac ? `Hay ${prac} ${prac === 1 ? "cuenta" : "cuentas"} de práctica.` : ""}</span></label>`;
+  const ROLE_ES = { owner: "owner · todo", viewer: "viewer · solo mirar", practica: "practica · solo práctica" };
+  $("us-table").innerHTML = us.length ? `<thead><tr><th>Usuario</th><th>Rol</th><th class="hide-s">Desde</th><th></th></tr></thead><tbody>` +
+    us.map(u => `<tr><td><b>${esc(u.user)}</b></td><td><select class="rolesel" data-role="${esc(u.user)}">${Object.entries(ROLE_ES).map(([r, t]) =>
+        `<option value="${r}" ${u.role === r ? "selected" : ""}>${t}</option>`).join("")}</select></td>
+      <td class="t hide-s">${esc(u.created || "")}</td><td style="text-align:right"><button class="pbtn" type="button" data-del="${esc(u.user)}">Borrar</button></td></tr>`).join("") + "</tbody>"
     : `<tbody><tr><td class="zero">Todavía no hay usuarios. ${d.token ? "Hoy se entra con el link con clave." : "<b>Hoy el dashboard está abierto a quien llegue a él.</b>"}</td></tr></tbody>`;
   if (!us.length) $("us-role").value = "owner";
 }
@@ -3110,6 +3151,19 @@ $("us-form").onsubmit = async e => {
     await loadMe(); renderUsers();
   } catch (err) { $("us-msg").textContent = "⚠ " + err.message; }
 };
+$("us-table").addEventListener("change", async e => {
+  const sel = e.target.closest("select[data-role]"); if (!sel) return;
+  try { await api(`/api/users/${encodeURIComponent(sel.dataset.role)}/role`, { method: "POST", body: JSON.stringify({ role: sel.value }) });
+    $("us-msg").textContent = `✅ ${sel.dataset.role} ahora es ${sel.value}.`; }
+  catch (err) { $("us-msg").textContent = "⚠ " + err.message; }
+  renderUsers();
+});
+$("us-signup").addEventListener("click", async e => {
+  const b = e.target.closest("#us-open"); if (!b) return;
+  try { await api("/api/signup/settings", { method: "POST", body: JSON.stringify({ open: b.getAttribute("aria-pressed") !== "true" }) }); }
+  catch (err) { $("us-msg").textContent = "⚠ " + err.message; }
+  renderUsers();
+});
 $("us-table").addEventListener("click", async e => {
   const b = e.target.closest("[data-del]");
   if (!b || !confirm(`¿Borrar el usuario ${b.dataset.del}?`)) return;
@@ -3449,10 +3503,23 @@ async function refresh(force = false) {
     document.body.classList.add("solo");
     document.title = "GHOST · Práctica";
     document.querySelectorAll(".brand .wm small").forEach(x => x.textContent = "Práctica · velas reales, cuenta de papel");
+    let me = {};
+    try { me = await (await fetch("/api/me")).json(); } catch {}
+    const key = new URLSearchParams(location.search).get("token");
+    if (me.auth && !me.user && !key) {           // everyone practices with their own user
+      location.href = "/login?modo=registro&next=/practica"; return;
+    }
+    if (me.user) {
+      $("solo-user").hidden = false; $("solo-name").textContent = me.user;
+      $("solo-out").onclick = async () => { try { await fetch("/api/logout", { method: "POST" }); } catch {} location.href = "/login"; };
+      await prLoadState();
+    }
     setView("practice");
     return;
   }
   await loadMe();
+  if (S.me?.role === "practica") { location.href = "/practica"; return; }
+  if (S.me?.user) prLoadState();
   const ver = new URLSearchParams(location.search).get("ver");
   if (ver && VIEWS.includes(ver)) setView(ver);
   initChart();

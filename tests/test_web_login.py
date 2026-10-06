@@ -88,3 +88,44 @@ def test_last_owner_cannot_be_deleted(tmp_path):
         raise AssertionError("should refuse")
     except AccountError:
         pass
+
+
+def test_anyone_with_the_link_signs_up_to_practice_only(tmp_path, monkeypatch):
+    c, acc = _client(tmp_path, monkeypatch)
+    # no owner yet: nobody can sign up (the first user must be the owner)
+    assert c.get("/api/signup").json()["open"] is False
+    assert c.post("/api/signup", json={"user": "amiga", "password": "practica-123"}).status_code == 400
+    acc.add("santi", "clave-segura-1", "owner")
+    assert c.get("/api/signup").json()["open"] is True
+    r = c.post("/api/signup", json={"user": "amiga", "password": "practica-123"})
+    assert r.status_code == 200 and r.json()["role"] == "practica" and "ghost_session" in r.cookies
+    assert c.post("/api/signup", json={"user": "AMIGA", "password": "otra-clave-9"}).status_code == 400   # taken
+    # a practice account sees only the practice screen and its own saved practice
+    assert c.get("/api/me").json()["role"] == "practica"
+    assert c.get("/api/practice/datasets").status_code == 200
+    for path in ("/api/status", "/api/bots", "/api/bots/trades", "/api/push", "/api/users"):
+        assert c.get(path).status_code == 403, path
+    assert c.post("/api/control/start").status_code == 403
+    assert c.get("/api/practice/state").json() == {"state": {}}
+    state = {"pr.log": [{"pnl": 120}], "pr.draw.NQ": [{"name": "line"}]}
+    assert c.post("/api/practice/state", json={"state": state}).status_code == 200
+    assert c.get("/api/practice/state").json()["state"] == state
+    assert c.post("/api/practice/state", json={"state": {"ghost.token": "x"}}).status_code == 400
+    # the owner closes sign-ups and promotes her to viewer
+    c.post("/api/logout"); c.cookies.clear()
+    c.post("/api/login", json={"user": "santi", "password": "clave-segura-1"})
+    assert c.post("/api/signup/settings", json={"open": False}).json()["open"] is False
+    assert c.get("/api/users").json()["signup_open"] is False
+    assert c.post("/api/users/amiga/role", json={"role": "viewer"}).status_code == 200
+    assert c.post("/api/users/santi/role", json={"role": "viewer"}).status_code == 400    # the only owner
+    c.post("/api/logout"); c.cookies.clear()
+    assert c.post("/api/signup", json={"user": "otro", "password": "practica-123"}).status_code == 400
+    c.post("/api/login", json={"user": "amiga", "password": "practica-123"})
+    assert c.get("/api/status").status_code == 200                                     # a viewer now
+
+
+def test_signups_are_throttled(tmp_path, monkeypatch):
+    c, acc = _client(tmp_path, monkeypatch)
+    acc.add("santi", "clave-segura-1", "owner")
+    codes = [c.post("/api/signup", json={"user": f"u{i}", "password": "practica-123"}).status_code for i in range(5)]
+    assert codes[:3] == [200, 200, 200] and codes[3] == 429

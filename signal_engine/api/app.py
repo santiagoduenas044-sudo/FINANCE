@@ -11,6 +11,7 @@ URLs, no tokens) — see signal_engine/runtime/engine.py.
 from __future__ import annotations
 
 import hmac
+import json
 import logging
 import os
 import time
@@ -30,7 +31,7 @@ from . import maintenance
 from .backtest import STRATEGY_INFO, BacktestError, BacktestManager
 from .lab import LabError, LabManager
 from .accounts import COOKIE, SESSION_DAYS, AccountError, Accounts, Throttle
-from .practice import PracticeKey, write_env_value
+from .practice import PRACTICE_PATHS, PracticeKey, write_env_value
 from .replay import ReplayData, ReplayError
 from .chart import build_chart_data
 
@@ -43,11 +44,13 @@ _VALID_ACTIONS = {"start", "pause", "stop"}
 # UI shell itself (the browser then sends the token on the /api/* calls).
 _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
 _AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me",
-                      "/manifest.webmanifest", "/sw.js"}
+                      "/api/signup", "/manifest.webmanifest", "/sw.js"}
 # what a read-only user (role viewer) may not even read
 _OWNER_ONLY_GET = ("/api/practice/link", "/api/users")
 # what any signed-in user may change for themself (not only the owner)
-_SELF_SERVICE_POST = ("/api/push/",)
+_SELF_SERVICE_POST = ("/api/push/", "/api/practice/state")
+# all a practice-only user (signed up from the link) can open
+_PRACTICA_PATHS = PRACTICE_PATHS | {"/api/practice/state"}
 
 
 def _is_auth_exempt(path: str) -> bool:
@@ -136,6 +139,9 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                 if not practice.allows(_extract_token(request), request.method, path):
                     return JSONResponse(status_code=401,
                                         content={"detail": "unauthorized: missing or invalid token"})
+            elif who[0] == "practica" and path not in _PRACTICA_PATHS:
+                return JSONResponse(status_code=403, content={
+                    "detail": "Tu cuenta es para practicar: esto no está en tu cuenta."})
             elif who[0] != "owner" and ((request.method not in ("GET", "HEAD")
                                          and not path.startswith(_SELF_SERVICE_POST))
                                         or path.startswith(_OWNER_ONLY_GET)):
@@ -170,6 +176,85 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         resp.set_cookie(COOKIE, accounts.issue(name), max_age=SESSION_DAYS * 86400, httponly=True,
                         samesite="lax", secure=_https(request), path="/")
         return resp
+
+    signup_ip, signup_all = Throttle(3, 3600), Throttle(40, 86400)
+
+    @app.get("/api/signup")
+    def signup_state() -> dict:
+        return {"open": accounts.has_users() and accounts.signup_open()}
+
+    @app.post("/api/signup")
+    async def signup(request: Request) -> JSONResponse:
+        """Anyone with the link makes their own practice-only user."""
+        try:
+            body = await request.json()
+        except ValueError:
+            body = {}
+        ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+              or (request.client.host if request.client else "?"))
+        if signup_ip.blocked(ip) or signup_all.blocked("*"):
+            raise HTTPException(status_code=429, detail="Demasiadas cuentas nuevas. Intenta más tarde.")
+        name = str(body.get("user", "")).strip()
+        try:
+            accounts.signup(name, str(body.get("password", "")))
+        except AccountError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        signup_ip.fail(ip)
+        signup_all.fail("*")
+        resp = JSONResponse({"user": name, "role": "practica"})
+        resp.set_cookie(COOKIE, accounts.issue(name), max_age=SESSION_DAYS * 86400, httponly=True,
+                        samesite="lax", secure=_https(request), path="/")
+        return resp
+
+    @app.post("/api/signup/settings")
+    async def signup_settings(request: Request) -> dict:
+        accounts.set_signup(bool((await request.json()).get("open")))
+        return {"open": accounts.signup_open()}
+
+    # each user's practice account (balance, trades, drawings), on the server
+    practice_dir = Path(backtests.root) / "data_store" / "practice_users"
+
+    def _practice_file(request: Request) -> Path:
+        who = identity(request)
+        name = who[1] if who else ("dueño" if not auth_on() else None)
+        if name is None:
+            raise HTTPException(status_code=401, detail="Entra con tu usuario para guardar tu práctica.")
+        safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in name)[:40] or "_"
+        return practice_dir / f"{safe}.json"
+
+    @app.get("/api/practice/state")
+    def practice_state_get(request: Request) -> dict:
+        f = _practice_file(request)
+        try:
+            return {"state": json.loads(f.read_text())}
+        except (OSError, ValueError):
+            return {"state": {}}
+
+    @app.post("/api/practice/state")
+    async def practice_state_put(request: Request) -> dict:
+        f = _practice_file(request)
+        raw = await request.body()
+        if len(raw) > 2_000_000:
+            raise HTTPException(status_code=413, detail="La práctica guardada es demasiado grande.")
+        try:
+            state = json.loads(raw or b"{}").get("state")
+        except ValueError:
+            state = None
+        if not isinstance(state, dict) or any(not str(k).startswith("pr.") for k in state):
+            raise HTTPException(status_code=400, detail="Formato de práctica inválido.")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        tmp = f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state))
+        tmp.replace(f)
+        return {"ok": True}
+
+    @app.post("/api/users/{name}/role")
+    async def change_role(name: str, request: Request) -> dict:
+        try:
+            accounts.set_role(name, str((await request.json()).get("role", "")))
+        except AccountError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return {"users": accounts.listing()}
 
     @app.post("/api/logout")
     def logout() -> JSONResponse:
@@ -240,7 +325,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
 
     @app.get("/api/users")
     def list_users() -> dict:
-        return {"users": accounts.listing(), "token": settings.auth_enabled}
+        return {"users": accounts.listing(), "token": settings.auth_enabled,
+                "signup_open": accounts.signup_open()}
 
     @app.post("/api/users")
     async def save_user(request: Request) -> dict:
