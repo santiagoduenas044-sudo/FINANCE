@@ -3,7 +3,7 @@
    - La página se pide siempre a la Mac; sin conexión sale la pantalla
      "sin conexión con la Mac".
    - Íconos, letras y librerías se guardan para que abra rápido. */
-const CACHE = "ghost-v1";
+const CACHE = "ghost-v2";
 const OFFLINE = "/static/offline.html";
 const PRECACHE = [OFFLINE, "/static/icon-192.png", "/static/ghost.png"];
 
@@ -33,5 +33,22 @@ self.addEventListener("fetch", e => {
     const net = fetch(req).then(res => { if (res.ok || res.type === "opaque") c.put(req, res.clone()); return res; })
       .catch(() => hit);
     return hit || net;
+  }));
+});
+
+/* ── notificaciones push: entradas y salidas de los set ups, cierre del día ── */
+self.addEventListener("push", e => {
+  let m = {};
+  try { m = e.data ? e.data.json() : {}; } catch (x) { m = { title: "GHOST", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(m.title || "GHOST", {
+    body: m.body || "", tag: m.tag || undefined, renotify: !!m.tag,
+    icon: "/static/icon-192.png", badge: "/static/icon-192.png", data: { url: m.url || "/" } }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "/";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    for (const c of list) if ("focus" in c) { c.navigate(url).catch(() => {}); return c.focus(); }
+    return self.clients.openWindow(url);
   }));
 });

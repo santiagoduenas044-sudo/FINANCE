@@ -148,6 +148,11 @@ def build_runtime(
     setup_engine = SetupEngine(data_engine.cfg, registry)
     signal_engine = SignalEngine(data_engine.cfg.signals)
     dispatcher = OutputDispatcher.from_config(data_engine.cfg)  # Discord if enabled+configured
+    # push notifications to the installed app (live bot only; BOT_PUSH=off disables)
+    if data_dir is None:
+        from ..output.webpush import PushOutputAdapter, push_enabled
+        if push_enabled():
+            dispatcher.adapters.append(PushOutputAdapter())
 
     # Phase 14: GHOST brain + paper-trade memory (additive; disabled -> identical
     # behaviour to before). No new connections, no orders, no AI in the path.

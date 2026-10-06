@@ -693,6 +693,10 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   .hsrc .sep { margin-top: 2px; }
   .sumt .nowm { display: block; white-space: normal; margin-top: 3px; max-width: 200px; }
 }
+.pushk { display: grid; gap: 8px; }
+.pushk label { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink-1); }
+.pushk input { width: 18px; height: 18px; accent-color: var(--amber); }
+
 /* ── selector de color de acento ── */
 .accpick { display: flex; align-items: center; gap: 8px; }
 .accpick button { width: 22px; height: 22px; border-radius: 50%; background: var(--sw); flex: none;
@@ -1128,6 +1132,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 
   <!-- ═════════ 5 · SISTEMA ═════════ -->
   <section class="view" id="v-system">
+    <div class="card mb" id="push-card"><h3>Notificaciones <span class="r" id="push-state"></span></h3>
+      <div class="body" id="push-body"><p class="foot" style="margin:0">Revisando…</p></div></div>
     <div class="card mb" id="inst-card"><h3>Instalar como app <span class="r" id="inst-state"></span></h3>
       <div class="body" id="inst-body"></div></div>
     <div class="card mb"><h3>Apariencia</h3>
@@ -1294,6 +1300,68 @@ $("theme-btn").onclick = () => {
   try { localStorage.setItem("ghost.theme", isDark() ? "light" : "dark"); } catch {}
   location.reload();                       // los gráficos toman los colores nuevos al cargar
 };
+/* ── notificaciones push en este teléfono / navegador ── */
+const PUSH_KINDS = [["trades", "Entradas y salidas de Set up 1 y 2"], ["setups", "Los otros set ups"],
+  ["daily", "Cierre del día"], ["inspiration", "Versículo y dato curioso"]];
+const b64ToBytes = s => { const p = "=".repeat((4 - s.length % 4) % 4), b = atob((s + p).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(b, c => c.charCodeAt(0)); };
+async function pushSub() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration("/"); return reg ? reg.pushManager.getSubscription() : null;
+}
+async function paintPush() {
+  const box = $("push-body"), st = $("push-state");
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+    st.textContent = "";
+    box.innerHTML = `<p class="foot" style="margin:0">${ios && !isApp()
+      ? "En iPhone las notificaciones funcionan con GHOST <b>instalada como app</b>: instálala (abajo) y ábrela desde tu pantalla de inicio."
+      : "Este navegador no puede recibir notificaciones."}</p>`;
+    return;
+  }
+  let d; try { d = await api("/api/push"); } catch (e) {
+    st.textContent = ""; box.innerHTML = `<p class="foot" style="margin:0">${esc(e.message || "No disponible para tu usuario.")}</p>`; return; }
+  const sub = await pushSub().catch(() => null);
+  const on = !!sub && d.endpoints.includes(sub.endpoint);
+  const prefs = d.prefs || { trades: true, setups: true, daily: true, inspiration: false };
+  st.innerHTML = on ? '<span class="badge good">activadas aquí</span>' : Notification.permission === "denied" ? '<span class="badge bad">bloqueadas</span>' : "";
+  box.innerHTML = Notification.permission === "denied"
+    ? `<p class="foot" style="margin:0">Las bloqueaste en este ${ios ? "iPhone: Ajustes → Notificaciones → GHOST" : "navegador: permite las notificaciones del sitio"} y vuelve aquí.</p>`
+    : `<p class="foot" style="margin-top:0">Avisos en ${ios ? "tu iPhone" : "este dispositivo"} cuando un set up entra o sale, aunque la app esté cerrada.
+        ${d.phones > (on ? 1 : 0) ? `Tienes ${d.phones} ${d.phones === 1 ? "dispositivo" : "dispositivos"} con avisos.` : ""}</p>
+      <div class="pushk">${PUSH_KINDS.map(([k, t]) => `<label><input type="checkbox" data-pk="${k}" ${prefs[k] ? "checked" : ""}> ${esc(t)}</label>`).join("")}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        ${on ? `<button class="pbtn" type="button" id="push-test">Enviar prueba</button><button class="pbtn" type="button" id="push-off">Desactivar aquí</button>`
+             : `<button class="pbtn on" type="button" id="push-on">Activar notificaciones</button>`}</div>
+      <p class="foot" id="push-msg"></p>`;
+  const say = t => { const m = $("push-msg"); if (m) m.textContent = t; };
+  const chosen = () => Object.fromEntries([...box.querySelectorAll("[data-pk]")].map(x => [x.dataset.pk, x.checked]));
+  box.querySelectorAll("[data-pk]").forEach(x => x.onchange = async () => {
+    if (!on) return;
+    try { await api("/api/push/prefs", { method: "POST", body: JSON.stringify({ prefs: chosen() }) }); say("Guardado."); } catch (e) { say(e.message); }
+  });
+  if ($("push-on")) $("push-on").onclick = async () => {
+    try {
+      say("Pidiendo permiso…");
+      if (await Notification.requestPermission() !== "granted") { paintPush(); return; }
+      const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      await navigator.serviceWorker.ready;
+      const s = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(d.key) });
+      await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: s.toJSON(), prefs: chosen() }) });
+      await api("/api/push/test", { method: "POST" });
+      paintPush();
+    } catch (e) { say("No se pudo activar: " + (e.message || e)); }
+  };
+  if ($("push-test")) $("push-test").onclick = async () => {
+    try { const r = await api("/api/push/test", { method: "POST" }); say(r.sent ? "Enviada: debería llegarte en unos segundos." : "No se pudo enviar; desactiva y vuelve a activar."); }
+    catch (e) { say(e.message); }
+  };
+  if ($("push-off")) $("push-off").onclick = async () => {
+    try { await api("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: sub.endpoint }) }); await sub.unsubscribe(); }
+    catch (e) { say(e.message); }
+    paintPush();
+  };
+}
 /* ── instalar como app (pantalla de inicio, pantalla completa) ── */
 const isApp = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 let installEvt = null;
@@ -2071,7 +2139,7 @@ async function dcLoad() {
     : (DC_FIX[d.state] || "");
 }
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); paintPush(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";

@@ -61,16 +61,20 @@ def settings() -> OrbSettings:
 
 
 def make_publisher():
-    """ORBIT's own Discord channel, or just the log when no webhook is set."""
-    if not os.environ.get(WEBHOOK_ENV, "").strip():
-        log.warning("%s no está en .env: ORBIT solo escribe en su log.", WEBHOOK_ENV)
-
+    """ORBIT's own Discord channel and the app's push notifications, or just
+    the log when neither is set."""
+    from ..output.webpush import PushOutputAdapter, push_enabled
+    adapters = [PushOutputAdapter()] if push_enabled() else []
+    if os.environ.get(WEBHOOK_ENV, "").strip():
+        from ..config.schema import DiscordOutputConfig
+        adapters.insert(0, DiscordOutputAdapter(DiscordOutputConfig(enabled=True, webhook_env=WEBHOOK_ENV)))
+    else:
+        log.warning("%s no está en .env: ORBIT no escribe en Discord.", WEBHOOK_ENV)
+    if not adapters:
         def to_log(*, title, text, **_kw):
             log.info("%s | %s", title, text.replace("\n", " · "))
         return to_log
-    from ..config.schema import DiscordOutputConfig
-    cfg = DiscordOutputConfig(enabled=True, webhook_env=WEBHOOK_ENV)
-    return OutputDispatcher([DiscordOutputAdapter(cfg)]).publish_note
+    return OutputDispatcher(adapters).publish_note
 
 
 def yahoo_bars() -> pd.DataFrame:

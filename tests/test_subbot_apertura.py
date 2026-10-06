@@ -183,10 +183,14 @@ def test_orbit_command_reads_its_saved_record(tmp_path, monkeypatch):
 def test_orbit_writes_only_to_its_own_channel(monkeypatch):
     from signal_engine.subbots import orbit
     monkeypatch.delenv("DISCORD_WEBHOOK_ORBIT", raising=False)
-    assert not hasattr(orbit.make_publisher(), "__self__")      # no webhook: only its log
+    monkeypatch.setenv("BOT_PUSH", "off")
+    assert not hasattr(orbit.make_publisher(), "__self__")      # nothing set: only its log
+    monkeypatch.delenv("BOT_PUSH")
+    assert [a.name for a in orbit.make_publisher().__self__.adapters] == ["push"]   # the app only
     monkeypatch.setenv("DISCORD_WEBHOOK_ORBIT", "https://discord.invalid/x")
-    adapter = orbit.make_publisher().__self__.adapters[0]
-    assert adapter.config.webhook_env == "DISCORD_WEBHOOK_ORBIT" and adapter.configured
+    adapters = orbit.make_publisher().__self__.adapters
+    assert [a.name for a in adapters] == ["discord", "push"]
+    assert adapters[0].config.webhook_env == "DISCORD_WEBHOOK_ORBIT" and adapters[0].configured
 
 
 def test_orbit_polls_and_survives_a_bad_poll(tmp_path):

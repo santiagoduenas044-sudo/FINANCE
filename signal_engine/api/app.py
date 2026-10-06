@@ -46,6 +46,8 @@ _AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "
                       "/manifest.webmanifest", "/sw.js"}
 # what a read-only user (role viewer) may not even read
 _OWNER_ONLY_GET = ("/api/practice/link", "/api/users")
+# what any signed-in user may change for themself (not only the owner)
+_SELF_SERVICE_POST = ("/api/push/",)
 
 
 def _is_auth_exempt(path: str) -> bool:
@@ -134,7 +136,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                 if not practice.allows(_extract_token(request), request.method, path):
                     return JSONResponse(status_code=401,
                                         content={"detail": "unauthorized: missing or invalid token"})
-            elif who[0] != "owner" and (request.method not in ("GET", "HEAD")
+            elif who[0] != "owner" and ((request.method not in ("GET", "HEAD")
+                                         and not path.startswith(_SELF_SERVICE_POST))
                                         or path.startswith(_OWNER_ONLY_GET)):
                 return JSONResponse(status_code=403, content={
                     "detail": "Tu usuario es de solo lectura: esto lo hace el dueño."})
@@ -180,6 +183,60 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         return {"auth": auth_on(), "users": accounts.has_users(),
                 "user": who[1] if who else None, "role": who[0] if who else
                 ("owner" if not auth_on() else None), "via": who[2] if who else None}
+
+    # -- notificaciones push (la app instalada) ------------------------------ #
+    from ..output.webpush import PushStore, send as push_send
+    push = PushStore(Path(backtests.root))
+    app.state.push = push
+
+    def push_user(request: Request) -> str:
+        who = identity(request)
+        if who is None:
+            if auth_on():
+                raise HTTPException(status_code=401, detail="Entra con tu usuario primero.")
+            return "dueño"
+        if who[0] not in ("owner", "viewer"):
+            raise HTTPException(status_code=403, detail="Las notificaciones de los bots son para owner y viewer.")
+        return who[1]
+
+    @app.get("/api/push")
+    def push_status(request: Request) -> dict:
+        user = push_user(request)
+        mine = push.of(user)
+        return {"key": push.vapid.public_key, "phones": len(mine),
+                "endpoints": [m["endpoint"] for m in mine],
+                "prefs": mine[0]["prefs"] if mine else None}
+
+    @app.post("/api/push/subscribe")
+    async def push_subscribe(request: Request) -> dict:
+        user = push_user(request)
+        body = await request.json()
+        try:
+            push.add(user, body.get("subscription") or {}, body.get("prefs"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return {"ok": True, "phones": len(push.of(user))}
+
+    @app.post("/api/push/unsubscribe")
+    async def push_unsubscribe(request: Request) -> dict:
+        user = push_user(request)
+        endpoint = (await request.json()).get("endpoint", "")
+        if endpoint in {m["endpoint"] for m in push.of(user)}:
+            push.remove(endpoint)
+        return {"ok": True, "phones": len(push.of(user))}
+
+    @app.post("/api/push/prefs")
+    async def push_prefs(request: Request) -> dict:
+        user = push_user(request)
+        n = push.set_prefs(user, (await request.json()).get("prefs") or {})
+        return {"ok": True, "phones": n}
+
+    @app.post("/api/push/test")
+    def push_test(request: Request) -> dict:
+        user = push_user(request)
+        n = push_send(push, {"title": "👻 GHOST", "body": "Así te van a llegar los avisos de tus set ups.",
+                             "tag": "test", "url": "/"}, "trades", user=user)
+        return {"sent": n}
 
     @app.get("/api/users")
     def list_users() -> dict:
