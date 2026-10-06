@@ -49,6 +49,10 @@ TICK = 0.25
 POSITIONS = {"5mnq": ("5 MNQ", 10.0, 5 * 1.04), "1nq": ("1 NQ", 20.0, 3.10),
              "riesgo": ("riesgo fijo en MNQ", 2.0, 1.04)}
 REF_PRICE = 15_000.0                 # NQ around 2021-2022: what the point limits were set for
+# --escala velas: the point limits are written for an average 15-minute candle
+# of this size (the live bot's `atr_ref_points`, point_mode "atr")
+ATR_REF = 20.0
+ATR_BARS = 20
 MAX_MICROS = 15                     # never more than 1.5 NQ, however tight the stop
 # the largest Nasdaq-100 weights: their 1-minute bars feed the breadth filter
 MEGACAPS = ("NVDA", "MSFT", "AAPL", "AMZN", "META", "AVGO", "GOOGL", "TSLA")
@@ -89,15 +93,36 @@ class Market:
         # --escala precio: point limits are written for NQ at REF_PRICE and
         # grow with the price (50 pts at 15,000 = 100 pts at 30,000). Uses the
         # previous day's close, so it never peeks at today.
-        self.scaled = False
+        # --escala velas: they follow the size of the candles, like the live
+        # bot (point_mode "atr"): average range of the last ATR_BARS closed
+        # 15-minute candles / ATR_REF, known at each moment (never ahead).
+        self.scale_mode = "puntos"
+        self.atr_ref = ATR_REF
         close = m1["close"].groupby(day).last()
         self._day_scale = (close.shift(1) / REF_PRICE).bfill()
+
+    @property
+    def scaled(self) -> bool:
+        return self.scale_mode != "puntos"
+
+    @scaled.setter
+    def scaled(self, on: bool) -> None:          # old callers: True = by price
+        self.scale_mode = "precio" if on else "puntos"
 
     def scale_at(self, times) -> np.ndarray:
         """Factor for point limits at each of `times` (1.0 without --escala)."""
         times = pd.DatetimeIndex(times)
-        if not self.scaled:
+        if self.scale_mode == "puntos":
             return np.ones(len(times))
+        if self.scale_mode == "velas":
+            if "_vel" not in self.__dict__:
+                b = self.bars("15min")
+                atr = (b["high"] - b["low"]).rolling(ATR_BARS, min_periods=ATR_BARS // 2).mean()
+                self._vel = (b["end"].to_numpy(), np.clip((atr / self.atr_ref).to_numpy(), 0.5, 5.0))
+            end, k = self._vel
+            i = np.searchsorted(end, times.values, side="right") - 1      # last candle closed
+            out = np.where(i >= 0, k[np.clip(i, 0, None)], np.nan)
+            return np.nan_to_num(out, nan=1.0)
         day = (times + pd.Timedelta(hours=6)).normalize()
         return self._day_scale.reindex(day).ffill().bfill().fillna(1.0).to_numpy()
 
@@ -1094,9 +1119,15 @@ def main() -> int:
                          "GHOST en velas de 1, 5 y 15 min · proteccion: GHOST (zonas 15 min) "
                          "con cada forma de asegurar ganancia, de día y de noche · nuevas: "
                          "MURO, RELLENO, TRAMPA, RESORTE, CIERRE, IMPULSO, APERTURA VWAP")
-    ap.add_argument("--escala", choices=("puntos", "precio"), default="puntos",
+    ap.add_argument("--escala", choices=("puntos", "precio", "velas"), default="puntos",
                     help="precio: los límites en puntos crecen con el precio del NQ "
-                         f"(escritos para {REF_PRICE:,.0f}; a 30,000 valen el doble)")
+                         f"(escritos para {REF_PRICE:,.0f}; a 30,000 valen el doble) · velas: "
+                         "siguen el tamaño de las velas de 15 min de cada momento (escritos "
+                         f"para una vela media de {ATR_REF:g} pts), como el bot en modo 'atr'")
+    ap.add_argument("--vela-ref", type=float, default=ATR_REF,
+                    help="con --escala velas: tamaño de vela de 15 min para el que están escritos "
+                         f"los puntos (por defecto {ATR_REF:g}, como el bot). Más chico = stops "
+                         "más grandes")
     ap.add_argument("--apex-dd", type=float, default=2500.0,
                     help="caída máxima que permite la cuenta (Apex 50K ≈ $2,500)")
     ap.add_argument("--json-out")
@@ -1109,13 +1140,16 @@ def main() -> int:
         label = f"riesgo fijo ${a.risk_usd:,.0f} por trade (1 a {MAX_MICROS} MNQ)"
     t0 = time.time()
     mk = Market(load_1m(a.symbol, a.data, a.start, a.end))
-    mk.scaled = a.escala == "precio"
+    mk.scale_mode = a.escala
+    mk.atr_ref = a.vela_ref
     big = load_megacaps(a.start, a.end) if a.estudio == "todo" else None
     print(f"== Laboratorio · {a.symbol} {a.start} → {a.end} · {label} · costo "
           f"{cost:.2f} pts/trade ({'por MNQ ' if riesgo else ''}${cost * pv:,.2f}) · entradas "
           f"{'09:30-15:30' if a.sessions == 'rth' else 'día y noche'} · TRAIN < {a.split} ≤ TEST")
-    print("   límites en puntos " + (f"ESCALADOS al precio (escritos para NQ a {REF_PRICE:,.0f})"
-                                     if mk.scaled else "fijos"))
+    print("   límites en puntos " + {
+        "precio": f"ESCALADOS al precio (escritos para NQ a {REF_PRICE:,.0f})",
+        "velas": f"SEGÚN LAS VELAS de 15 min de cada momento (escritos para velas de {a.vela_ref:g} pts)",
+    }.get(a.escala, "fijos"))
     print("   prom = dólares por trade después de costos · conf = qué tan lejos del azar"
           " (≥ 2 ≈ poco probable por suerte)")
     if big is None and a.estudio == "todo":

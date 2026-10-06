@@ -43,6 +43,13 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
 
+  - id: zonas_15m_fijo
+    setup: 9
+    name: "IMÁN 15 FIJO"
+    about: "Set up 1 como estaba hasta el 6 de octubre: stop fijo de 20–35 pts y objetivo 3×, sin importar el tamaño de las velas. Para comparar con el stop según el mercado."
+    strategy: zones_fijo
+    version: v4
+
   - id: zonas_15m_noticias
     setup: 5
     name: "IMÁN 15 CALMA"

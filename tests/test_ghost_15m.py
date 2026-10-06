@@ -106,3 +106,40 @@ def test_ghost_porque_lists_each_idea_with_its_reason(tmp_path):
     assert "límite del día" in text
     assert "ya la había evaluado" not in text                 # repeats are left out
     assert read_log(1, log).count("descartada") == 2 and "TOMADO" not in read_log(1, log)
+
+
+def test_stop_and_target_follow_the_size_of_the_candles():
+    """point_mode "atr": the 20-35 pts are written for 20-pt 15-minute
+    candles; with 40-pt candles they become 40-70 and the 3x target follows."""
+    from signal_engine.data.context import AnalysisContext, TimeframeView
+    from signal_engine.features.analyzer import MarketAnalysis
+    from signal_engine.setups.zone_retrace import ZoneRetraceDetector
+
+    def run(candle):                 # earlier 15m candles of `candle` points, then the same setup
+        calm = _bars([(100, 100 + candle / 2, 100 - candle / 2, 100)] * 20,
+                     T0 - pd.Timedelta(minutes=15 * 23), "15min")
+        z15 = _bars([(95, 100, 94, 99), (99, 118, 98, 117), (117, 125, 110, 124)],
+                    T0 - pd.Timedelta(minutes=45), "15min")
+        conf = _bars([(104, 112, 103, 108)], z15.index[-1] + pd.Timedelta(minutes=15), "15min")
+        ex = pd.concat([calm, z15, conf])
+        ctx = AnalysisContext("NQ", ex.index[-1], "RTH", htf=TimeframeView("1H", ex.iloc[:0]),
+                              structure=TimeframeView("15m", ex), execution=TimeframeView("1m", ex))
+        p = ZoneRetraceParams(enabled=True, timeframe="15m", zone_timeframe="15m",
+                              fixed_target_r=3.0, single_target=True, stop_from="fill",
+                              zone_lookback_bars=4, point_mode="atr", atr_bars=20,
+                              atr_ref_points=20.0, max_risk_points=120.0)
+        det = ZoneRetraceDetector(p)
+        (c,) = det.detect(ctx, MarketAnalysis("NQ", ex.index[-1], {}))
+        return c, det.market_scale(ctx)
+
+    c, (k, avg) = run(20.0)          # candles like the ones the values were written for
+    assert 0.9 < k < 1.3 and c.entry - c.stop_loss == pytest.approx(20 * k, abs=0.01)
+    c2, (k2, _) = run(40.0)          # candles twice as big: twice the room
+    assert k2 > 1.6 and k2 > 1.5 * k                 # (the setup's own candles are in the average)
+    assert c2.entry - c2.stop_loss == pytest.approx(20 * k2, abs=0.01)
+    assert c2.take_profits[0] - c2.entry == pytest.approx(3 * 20 * k2, abs=0.01)
+    assert any("vela media de 15m" in r for r in c2.reasons)
+
+
+def test_fixed_points_stay_fixed_by_default():
+    assert ZoneRetraceParams().point_mode == "points"

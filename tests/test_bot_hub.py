@@ -96,7 +96,8 @@ def test_ghost_shadows_get_the_live_bars(tmp_path):
     from tests.test_bot_runtime import _pipeline
 
     shadows = build_ghost_shadows(ContractRegistry.load(), base=tmp_path)
-    assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche", "zonas_15m_noticias"]
+    assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche", "zonas_15m_fijo",
+                                          "zonas_15m_noticias"]
     engine = DataEngine(EngineConfig.load(strategy="zones"))
     rt = _runtime(engine)
     rt.shadows = shadows
@@ -167,7 +168,8 @@ def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
     assert not v["setups_clasicos"]["enabled"] and v["setups_clasicos"]["now"] == "Apagado."
     vers = {x["version"]: x for x in ghost["versions"]}
     assert vers["v1"]["variant"] == "setups_clasicos" and vers["v1"]["variant_on"] is False
-    assert vers["v2"]["variant_on"] is True and vers["v4"]["current"]
+    assert vers["v2"]["variant_on"] is True and vers["v5"]["current"]
+    assert vers["v4"]["variant"] == "zonas_15m_fijo"                 # the fixed-stop Set up 9
     # ORBIT runs elsewhere: the switch is saved for it to pick up
     assert c.post("/api/bots/orbit/variants/apertura_tp2?on=false").status_code == 200
     from signal_engine.runtime.shadows import switches
@@ -271,15 +273,19 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
     c = TestClient(app)
     st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
-    (only,) = st["IMÁN 15"]["live"]["detail"]
+    # each part on its own: v4 (stop fijo), v5 (según el mercado, la de ahora), Set up 9
+    parts = {p.get("version") or p.get("variant"): p for p in st["IMÁN 15"]["live"]["detail"]}
+    only = parts["v4"]
     pv = only["net_usd"] / 25.0                                   # $ per point of GHOST's size
     assert only["n"] == 1                                         # not the 1-minute trades
+    assert parts["v5"]["n"] == 0 and parts["v5"]["name"].startswith("Set up 1")
+    assert parts["zonas_15m_fijo"]["name"].startswith("Set up 9")
     real = [p for p in st["IMÁN 1"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
                      "name": "GHOST v2 (antes)", "n": 2, "net_usd": 100.0 * pv}]
     assert st["IMÁN 1"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
     assert st["IMÁN 1"]["live"]["detail"][-1]["name"].startswith("Set up 3")
-    assert st["IMÁN 15"]["setups"] == [1] and st["IMÁN 1"]["setups"] == [3]
+    assert st["IMÁN 15"]["setups"] == [1, 9] and st["IMÁN 1"]["setups"] == [3]
     assert [p["n"] for p in st["IMÁN 1 NOCHE"]["live"]["detail"] if p["kind"] == "real"] == [1]
     assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
     assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None

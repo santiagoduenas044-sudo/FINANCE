@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import ClassVar, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -157,16 +157,37 @@ class ZoneRetraceParams(BaseModel):
     # roughly a quarter of NQ's points for the same % move.
     points_scale: dict[str, float] = Field(
         default_factory=lambda: {"ES": 0.25, "MES": 0.25})
+    # How the point values above meet the market:
+    #   "points" — fixed index points (20 pts of stop are 20 pts in 2021 and now);
+    #   "atr"    — they follow the size of the candles: every distance is
+    #     multiplied by (average range of the last `atr_bars` closed candles of
+    #     `atr_timeframe`) / `atr_ref_points`. Written for a 20-pt average
+    #     15-minute candle: when candles average 45 pts, a 20-35 stop becomes
+    #     45-79 and the 3x target 135-236. Same idea on any year of the lab.
+    point_mode: str = "points"
+    atr_timeframe: str = "15m"
+    atr_bars: int = 20
+    atr_ref_points: float = 20.0
+    atr_scale_min: float = 0.5           # never below half...
+    atr_scale_max: float = 5.0           # ...nor above 5x the written values
+
+    _POINT_FIELDS: ClassVar[tuple] = ("min_zone_points", "max_zone_points", "min_stop_points",
+                     "max_stop_points", "stop_buffer_points", "max_risk_points",
+                     "arm_distance_points")
+
+    def scaled(self, k: float) -> "ZoneRetraceParams":
+        """Every point distance multiplied by `k`."""
+        if k == 1.0:
+            return self
+        return self.model_copy(update={f: getattr(self, f) * k for f in self._POINT_FIELDS})
 
     def for_symbol(self, symbol: str) -> "ZoneRetraceParams":
         k = self.points_scale.get(symbol, 1.0)
         if k == 1.0:
             return self
         return self.model_copy(update={
-            f: getattr(self, f) * k for f in (
-                "min_zone_points", "max_zone_points", "min_stop_points",
-                "max_stop_points", "stop_buffer_points", "max_risk_points",
-                "arm_distance_points")})
+            **{f: getattr(self, f) * k for f in self._POINT_FIELDS},
+            "atr_ref_points": self.atr_ref_points * k})
 
 
 class SetupsConfig(BaseModel):
@@ -491,7 +512,13 @@ class EngineConfig(BaseModel):
                 known = sorted(p.stem for p in STRATEGIES_DIR.glob("*.yaml"))
                 raise ValueError(f"unknown strategy {strategy!r}; known: {known}")
             with open(overlay_path, "r") as fh:
-                raw = _deep_merge(raw, yaml.safe_load(fh) or {})
+                over = yaml.safe_load(fh) or {}
+            # `extends: <other strategy>`: that one first, then this file's changes
+            parent = over.pop("extends", None)
+            if parent:
+                with open(STRATEGIES_DIR / f"{parent}.yaml", "r") as fh:
+                    raw = _deep_merge(raw, yaml.safe_load(fh) or {})
+            raw = _deep_merge(raw, over)
             raw["strategy"] = strategy
         if overrides:
             raw = _deep_merge(raw, overrides)

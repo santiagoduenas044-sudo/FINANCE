@@ -1,0 +1,9 @@
+# GHOST v4 / Set up 9: the zones strategy with FIXED point distances (stop
+# 20-35 pts and the 3x target the same in any market). The live bot moved to
+# distances that follow the candles on 2026-10-06 (zones.yaml, point_mode atr);
+# this keeps the fixed one to compare, live and in the backtests.
+extends: zones
+
+setups:
+  zone_retrace:
+    point_mode: points

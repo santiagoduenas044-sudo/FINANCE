@@ -36,7 +36,7 @@ def test_backtest_runs_from_the_dashboard(tmp_path):
 
     r = client.post("/api/backtest/run", json={"symbol": "ES", "data": "SAMPLE",
                                                 "start": "2026-06-10", "end": "2026-06-10",
-                                                "strategy": "zones"})
+                                                "strategy": "zones_fijo"})
     assert r.status_code == 200 and r.json()["state"] == "running"
     deadline = time.time() + 240
     while mgr.running() and time.time() < deadline:

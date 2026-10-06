@@ -294,3 +294,18 @@ def test_new_ideas_run_and_carry_their_codes():
         assert name.split(" · ")[0] in codes
         lab.run(mk, sig, 1.0, "rth")
     assert any(sig for name, sig, _ in rows if name.startswith("MURO"))
+
+
+def test_scale_by_candles_follows_the_15_minute_range_without_looking_ahead():
+    # 4 hours of 1-minute bars with 2-pt ranges, then 3 hours of 60-pt ones
+    rows = [(100, 101, 99, 100)] * 240 + [(100, 130, 70, 100)] * 180
+    mk = _market(rows, start="2025-03-03 09:00")
+    mk.scale_mode = "velas"
+    k_calm, k_wild = mk.scale_at([pd.Timestamp("2025-03-03 12:59"), pd.Timestamp("2025-03-03 15:59")])
+    assert k_calm == pytest.approx(0.5)                  # floor: tiny candles
+    assert k_wild > 1.5                                  # 60-pt candles closed by then
+    # at 13:00 the first big 15m candle has not closed yet: still calm
+    assert mk.scale_at([pd.Timestamp("2025-03-03 13:00")])[0] == pytest.approx(0.5)
+    t_wild = pd.Timestamp("2025-03-03 15:59")
+    mk.scale_mode = "puntos"
+    assert list(mk.scale_at([t_wild])) == [1.0]

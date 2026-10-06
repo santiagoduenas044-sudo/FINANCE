@@ -35,6 +35,16 @@ setups:
     max_zone_points: 60.0
     min_stop_points: 20.0
     max_stop_points: 35.0
+    # Since 2026-10-06 (GHOST v5) every distance follows the market: the
+    # values here are for an average 15-minute candle of 20 pts and grow or
+    # shrink with the real one (average of the last 20 closed 15m candles).
+    # With 45-pt candles the stop is 45-79 pts and the target 3x that. A
+    # fixed 20-pt stop that was wide in 2021 is noise now. The fixed version
+    # keeps running in parallel as Set up 9 (config/shadows.yaml).
+    point_mode: atr
+    atr_timeframe: "15m"
+    atr_bars: 20
+    atr_ref_points: 20.0
     stop_buffer_points: 1.0
     stop_from: "fill"               # stop 20-35 pts from the entry, behind the origin
     max_risk_points: 120.0

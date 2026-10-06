@@ -25,6 +25,10 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("v4", "2026-09-29", "IMÁN 15 · zonas 15 min de día",
          "Huecos de 15 min confirmados por una vela de 15 min. Stop 20–35 pts desde la "
          "entrada, objetivo 3×, entradas 9:30–15:30, cierre 16:55, sin límites diarios."),
+        ("v5", "2026-10-06", "IMÁN 15 · zonas 15 min, stop según el mercado",
+         "Las mismas reglas, pero el stop, el objetivo y el tamaño de las zonas siguen el "
+         "tamaño de las velas de 15 min: 20–35 pts cuando la vela media es de 20; con velas "
+         "de 45, 45–79 pts y objetivo 3×. La versión fija sigue en paralelo (Set up 9)."),
     ],
     "ORBIT": [
         ("v1", "2026-09-29", "APERTURA · 1 MNQ",
@@ -48,8 +52,10 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
     {"code": "IMÁN 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
-     "real": {"GHOST": ["v4"]},
-     "text": "Huecos de precio de 15 min, primer regreso, stop 20–35 pts, objetivo 3×.",
+     "real": {"GHOST": ["v4", "v5"]}, "shadows": ["zonas_15m_fijo"],
+     "text": "Huecos de precio de 15 min, primer regreso, objetivo 3× el stop. Desde el 6 de "
+             "octubre el stop sigue el tamaño de las velas (Set up 1); con stop fijo de 20–35 "
+             "pts corre en paralelo (Set up 9).",
      "lab": "5 años, 5 MNQ: +$25 por trade en 2021–23 y +$12 en 2024–26. Gana en los dos "
             "periodos, pero todavía sin suficiente confianza."},
     {"code": "APERTURA", "name": "Ruptura de la caja de apertura", "bot": "ORBIT",
@@ -149,6 +155,7 @@ VERSION_NAMES: dict[tuple[str, str], str] = {
     ("GHOST", "v2"): "Zonas de 1 minuto",
     ("GHOST", "v3"): "Zonas de 1 minuto, día y noche",
     ("GHOST", "v4"): "Zonas de 15 minutos",
+    ("GHOST", "v5"): "Zonas de 15 minutos, stop según el mercado",
     ("ORBIT", "v1"): "Caja de apertura con 1 MNQ",
     ("ORBIT", "v2"): "Caja de apertura con 1 NQ",
     ("ORBIT", "v3"): "Caja de apertura con 5 MNQ",

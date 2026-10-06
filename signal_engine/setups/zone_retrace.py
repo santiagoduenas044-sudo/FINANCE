@@ -151,11 +151,44 @@ class ZoneRetraceDetector(SetupDetector):
     def __init__(self, params: ZoneRetraceParams):
         self.p = params
         self._last: tuple | None = None    # (ctx, states): detector + runtime share it
+        self._scale: tuple | None = None   # (ctx, factor, average candle)
+
+    def market_scale(self, ctx: AnalysisContext) -> tuple[float, float | None]:
+        """(factor, average candle in points) that the point values are
+        multiplied by now: (1.0, None) in "points" mode or without bars."""
+        if self._scale is not None and self._scale[0] is ctx:
+            return self._scale[1], self._scale[2]
+        p = self.p.for_symbol(ctx.symbol)
+        k, avg = 1.0, None
+        if p.point_mode == "atr":
+            try:
+                bars = view_for(ctx, p.atr_timeframe).bars
+            except KeyError:
+                bars = None
+            if bars is not None and len(bars) >= max(3, p.atr_bars // 2):
+                rng = (bars[HIGH] - bars[LOW]).iloc[-p.atr_bars:]
+                avg = float(rng.mean())
+                if avg > 0 and p.atr_ref_points > 0:
+                    k = min(max(avg / p.atr_ref_points, p.atr_scale_min), p.atr_scale_max)
+        self._scale = (ctx, k, avg)
+        return k, avg
+
+    def _market_note(self, ctx) -> list[str]:
+        k, avg = self.market_scale(ctx)
+        if avg is None:
+            return []
+        return [f"Distancias según el mercado: vela media de {self.p.atr_timeframe} = "
+                f"{avg:.0f} pts (×{k:.2f} de lo escrito para velas de "
+                f"{self.p.for_symbol(ctx.symbol).atr_ref_points:g} pts)"]
+
+    def params(self, ctx: AnalysisContext) -> ZoneRetraceParams:
+        """The rules for this symbol, at today's market (see point_mode)."""
+        return self.p.for_symbol(ctx.symbol).scaled(self.market_scale(ctx)[0])
 
     def zone_states(self, ctx: AnalysisContext) -> list[ZoneState]:
         if self._last is not None and self._last[0] is ctx:
             return self._last[1]
-        p = self.p.for_symbol(ctx.symbol)
+        p = self.params(ctx)
         zbars = view_for(ctx, p.zone_timeframe).bars
         ebars = view_for(ctx, p.timeframe).bars
         states = []
@@ -192,7 +225,7 @@ class ZoneRetraceDetector(SetupDetector):
     def plan_for(self, ctx, analysis, z: Zone) -> dict:
         """The trade plan for a zone, anchored at its midpoint: what the
         heads-up announces and what a confirmation will trade."""
-        p = self.p.for_symbol(ctx.symbol)
+        p = self.params(ctx)
         bull = z.bullish
         plan_r = abs(z.mid - z.stop)
         tp1, _ = self._target(ctx, analysis, z.mid, plan_r, bull, p.tp1_r, p.tp1_max_r, p.tp1_r)
@@ -215,7 +248,7 @@ class ZoneRetraceDetector(SetupDetector):
                 * int(pd.Timedelta(p.timeframe.replace("m", "min")).total_seconds() // 60)}
 
     def _make(self, ctx, analysis, N, entry: float, z: Zone) -> SetupCandidate | None:
-        p = self.p.for_symbol(ctx.symbol)
+        p = self.params(ctx)
         bull = z.bullish
         stop = z.stop
         plan = self.plan_for(ctx, analysis, z)
@@ -248,7 +281,7 @@ class ZoneRetraceDetector(SetupDetector):
                 f"Reacción confirmada: vela {'alcista' if bull else 'bajista'} que "
                 f"cerró {'arriba' if bull else 'abajo'} de la mitad ({z.mid:.2f})",
                 f"Objetivo final: {basis}",
-            ],
+            ] + self._market_note(ctx),
             invalidation_conditions=[f"Stop {stop:.2f}: {plan_r:g} pts "
                                      f"{'bajo' if bull else 'sobre'} "
                                      + ("la entrada" if p.stop_from == "fill"
