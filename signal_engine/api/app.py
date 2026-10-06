@@ -42,7 +42,8 @@ _VALID_ACTIONS = {"start", "pause", "stop"}
 # health check (for load balancers / systemd / uptime probes) and the static
 # UI shell itself (the browser then sends the token on the /api/* calls).
 _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
-_AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me"}
+_AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me",
+                      "/manifest.webmanifest", "/sw.js"}
 # what a read-only user (role viewer) may not even read
 _OWNER_ONLY_GET = ("/api/practice/link", "/api/users")
 
@@ -640,17 +641,32 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     if STATIC_DIR.exists():
         app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+        # the pages are always asked to the Mac (no stale copy after an update,
+        # and the app shows "sin conexión" instead of an empty page)
+        fresh = {"Cache-Control": "no-cache"}
+
         @app.get("/")
         def index() -> FileResponse:
-            return FileResponse(STATIC_DIR / "index.html")
+            return FileResponse(STATIC_DIR / "index.html", headers=fresh)
 
         @app.get("/login")
         def login_page() -> FileResponse:
-            return FileResponse(STATIC_DIR / "login.html")
+            return FileResponse(STATIC_DIR / "login.html", headers=fresh)
 
         @app.get("/practica")
         def practice_page() -> FileResponse:
             """The same page in practice-only mode (the link given to a friend)."""
-            return FileResponse(STATIC_DIR / "index.html")
+            return FileResponse(STATIC_DIR / "index.html", headers=fresh)
+
+        # installable as an app (home screen, full screen): the manifest and the
+        # service worker live at the root so they cover the whole site
+        @app.get("/manifest.webmanifest")
+        def manifest() -> FileResponse:
+            return FileResponse(STATIC_DIR / "manifest.webmanifest", media_type="application/manifest+json")
+
+        @app.get("/sw.js")
+        def service_worker() -> FileResponse:
+            return FileResponse(STATIC_DIR / "sw.js", media_type="text/javascript",
+                                headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 
     return app

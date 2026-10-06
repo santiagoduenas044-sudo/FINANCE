@@ -11,6 +11,11 @@
 <title>GHOST · Panel</title>
 <link rel="icon" type="image/png" href="/static/ghost-64.png">
 <link rel="apple-touch-icon" href="/static/ghost-180.png">
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GHOST">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap">
@@ -141,7 +146,7 @@ body.viewer .ctl, body.viewer .owner-only { display: none !important; }
 
 /* ── barra superior ── */
 .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px;
-  padding: 16px 28px; background: var(--glass); backdrop-filter: saturate(160%) blur(18px);
+  padding: max(16px, env(safe-area-inset-top)) 28px 16px; background: var(--glass); backdrop-filter: saturate(160%) blur(18px);
   -webkit-backdrop-filter: saturate(160%) blur(18px); flex-wrap: wrap; }
 .hello h1 { margin: 0; font-size: 23px; font-weight: 700; letter-spacing: -.02em; }
 .hello p { margin: 3px 0 0; color: var(--ink-3); font-size: 13px; }
@@ -677,7 +682,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   /* en el celular, lo que está pasando va antes que la gráfica */
   .board { display: flex; flex-direction: column-reverse; }
   /* la barra de arriba se va al bajar: deja la pantalla para el contenido */
-  .top { position: relative; padding: 10px 16px 8px; gap: 8px; }
+  .top { position: relative; padding: calc(10px + env(safe-area-inset-top)) 16px 8px; gap: 8px; }
   .quote { padding: 6px 12px; } .quote .last { font-size: 18px; }
   .today .v { font-size: 15px; }
   .ctl button { padding: 8px 10px; font-size: 13px; }
@@ -1123,6 +1128,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 
   <!-- ═════════ 5 · SISTEMA ═════════ -->
   <section class="view" id="v-system">
+    <div class="card mb" id="inst-card"><h3>Instalar como app <span class="r" id="inst-state"></span></h3>
+      <div class="body" id="inst-body"></div></div>
     <div class="card mb"><h3>Apariencia</h3>
       <div class="body appear">
         <div><span class="k">Fondo</span><div class="seg" id="ap-theme" role="group" aria-label="Fondo">
@@ -1287,6 +1294,36 @@ $("theme-btn").onclick = () => {
   try { localStorage.setItem("ghost.theme", isDark() ? "light" : "dark"); } catch {}
   location.reload();                       // los gráficos toman los colores nuevos al cargar
 };
+/* ── instalar como app (pantalla de inicio, pantalla completa) ── */
+const isApp = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+let installEvt = null;
+addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEvt = e; paintInstall(); });
+function paintInstall() {
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (isApp()) {
+    $("inst-state").innerHTML = '<span class="badge good">instalada</span>';
+    $("inst-body").innerHTML = `<p class="foot" style="margin:0">Estás usando GHOST como app. Para ver una actualización nueva, ciérrala y vuelve a abrirla.</p>`;
+    return;
+  }
+  $("inst-state").textContent = "";
+  $("inst-body").innerHTML = installEvt
+    ? `<p class="foot" style="margin-top:0">Ponla en tu pantalla de inicio: abre a pantalla completa, con su ícono y sin barras del navegador.</p>
+       <button class="pbtn on" type="button" id="inst-go">Instalar GHOST</button>`
+    : ios
+      ? `<ol class="foot" style="margin:0;padding-left:18px;line-height:1.9">
+          <li>Abre esta página en <b>Safari</b>.</li>
+          <li>Toca <b>Compartir</b> (el cuadrito con la flecha hacia arriba).</li>
+          <li>Elige <b>"Agregar a inicio"</b> y toca <b>Agregar</b>.</li>
+          <li>Abre <b>GHOST</b> desde tu pantalla de inicio y entra con tu usuario (la app pide entrar una vez).</li></ol>`
+      : `<p class="foot" style="margin:0">En el celular: abre la página y usa <b>"Agregar a la pantalla de inicio"</b> del navegador
+          (en iPhone, desde Safari → Compartir).</p>`;
+  const go = $("inst-go");
+  if (go) go.onclick = async () => { installEvt.prompt(); await installEvt.userChoice; installEvt = null; paintInstall(); };
+}
+paintInstall();
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+  addEventListener("load", () => navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {}));
+}
 // color de acento (azul por defecto) y fondo, también desde Sistema → Apariencia
 const accentNow = () => document.documentElement.dataset.accent || "blue";
 function paintAccent() {
@@ -3348,6 +3385,8 @@ async function refresh(force = false) {
     return;
   }
   await loadMe();
+  const ver = new URLSearchParams(location.search).get("ver");
+  if (ver && VIEWS.includes(ver)) setView(ver);
   initChart();
   await pollSymbols();
   await refresh(true);
