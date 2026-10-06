@@ -1,35 +1,52 @@
-# 24/7 Futures Signal Engine (Phase 13).
-#
-#   1. cp .env.example .env   and set at least DASHBOARD_TOKEN (remote mode
-#      refuses to serve publicly without one).
-#   2. docker compose up -d --build
-#   3. Dashboard: http://<host>:8000/?token=<DASHBOARD_TOKEN>
-#
-# No broker, no order execution, no auto-trading of an account.
+# GHOST in the cloud: the dashboard + GHOST, ORBIT, and Caddy for HTTPS.
+# Everything is set up by deploy/cloud/server_setup.sh; by hand:
+#   1. this repository in /opt/ghost, with its .env, data_store/ and market_data/
+#   2. DOMAIN=... in .env (a domain of yours, or <ip-with-dashes>.sslip.io)
+#   3. docker compose up -d --build
+# Paper trading only: no broker, no order execution.
 services:
-  signal-engine:
+  ghost:
     build: .
-    image: futures-signal-engine:latest
-    restart: unless-stopped          # auto-recover after crashes / reboots
-    ports:
-      - "${BOT_PORT:-8000}:8000"
+    image: ghost-bot:latest
+    restart: unless-stopped            # also brings it back after an in-app update
+    env_file: .env
     environment:
       BOT_MODE: remote
       BOT_HOST: 0.0.0.0
-      BOT_PORT: 8000
+      BOT_PORT: "8000"
       BOT_AUTO_START: "true"
-      BOT_SYMBOLS: "${BOT_SYMBOLS:-ES,NQ}"
-      BOT_CYCLE_SECONDS: "${BOT_CYCLE_SECONDS:-5}"
-      # Secrets come from your .env — never baked into the image.
-      DASHBOARD_TOKEN: "${DASHBOARD_TOKEN:?set DASHBOARD_TOKEN in .env for remote mode}"
-      DISCORD_WEBHOOK_URL: "${DISCORD_WEBHOOK_URL:-}"
-      BOT_CORS_ORIGINS: "${BOT_CORS_ORIGINS:-}"
+      BOT_IN_DOCKER: "1"
     volumes:
-      # Persist the signal log across restarts/redeploys.
-      - ./data_store:/app/data_store
+      - .:/app                          # code + data_store/ + market_data/ (kept on the server)
+      - /opt/ghost-secrets:/run/ghost:ro
+    expose: ["8000"]
+
+  orbit:
+    image: ghost-bot:latest
+    depends_on: [ghost]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BOT_IN_DOCKER: "1"
+    command: ["python", "-m", "signal_engine.subbots.orbit"]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status==200 else sys.exit(1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+      disable: true                     # ORBIT has no web page; Docker restarts it if it stops
+    volumes:
+      - .:/app
+      - /opt/ghost-secrets:/run/ghost:ro
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [ghost]
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./deploy/cloud/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -67,10 +67,18 @@ def update(root: Path, python: str | None = None) -> dict:
             "dependencies": deps, "orbit": restart_orbit() if before != after else None}
 
 
+ORBIT_RESTART_FLAG = Path(__file__).resolve().parents[2] / "data_store" / "orbit.restart"
+
+
 def restart_orbit() -> str:
     """ORBIT (the separate APERTURA paper bot) runs as its own launchd
     service: restart it too so it picks up the new code. Nothing to do when
-    it is not installed."""
+    it is not installed. In the cloud (Docker) it is told through a file:
+    ORBIT sees it within a second, exits, and Docker starts it again."""
+    if os.environ.get("BOT_IN_DOCKER"):
+        ORBIT_RESTART_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        ORBIT_RESTART_FLAG.touch()
+        return "se reinicia en unos segundos"
     label = f"gui/{os.getuid()}/com.finance.orbit" if hasattr(os, "getuid") else ""
     try:
         if not label or subprocess.run(["launchctl", "print", label], capture_output=True,

@@ -47,6 +47,34 @@ case "${1:-}" in
       launchctl kickstart -k "$DOMAIN/$ORBIT_LABEL"; echo "ORBIT restarted"
     fi
     ;;
+  nube)
+    # Move the bots to a cloud server (deploy/cloud/README.md).
+    case "${2:-}" in
+      llave)
+        [ -f "$HOME/.ssh/id_ed25519.pub" ] || ssh-keygen -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519" -q
+        echo "Pega esta llave al crear el servidor (o en su panel -> SSH keys):"; echo
+        cat "$HOME/.ssh/id_ed25519.pub";;
+      traer)
+        [ -n "${3:-}" ] || { echo "uso: bash deploy/macos/ctl.sh nube traer <IP del servidor>"; exit 2; }
+        echo "Trayendo los datos del servidor (trades, usuarios, práctica) a esta Mac..."
+        rsync -az -e "ssh -o StrictHostKeyChecking=accept-new" "root@$3:/opt/ghost/data_store/" "$REPO_DIR/data_store/"
+        echo "Listo. Ahora: bash deploy/macos/ctl.sh nube volver";;
+      volver)
+        launchctl enable "$DOMAIN/$LABEL" 2>/dev/null || true
+        launchctl enable "$DOMAIN/$ORBIT_LABEL" 2>/dev/null || true
+        launchctl bootstrap "$DOMAIN" "$PLIST" 2>/dev/null || launchctl kickstart "$DOMAIN/$LABEL" 2>/dev/null || true
+        [ -f "$ORBIT_PLIST" ] && launchctl bootstrap "$DOMAIN" "$ORBIT_PLIST" 2>/dev/null || true
+        echo "Los bots vuelven a correr en esta Mac. Apaga los del servidor para que no avisen dos veces"
+        echo "(en el servidor: cd /opt/ghost && docker compose down)."
+        echo "Si ORBIT no arrancó: bash deploy/macos/ctl.sh orbit on";;
+      ""|-h|--help)
+        echo "uso: bash deploy/macos/ctl.sh nube <IP del servidor>   (mover / actualizar)"
+        echo "     bash deploy/macos/ctl.sh nube llave                (la llave SSH de esta Mac)"
+        echo "     bash deploy/macos/ctl.sh nube traer <IP>           (traer los datos del servidor)"
+        echo "     bash deploy/macos/ctl.sh nube volver               (volver a correr en la Mac)";;
+      *) bash "$REPO_DIR/deploy/cloud/move_from_mac.sh" "$2";;
+    esac
+    ;;
   discord)
     if [ "${2:-}" = "comandos" ]; then
       # The command bot (!record, !setups, !status…) is a Discord bot of its
@@ -238,6 +266,6 @@ PYEOF
     esac
     ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord [comandos]|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord [comandos]|nube <IP>|llave|volver|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
     exit 2;;
 esac

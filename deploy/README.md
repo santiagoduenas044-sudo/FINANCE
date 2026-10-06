@@ -1,5 +1,10 @@
 # Deploying the Futures Signal Engine (24/7)
 
+> **Moving GHOST + ORBIT to a cloud server (no Mac needed)?** Follow
+> **[`deploy/cloud/README.md`](cloud/README.md)**: one command from the Mac
+> (`bash deploy/macos/ctl.sh nube <IP>`) copies everything and starts it with
+> HTTPS. The Docker notes below are older and kept for reference.
+>
 > **Running it on a Mac mini (Apple Silicon) as a local server?** Use the native
 > launchd setup in **[`deploy/macos/README.md`](macos/README.md)** — one command
 > (`bash deploy/macos/install.sh`), no Docker. The guide below is for a

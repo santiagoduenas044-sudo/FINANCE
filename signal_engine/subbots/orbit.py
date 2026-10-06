@@ -295,10 +295,15 @@ def main() -> int:
     shadows = build_shadows(publish=publish)
     if shadows:
         log.info("set ups en paralelo: %s", ", ".join(sp.label for sp, _ in shadows))
+    from ..api.maintenance import ORBIT_RESTART_FLAG
     while not stop["now"]:
         shadows = build_shadows(current=shadows, publish=publish)   # follows the dashboard switches
         run_once(bot, shadows=shadows)
         for _ in range(POLL_SECONDS):
+            if ORBIT_RESTART_FLAG.exists():          # an update asked for a restart (cloud)
+                ORBIT_RESTART_FLAG.unlink(missing_ok=True)
+                log.info("%s se reinicia para tomar el código nuevo.", name)
+                stop["now"] = True
             if stop["now"]:
                 break
             time.sleep(1)

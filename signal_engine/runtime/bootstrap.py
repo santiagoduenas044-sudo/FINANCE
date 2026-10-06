@@ -103,8 +103,11 @@ def build_live_feed(symbol: str, data_engine: DataEngine, *, logger=None,
 
     contract = _SIMULATED_FALLBACK_SOURCE.get(symbol) if allow_simulated_fallback else None
     if contract is None:
-        _log(f"[{symbol}] no simulated fallback data available — skipping this symbol.")
-        return None, None
+        # Keep the real feed anyway: it reconnects by itself on every poll, so
+        # a Yahoo hiccup at boot never takes the whole dashboard down.
+        _log(f"[{symbol}] no simulated fallback — keeping Yahoo and retrying on every cycle.")
+        feed = LiveFeed(real_adapter, symbol, data_engine.cfg)
+        return feed, FeedInfo(symbol, real_adapter.name, True, False)
 
     provider = CsvProvider(SAMPLES)
     raw = provider.get_raw_bars(symbol, "1m", contract=contract)
