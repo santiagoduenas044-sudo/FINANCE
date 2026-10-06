@@ -59,8 +59,11 @@ def test_hub_shows_both_bots_and_orbit_state(tmp_path, monkeypatch):
     assert orbit["main"]["version"] == "v3" and orbit["main"]["total"]["net_usd"] == 450.0
     assert ghost["main"]["version"] == current_version("GHOST")
     live = {s["code"]: s["live"] for s in d["strategies"] if s["status"] == "en vivo"}
-    assert (live["APERTURA"]["n"], live["APERTURA"]["net_usd"]) == (3, 1230.0)
-    assert [p["version"] for p in live["APERTURA"]["detail"]] == ["v1", "v2", "v3"]
+    # each version on its own, never added up into one "strategy total"
+    assert "n" not in live["APERTURA"] and "net_usd" not in live["APERTURA"]
+    assert [(p["version"], p["net_usd"]) for p in live["APERTURA"]["detail"]] == \
+        [("v1", -120.0), ("v2", 900.0), ("v3", 450.0)]
+    assert "combined_usd" not in d                                  # no "together" total
 
 
 def test_hub_flags_a_silent_orbit(tmp_path):
@@ -268,15 +271,16 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
     c = TestClient(app)
     st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
-    pv = st["IMÁN 15"]["live"]["net_usd"] / 25.0                 # $ per point of GHOST's size
-    assert st["IMÁN 15"]["live"]["n"] == 1                        # not the 1-minute trades
+    (only,) = st["IMÁN 15"]["live"]["detail"]
+    pv = only["net_usd"] / 25.0                                   # $ per point of GHOST's size
+    assert only["n"] == 1                                         # not the 1-minute trades
     real = [p for p in st["IMÁN 1"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
                      "name": "GHOST v2 (antes)", "n": 2, "net_usd": 100.0 * pv}]
     assert st["IMÁN 1"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
     assert st["IMÁN 1"]["live"]["detail"][-1]["name"].startswith("Set up 3")
     assert st["IMÁN 15"]["setups"] == [1] and st["IMÁN 1"]["setups"] == [3]
-    assert st["IMÁN 1 NOCHE"]["live"]["n"] == 1
+    assert [p["n"] for p in st["IMÁN 1 NOCHE"]["live"]["detail"] if p["kind"] == "real"] == [1]
     assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
     assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None
     # the trade log behind the calendar: every trade, with its version and day

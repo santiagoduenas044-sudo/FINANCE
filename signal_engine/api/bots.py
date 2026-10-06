@@ -405,11 +405,10 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
         except Exception as exc:  # noqa: BLE001 - one bad bot never hides the others
             log.exception("bot hub: %s card failed", name)
             bots.append(_broken(name, color, exc))
-    totals = {b["name"]: b["total"]["net_usd"] or 0 for b in bots}
+    # no "together" total: every set up is a different strategy, measured alone
     return _clean({"now": now.isoformat(), "commit": commit or {}, "bots": bots,
                    "setups": setup_rows(bots),
                    "strategies": strategy_cards(bots, lab_dir),
-                   "combined_usd": round(sum(totals.values()), 2),
                    "news": news_today(getattr(runtime, "news", None), now)})
 
 
@@ -488,10 +487,8 @@ def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
         status = st["status"]
         if status == "en paralelo" and on and not any(on):
             status = "apagada"
-        live = None
-        if parts:
-            live = {"n": sum(p["n"] for p in parts),
-                    "net_usd": round(sum(p["net_usd"] or 0 for p in parts), 2), "detail": parts}
+        # each part (a bot version, a set up) on its own: never added together
+        live = {"detail": parts} if parts else None
         setups = [MAIN_SETUP[bot] for bot, vids in (st.get("real") or {}).items()
                   if bot in MAIN_SETUP and current_version(bot) in vids]
         setups += [variants[sid][1].get("setup") for sid in st.get("shadows") or []

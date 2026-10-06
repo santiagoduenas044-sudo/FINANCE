@@ -719,6 +719,27 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 .appear > div { display: flex; flex-direction: column; gap: 8px; }
 .appear .k { font: 700 10px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
 
+/* ── Panel: una tarjeta por set up (nunca sumados) ── */
+.sutitle { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.sutitle span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.sugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.sucard { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r); text-align: left; color: var(--ink-1);
+  background: var(--sheen), var(--panel); border: 1px solid var(--rule); box-shadow: var(--lift); min-width: 0; transition: border-color .15s, transform .15s; }
+.sucard:hover { transform: translateY(-1px); border-color: var(--rule-strong); }
+.sucard.on { border-color: rgba(var(--acc-rgb), .6); box-shadow: 0 0 0 1px rgba(var(--acc-rgb), .35), var(--lift); }
+.sucard.off { opacity: .55; }
+.sucard .sh { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.sucard .sh b { font: 700 15px var(--sans); }
+.sucard .sh span { font: 700 11px var(--display); letter-spacing: .1em; color: var(--amber); }
+.sucard .sh i { font-style: normal; font-size: 11px; color: var(--ink-3); margin-left: auto; }
+.sucard .sv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sucard .sv div { display: flex; flex-direction: column; min-width: 0; }
+.sucard .sv .k { font: 700 9.5px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.sucard .sv b { font: 700 16px var(--display); letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sucard .sv small { font: 500 10.5px var(--mono); color: var(--ink-3); }
+.sucard .sf { font: 500 11px var(--mono); color: var(--ink-3); }
+@media (max-width: 760px) { .sugrid { grid-template-columns: minmax(0, 1fr); gap: 10px; } .sucard .sv b { font-size: 15px; } }
+
 /* ── diario (Panel): saludo, resumen del mes, indicadores y calendario ── */
 .pill2 { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px;
   font: 700 10.5px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--amber);
@@ -914,7 +935,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   <div class="quote"><span class="last" id="px">—</span><span class="chg" id="px-chg"></span></div>
   <span class="chip" id="status-chip"><span class="dot" id="status-dot"></span><span id="status-t">Conectando…</span></span>
   <span class="chip opt" id="feed-chip"><span class="dot" id="feed-dot"></span><span id="feed-t">Datos —</span></span>
-  <div class="today"><span class="k">Hoy GHOST</span><span class="v" id="day-pnl">—</span></div>
+  <div class="today"><span class="k">Hoy · Set up 1</span><span class="v" id="day-pnl">—</span></div>
   <div class="ctl">
     <button id="b-pause" type="button">Pausa</button>
     <button class="halt" id="b-stop" type="button">Detener</button>
@@ -927,6 +948,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   <!-- ═════════ 1 · PANEL ═════════ -->
   <section class="view" id="v-panel" data-active>
     <div id="journal">
+      <h3 class="sutitle">Tus set ups <span>cada uno es una estrategia distinta: se mide por separado · toca uno para ver su diario</span></h3>
+      <div class="sugrid" id="j-setups"></div>
       <div class="jbar">
         <div class="seg" id="j-range" role="group" aria-label="Periodo">
           <button type="button" data-r="month" aria-pressed="true">Mes</button>
@@ -1772,10 +1795,11 @@ function renderBots() {
       ? `<b>Noticias fuertes de hoy (EE.UU.)</b>` + nw.events.map(e => `<span class="ev ${e.impact === "Holiday" ? "hol" : ""} ${
           Date.parse(e.time) < Date.now() - 15 * 60e3 ? "past" : ""}"><span class="hm">${e.impact === "Holiday" ? "feriado" : esc(e.hm)}</span>${esc(e.title)}</span>`).join("")
       : `<b>Noticias de hoy</b><span class="zero">ninguna noticia fuerte de EE.UU.</span>`;
-  $("hub-sum").innerHTML = `<span class="pill"><span class="k">juntos</span><span class="v ${cls(d.combined_usd)}">${usd0(d.combined_usd)}</span></span>`
-    + (d.commit?.commit ? `<span class="pill"><span class="k">código</span><span class="v mono">${esc(d.commit.commit)}</span></span>` : "");
+  $("hub-sum").innerHTML = (d.commit?.commit ? `<span class="pill"><span class="k">código</span><span class="v mono">${esc(d.commit.commit)}</span></span>` : "");
   $("hub-bots").innerHTML = d.bots.map(b => {
-    const t = b.today, a = b.total, fee = b.fee_per_trade || 0;
+    // only the set up this bot runs now (Set up 1 / 2): old versions are other strategies
+    const t = b.main?.today || b.today, a = b.main?.total || b.total, fee = b.fee_per_trade || 0;
+    const su = (b.setup_label || "").split(" · ")[0] || b.name;
     const afterFees = a.n ? a.net_usd - fee * a.n : null;
     const kv = (k, v, sub, c = "") => `<div><div class="k">${k}</div><div class="v ${c}">${v}</div><div class="s">${sub}</div></div>`;
     const bot = b.name === "GHOST" ? "ghost" : "orbit";
@@ -1800,7 +1824,7 @@ function renderBots() {
         ${t.n || b.open_usd == null
           ? kv("Hoy", t.n ? usd0(t.net_usd) : "—", `${t.n} ${t.n === 1 ? "trade" : "trades"}${b.open_usd != null ? " · abierto " + usd0(b.open_usd) : ""}`, cls(t.n ? t.net_usd : null))
           : kv("Hoy · abierto", usd0(b.open_usd), "trade en curso", cls(b.open_usd))}
-        ${kv("Total · todas", a.n ? usd0(a.net_usd) : "—", afterFees != null ? "real " + usd0(afterFees) : "sin trades aún", cls(a.n ? a.net_usd : null))}
+        ${kv(`Total · ${esc(su)}`, a.n ? usd0(a.net_usd) : "—", afterFees != null && b.name === "GHOST" ? "con comisiones " + usd0(afterFees) : a.n ? "con comisiones" : "sin trades aún", cls(a.n ? a.net_usd : null))}
         ${kv("Trades", a.n || "0", a.n ? `${a.wins} ganados` : "—")}
         ${kv("Acierto", a.n ? Math.round(a.win_rate * 100) + "%" : "—", a.n ? `prom. ${usd0(a.avg_usd)}` : "—")}
       </div>
@@ -1829,8 +1853,8 @@ function renderBots() {
         <b class="code">${esc(st.code || st.name)}</b><span class="btag ${bt}">${esc(st.bot)}</span>${(st.setups || []).map(n => `<span class="btag labt">Set up ${n}</span>`).join("")}</div>
       <span class="sname">${esc(st.name)}</span>
       <p>${esc(st.text)}</p>
-      <div class="lab">Laboratorio: ${esc(st.lab)}${lr ? `<div class="labrun">Última prueba: ${lr.passed} de ${lr.variants} variantes ✔${best ? `<br>Mejor: ${esc(best.name.split(" · ").slice(1).join(" · "))} · ${best.n} trades · <span class="${cls(best.net_usd)}">${usd0(best.net_usd)}</span>${best.test_avg != null ? ` · ${usd0(best.test_avg)}/trade en 2024–26` : ""}` : ""}</div>` : ""}${
-        st.live ? `<br>En papel: ${st.live.n} ${st.live.n === 1 ? "trade" : "trades"} · <span class="${cls(st.live.n ? st.live.net_usd : null)}">${st.live.n ? usd0(st.live.net_usd) : "—"}</span>${det}` : ""}</div></div>`;
+      <div class="lab">Laboratorio (5 años, solo referencia): ${esc(st.lab)}${lr ? `<div class="labrun">Última prueba: ${lr.passed} de ${lr.variants} variantes ✔${best ? `<br>Mejor: ${esc(best.name.split(" · ").slice(1).join(" · "))} · ${best.n} trades · <span class="${cls(best.net_usd)}">${usd0(best.net_usd)}</span>${best.test_avg != null ? ` · ${usd0(best.test_avg)}/trade en 2024–26` : ""}` : ""}</div>` : ""}${
+        st.live ? `<br>En vivo, cada uno por separado:${det}` : ""}</div></div>`;
   }).join("");
 }
 
@@ -1903,8 +1927,6 @@ function hSources() {
   const L = S.tlog || { sources: [] }, out = [];
   for (const so of L.sources.filter(x => x.bot === H.bot)) {
     if (so.kind === "main") {
-      out.push({ sel: so.id, label: "Todas las versiones", sub: so.position, group: "real", about:
-        `${so.name}: todos sus trades reales (los que avisó en Discord), de todas sus versiones.` });
       for (const v of so.versions.slice().reverse()) out.push({ sel: `${so.id}@${v.version}`,
         label: v.version === so.current ? `Ahora · ${(v.name || "").replace(/^Versión \d+ · /, "")}` : `${v.name || v.version} · ${v.span || ""}`,
         group: "real", about: `${so.name} · ${v.name || v.version} (${v.span || ""})${v.version === so.current ? `, la que usa ahora: ${so.setup_label || ""}` : ""}.` });
@@ -3176,7 +3198,7 @@ $("us-table").addEventListener("click", async e => {
    Lee /api/bots/trades (S.tlog). "Principales" = Set up 1 (GHOST) + Set up 2
    (ORBIT) con la versión que usan ahora; también se puede ver cada set up solo.
    Todo en dólares con comisiones (net_usd). */
-const J = { sel: "main", range: "month", month: null, day: null };
+const J = { sel: "1", range: "month", month: null, day: null };
 const MONTHS_UP = m => MONTHS[m][0].toUpperCase() + MONTHS[m].slice(1);
 const money2 = v => `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function jSetups() {                       // [{n, label, id, current, kind}] in number order
@@ -3189,11 +3211,23 @@ function jOf(su) {                         // the trades of one set up (a bot: o
   return ((S.tlog || {}).trades || []).filter(t => t.src === su.id && (su.kind !== "main" || t.version === su.current))
     .map(t => ({ ...t, su: su.label }));
 }
-function jTrades(sel = J.sel) {
-  const sus = jSetups();
-  const pick = sel === "main" ? sus.filter(s => s.kind === "main") : sel === "all" ? sus
-    : sus.filter(s => String(s.n) === String(sel));
-  return pick.flatMap(jOf).sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at)));
+function jTrades(sel = J.sel) {           // ONE set up: strategies are never mixed
+  const su = jSetups().find(s => String(s.n) === String(sel));
+  return su ? jOf(su).sort((a, b) => String(a.closed_at).localeCompare(String(b.closed_at))) : [];
+}
+function paintSetupGrid() {
+  const today = fmtDate.format(new Date()), month = today.slice(0, 7);
+  const sum = a => a.reduce((s, t) => s + (t.net_usd || 0), 0);
+  const cell = (k, T) => `<div><span class="k">${k}</span><b class="${T.length ? cls(sum(T)) : "zero"}">${T.length ? usd0(sum(T)) : "—"}</b>
+    <small>${T.length} ${T.length === 1 ? "trade" : "trades"}</small></div>`;
+  $("j-setups").innerHTML = jSetups().map(s => {
+    const T = jOf(s), w = T.filter(t => (t.net_usd || 0) > 0).length;
+    const [num, ...code] = s.label.split(" · ");
+    return `<button type="button" class="sucard ${String(s.n) === String(J.sel) ? "on" : ""} ${s.on ? "" : "off"}" data-js="${s.n}">
+      <span class="sh"><b>${esc(num)}</b><span>${esc(code.join(" · "))}</span><i>${esc(s.kind === "main" ? (s.id === "orbit" ? "ORBIT" : "GHOST") : (s.id.startsWith("orbit") ? "ORBIT" : "GHOST") + " · paralelo")}${s.on ? "" : " · apagado"}</i></span>
+      <span class="sv">${cell("Hoy", T.filter(t => t.day === today))}${cell("Mes", T.filter(t => t.day.startsWith(month)))}${cell("Total", T)}</span>
+      <span class="sf">${T.length ? `gana ${Math.round(w / T.length * 100)}% · prom. ${usd0(sum(T) / T.length)} por trade` : "todavía sin trades cerrados"}</span></button>`;
+  }).join("");
 }
 function jStats(T) {
   const n = T.length, v = T.reduce((s, t) => s + (t.net_usd || 0), 0);
@@ -3264,14 +3298,15 @@ function renderJournal() {
   const today = fmtDate.format(new Date());
   if (!J.month) J.month = today.slice(0, 7);
   const sus = jSetups();
-  const chip = (sel, label, off) => `<button type="button" class="${sel === "main" || sel === "all" ? "" : "par"}" data-js="${sel}" aria-pressed="${String(J.sel) === String(sel)}"
+  paintSetupGrid();
+  const chip = (sel, label, off) => `<button type="button" data-js="${sel}" aria-pressed="${String(J.sel) === String(sel)}"
     ${off ? 'title="apagado"' : ""}>${esc(label)}<span class="n">${jTrades(sel).filter(t => t.day.startsWith(J.month)).length}</span></button>`;
-  $("j-src").innerHTML = chip("main", "Principales") + chip("all", "Todos") + sus.map(s => chip(s.n, s.label.split(" · ")[0], !s.on)).join("");
+  $("j-src").innerHTML = sus.map(s => chip(s.n, s.label, !s.on)).join("");
   document.querySelectorAll("#j-range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === J.range));
   const all = jTrades(), T = jRangeTrades(all), st = jStats(T);
   const [Y, M] = J.month.split("-").map(Number);
   const per = J.range === "month" ? MONTHS[M - 1] : J.range === "week" ? "esta semana" : "todo";
-  const who = J.sel === "main" ? "Set up 1 y 2" : J.sel === "all" ? "todos los set ups" : (sus.find(s => String(s.n) === String(J.sel)) || {}).label || "";
+  const who = (sus.find(s => String(s.n) === String(J.sel)) || {}).label || "";
 
   // the banner: the month in review
   const rm = reviewMonth(all), rT = all.filter(t => t.day.startsWith(rm)), rS = jStats(rT);
@@ -3342,6 +3377,8 @@ function renderJournal() {
       <span class="lbl">${esc(t.su)} · ${esc(WHY_ES[t.why] || t.why || "—")}</span><span class="u ${cls(t.net_usd)}">${usd0(t.net_usd)}</span></div>`).join("") : "";
 }
 $("j-src").addEventListener("click", e => { const b = e.target.closest("button[data-js]"); if (!b) return; J.sel = b.dataset.js; J.day = null; renderJournal(); });
+$("j-setups").addEventListener("click", e => { const b = e.target.closest("button[data-js]"); if (!b) return;
+  J.sel = b.dataset.js; J.day = null; renderJournal(); $("j-range").scrollIntoView({ behavior: "smooth", block: "start" }); });
 $("j-range").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (!b) return; J.range = b.dataset.r; renderJournal(); });
 $("j-cal").addEventListener("click", e => { const b = e.target.closest(".d.has"); if (!b) return; J.day = J.day === b.dataset.day ? null : b.dataset.day; renderJournal(); });
 const jShift = k => { const [y, m] = J.month.split("-").map(Number); J.month = new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7); J.day = null; renderJournal(); };
@@ -3357,7 +3394,7 @@ const dayName = d => { const x = new Date(d + "T12:00:00Z"); return `${DOW_ES[x.
 function storySlides(month) {
   const T = jTrades().filter(t => t.day.startsWith(month)), st = jStats(T);
   const [Y, M] = month.split("-").map(Number), name = `${MONTHS[M - 1]} ${Y}`;
-  const who = J.sel === "main" ? "Set up 1 y 2" : J.sel === "all" ? "todos los set ups" : (jSetups().find(s => String(s.n) === String(J.sel)) || {}).label || "";
+  const who = (jSetups().find(s => String(s.n) === String(J.sel)) || {}).label || "";
   const S2 = [];
   S2.push(`<span class="pill2">Resumen del mes</span><h2>${esc(name)}</h2>
     <div class="meta">${st.n} ${st.n === 1 ? "trade" : "trades"} · ${st.days.length} ${st.days.length === 1 ? "día operado" : "días operados"} · ${esc(who)}</div>`);

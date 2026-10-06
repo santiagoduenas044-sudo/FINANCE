@@ -76,7 +76,8 @@ def test_daily_record_once_after_the_flat():
 def test_record_command_on_discord():
     rt = _runtime(_tracker(), [])
     out = build_reply("!record", rt)
-    assert out.startswith("**Hoy los bots principales")
+    assert out.startswith("Cada set up por separado")
+    assert "principales" not in out and "GANARON" not in out          # never added together
     assert "**Set up 1 · IMÁN 15**" in out and "👻 **GHOST**" in out
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
@@ -110,7 +111,8 @@ def test_day_message_counts_only_the_version_running_now():
     assert text.startswith("📒 **GHOST v4 IMÁN 15** · 5 MNQ")
     assert "Hoy 29-Sep:** 1 trade · 1 ✅" in text and "perdido $0" in text and "**neto +$20**" in text
     assert "Total desde 29-Sep:** 1 trade · gana 100%" in text and "peor caída" not in text
-    assert "_Versiones anteriores (v2, v3), aparte:_ 2 trades · neto +$500" in text
+    assert "_Versión anterior v2, aparte:_ 1 trade" in text          # each old version on its own
+    assert "_Versión anterior v3, aparte:_ 1 trade" in text and "v2, v3" not in text
     assert "∥ **IMÁN 1**: hoy 2 trades −$230 · total 3 trades +$520" in text
     last = text.split("**Últimos trades · GHOST v4 IMÁN 15**")[1]
     assert last.count("\n") == 1                     # only IMÁN 15's trade is listed
@@ -152,13 +154,15 @@ def test_day_message_says_plainly_who_won_and_who_lost():
         {"src": "orbit:apertura_30m", "version": "paralelo", "day": "2026-10-05",
          "net_usd": 400.0, "pts": 40, "closed_at": T.format("11:30")}]}
     text = day_message(log, pd.Timestamp("2026-10-05 17:00", tz="America/New_York"))
-    assert text.startswith("**Hoy los bots principales GANARON +$290**")
+    assert text.startswith("Cada set up por separado")
+    assert "principales" not in text and "GANARON" not in text and "Mejor de hoy" not in text
     assert text.index("👻 **GHOST**") < text.index("🛰️ **ORBIT**")
     assert "✅ **Set up 1 · IMÁN 15** — hoy **GANÓ +$290** (1 trade: 1 ✅ 0 🛑)" in text
-    assert "↳ total −$65 en 2 trades · gana 50%" in text
+    # today's trade sits under its own set up, with that set up's own total
+    s1 = text.split("**Set up 1 · IMÁN 15**")[1].split("**Set up")[0]
+    assert "✅ 16:55 · COMPRA 31,313.50 → 31,343.00 · cierre del día · GANÓ +$290" in s1
+    assert "↳ total −$65 en 2 trades · gana 50%" in s1                 # its v4 trades only
     assert "🛑 **Set up 3 · IMÁN 1** — hoy **PERDIÓ −$120**" in text
     assert "⚪ Set up 8 · CLÁSICO — apagado" in text
     assert "➖ **Set up 2 · APERTURA** — hoy sin trades" in text
-    assert "🏆 Mejor de hoy: **Set up 6 · APERTURA 30** GANÓ +$400" in text
-    assert ("✅ 16:55 · Set up 1 · COMPRA 31,313.50 → 31,343.00 · cierre del día · "
-            "**GANÓ +$290**") in text
+    assert "✅ **Set up 6 · APERTURA 30** — hoy **GANÓ +$400**" in text

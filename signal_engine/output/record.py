@@ -90,7 +90,7 @@ def _line(label: str, trades: list, pv: float, fee: float = 0.0) -> str:
 def build_record(closed: list, now, pv: float, position: str, last: int = 8,
                  version_of=None, current: str | None = None, title: str | None = None,
                  extras: list[str] | None = None, who: str | None = None,
-                 older_label: str = "Versiones anteriores ({names}), aparte") -> str:
+                 older_label: str = "Versión anterior {names}, aparte") -> str:
     """Markdown for Discord. `closed`: closed PaperTrades; `pv`: $ per point
     of the position the operator trades (5 MNQ = 10).
 
@@ -128,10 +128,9 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
         lines.append(f"**Total desde {first:%d-%b}:** {_n(len(pts))} · gana {wins / len(pts):.0%} · "
                      f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)}"
                      + (f" · peor caída {usd(-dd, pv)}" if dd > 0 else ""))
-    if older:
-        names = sorted({version_of(t) for t in older})
-        opts = [t.pnl_points for t in older]
-        lines.append(f"_{older_label.format(names=', '.join(names))}:_ {_n(len(opts))} · "
+    for name in sorted({version_of(t) for t in older}):
+        opts = [t.pnl_points for t in older if version_of(t) == name]     # each version on its own
+        lines.append(f"_{older_label.format(names=name)}:_ {_n(len(opts))} · "
                      f"neto {usd(sum(opts), pv)}{after_fees(opts, pv, fee)}")
     if extras:
         lines.append("")
@@ -193,7 +192,7 @@ def _setup1_record(runtime, now, symbol: str = "NQ") -> str:
     return build_record(list(tracker.closed_trades) if tracker is not None else [], now,
                         per_pt, label, version_of=ghost_version_of, current=cur,
                         title=main_setup_label("GHOST"), who=f"GHOST {cur}",
-                        older_label="Antes, GHOST con otras versiones ({names})",
+                        older_label="GHOST {names} (versión anterior)",
                         extras=extras)
 
 
@@ -242,8 +241,9 @@ def _hm(iso) -> str:
 
 def day_message(log: dict, now) -> str:
     """Discord text of the day's close. `log`: api/bots.trade_log(...).
-    Dollars are after commissions for every set up; Set up 1 and 2 count
-    only the version each bot uses now."""
+    Every set up on its own (each one is a different strategy: they are never
+    added together), with today's trades under it. Dollars after commissions;
+    Set up 1 and 2 count only the version each bot uses now."""
     now = pd.Timestamp(now)
     now = now.tz_localize("America/New_York") if now.tzinfo is None else \
         now.tz_convert("America/New_York")
@@ -258,24 +258,16 @@ def day_message(log: dict, now) -> str:
         setups.append({**so, "label": so.get("setup_label") or so["name"], "trades": mine,
                        "on": so.get("kind") == "main" or so.get("enabled", True)})
     setups.sort(key=lambda s: s["setup"])
-    mains = [s for s in setups if s.get("kind") == "main"]
-    main_today = [t for s in mains for t in s["trades"] if t["day"] == day]
-    main_usd = sum(t["net_usd"] for t in main_today)
 
-    if main_today:
-        lines = [f"**Hoy los bots principales {_verdict(main_usd, he=False)}** "
-                 f"({' y '.join(s['label'].split(' · ')[0] for s in mains)}, con comisiones)"]
-    else:
-        lines = ["**Hoy los bots principales no hicieron trades** "
-                 f"({' y '.join(s['label'].split(' · ')[0] for s in mains)})"]
-    best = None
+    lines = ["Cada set up por separado · en papel · dólares con comisiones"]
     for bot in ("GHOST", "ORBIT"):
         group = [s for s in setups if s["bot"] == bot]
         if not group:
             continue
         lines += ["", f"{_BOT_ICON.get(bot, '•')} **{bot}**"]
         for s in group:
-            today = [t for t in s["trades"] if t["day"] == day]
+            today = sorted((t for t in s["trades"] if t["day"] == day),
+                           key=lambda t: t.get("closed_at") or "")
             alln = len(s["trades"])
             allv = sum(t["net_usd"] for t in s["trades"])
             wins = sum(1 for t in s["trades"] if (t.get("pts") or 0) > 0.01)
@@ -291,26 +283,16 @@ def day_message(log: dict, now) -> str:
                 mark = "✅" if v >= 0.5 else ("🛑" if v <= -0.5 else "➖")
                 lines.append(f"{mark} **{s['label']}** — hoy **{_verdict(v)}** "
                              f"({_n(len(today))}: {w} ✅ {lo} 🛑)")
-                if v > 0 and (best is None or v > best[1]):
-                    best = (s["label"], v)
+                for t in today[:6]:
+                    side = "COMPRA" if t.get("side") == "LONG" else "VENTA"
+                    lines.append(f"　{_tmark(t)} {_hm(t.get('closed_at'))} · {side} "
+                                 f"{(t.get('entry') or 0):,.2f} → {(t.get('exit') or 0):,.2f} · "
+                                 f"{_why(t)} · {_verdict(t['net_usd'])}")
+                if len(today) > 6:
+                    lines.append(f"　y {len(today) - 6} más (en la página, Historial)")
             else:
                 lines.append(f"➖ **{s['label']}** — hoy sin trades")
             lines.append(f"↳ {total}")
-    if best:
-        lines += ["", f"🏆 Mejor de hoy: **{best[0]}** {_verdict(best[1])}"]
-    lines += ["", "**Trades de hoy de los principales**"]
-    if main_today:
-        label = {s["id"]: s["label"].split(" · ")[0] for s in mains}
-        for t in sorted(main_today, key=lambda t: t.get("closed_at") or ""):
-            side = "COMPRA" if t.get("side") == "LONG" else "VENTA"
-            lines.append(f"{_tmark(t)} {_hm(t.get('closed_at'))} · {label[t['src']]} · {side} "
-                         f"{(t.get('entry') or 0):,.2f} → {(t.get('exit') or 0):,.2f} · "
-                         f"{_why(t)} · **{_verdict(t['net_usd'])}**")
-    else:
-        lines.append("_ninguno hoy_")
-    pos = next((s.get("position") for s in mains if s.get("position")), "")
-    lines += ["", f"_Todo en papel, en dólares ya con comisiones{' · ' + pos if pos else ''}. "
-                  "Los set ups en paralelo avisaron cada trade en su momento._"]
     return "\n".join(lines)
 
 
