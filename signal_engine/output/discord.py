@@ -641,8 +641,13 @@ class DiscordOutputAdapter(OutputAdapter):
     name = "discord"
 
     def __init__(self, config: DiscordOutputConfig, *, webhook_url: str | None = None,
-                 transport=None, sleep=None, file_transport=None):
+                 transport=None, sleep=None, file_transport=None,
+                 main_setup: int | None = 1, route=None):
         self.config = config
+        # each set up writes in its own channel when it has one (see
+        # discord_channels); this process's own trades are `main_setup`'s
+        self.main_setup = main_setup
+        self._route = route
         # webhook resolved from env by default; kept private, never logged
         self._webhook = webhook_url if webhook_url is not None \
             else os.environ.get(config.webhook_env)
@@ -667,7 +672,8 @@ class DiscordOutputAdapter(OutputAdapter):
         if not self.config.enabled:
             log.debug("Discord emit skipped: adapter disabled. kind=%s", event.kind)
             return False
-        if not self._webhook:
+        url = self._url_for(event)
+        if not url:
             log.warning("Discord emit skipped: webhook env=%s not set. kind=%s",
                         self.config.webhook_env, event.kind)
             return False
@@ -684,7 +690,7 @@ class DiscordOutputAdapter(OutputAdapter):
         if image:
             for emb in payload.get("embeds", [])[:1]:
                 emb["image"] = {"url": "attachment://chart.png"}
-        ok = self._send_with_retry(payload, image)
+        ok = self._send_with_retry(payload, image, url)
         if ok:
             log.info("Discord SENT OK kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
             if self.config.deduplication_enabled:
@@ -693,17 +699,31 @@ class DiscordOutputAdapter(OutputAdapter):
             log.warning("Discord FAILED kind=%s dedup_key=%.8s…", event.kind, event.dedup_key)
         return ok
 
-    def _send_with_retry(self, payload: dict, image: bytes | None = None) -> bool:
+    def _url_for(self, event: OutputEvent) -> str | None:
+        """The set up's own channel if it has one, else the general one."""
+        try:
+            if self._route is not None:
+                own = self._route(event)
+            else:
+                from .discord_channels import setup_of, webhook_for
+                own = webhook_for(setup_of(event, self.main_setup))
+        except Exception:  # noqa: BLE001 - a routing problem never loses the message
+            own = None
+        return own or self._webhook
+
+    def _send_with_retry(self, payload: dict, image: bytes | None = None,
+                         url: str | None = None) -> bool:
+        url = url or self._webhook
         data = json.dumps(payload).encode("utf-8")
         attempts = max(1, self.config.retry_count + 1)
         for i in range(attempts):
             last = i == attempts - 1
             try:
                 if image:
-                    status = self._file_transport(self._webhook, payload, image, "chart.png",
+                    status = self._file_transport(url, payload, image, "chart.png",
                                                   self.config.timeout_seconds)
                 else:
-                    status = self._transport(self._webhook, data, self.config.timeout_seconds)
+                    status = self._transport(url, data, self.config.timeout_seconds)
             except TimeoutError:
                 if last:
                     log.warning("Discord request timed out after %d attempt(s).", attempts)

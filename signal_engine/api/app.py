@@ -48,7 +48,7 @@ _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
 _AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me",
                       "/api/signup", "/manifest.webmanifest", "/sw.js"}
 # what a read-only user (role viewer) may not even read
-_OWNER_ONLY_GET = ("/api/practice/link", "/api/users", "/api/backup")
+_OWNER_ONLY_GET = ("/api/practice/link", "/api/users", "/api/backup", "/api/discord/channels")
 # what any signed-in user may change for themself (not only the owner)
 _SELF_SERVICE_POST = ("/api/push/", "/api/practice/state")
 # all a practice-only user (signed up from the link) can open
@@ -387,6 +387,43 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         """Whether !record, !setups… can answer, and why not (never the token)."""
         from ..output.discord_bot import STATUS
         return dict(STATUS)
+
+    @app.get("/api/discord/channels")
+    def discord_channels() -> dict:
+        """Which set ups have their own Discord channel (names, never webhooks)."""
+        from ..output import discord_channels as dch
+        return {**dch.status(), "sending": bool(getattr(app.state, "history_thread", None)
+                                                 and app.state.history_thread.is_alive())}
+
+    @app.post("/api/discord/channels")
+    def discord_channels_create() -> dict:
+        """The bot makes a channel (and its webhook) for every set up that is on."""
+        from ..output import discord_channels as dch
+        try:
+            return dch.create_channels()
+        except dch.ChannelError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.post("/api/discord/channels/history")
+    def discord_channels_history() -> dict:
+        """Send each set up's past trades to its own channel (in the background)."""
+        import threading
+        from ..output import discord_channels as dch
+        from .bots import trade_log
+        th = getattr(app.state, "history_thread", None)
+        if th is not None and th.is_alive():
+            return {"started": False, "detail": "Ya se está enviando."}
+        log = trade_log(runtime, orbit_dir=getattr(app.state, "orbit_dir", None),
+                        shadows_dir=getattr(app.state, "shadows_dir", None))
+
+        def run():
+            try:
+                dch.send_history(log)
+            except Exception:  # noqa: BLE001
+                logging.getLogger(__name__).exception("discord history failed")
+        app.state.history_thread = threading.Thread(target=run, name="historial", daemon=True)
+        app.state.history_thread.start()
+        return {"started": True}
 
     @app.get("/api/health")
     def get_health() -> dict:

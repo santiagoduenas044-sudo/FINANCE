@@ -722,6 +722,10 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 /* ── Panel: una tarjeta por set up (nunca sumados) ── */
 .sutitle { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .sutitle span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.chlist { display: flex; flex-direction: column; gap: 2px; }
+.chrow { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; }
+.chrow span { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.chrow.off { opacity: .55; }
 .pdfbtn { margin-left: auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--rule-strong);
   background: transparent; color: var(--ink-1); font: 600 12px var(--sans); cursor: pointer; }
 .pdfbtn:hover { border-color: rgba(var(--acc-rgb), .6); }
@@ -1154,6 +1158,16 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
           reiniciar mientras corre un backtest, porque lo cortaría.</p></div></div>
     <div class="card mb"><h3>Comandos de Discord <span class="r" id="dc-state"></span></h3>
       <div class="body"><div id="dc-body" class="foot" style="margin-top:0">Revisando…</div></div></div>
+    <div class="card mb owner-only"><h3>Un canal por set up <span class="r" id="ch-state"></span></h3>
+      <div class="body">
+        <p class="foot" style="margin-top:0">Cada set up escribe en su propio canal de Discord: su aviso, su entrada y su salida con gráfica.
+          El canal de siempre queda para el cierre del día, la Palabra del día y los errores. El bot de comandos crea los canales
+          (necesita los permisos <b>Gestionar canales</b> y <b>Gestionar webhooks</b>).</p>
+        <div class="chlist" id="ch-list"></div>
+        <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button type="button" class="pbtn on" id="ch-make">Crear un canal por set up</button>
+          <button type="button" class="pbtn" id="ch-hist">Reenviar historial a cada canal</button></div>
+        <p class="foot" id="ch-msg"></p></div></div>
     <div class="card mb owner-only"><h3>Página web y usuarios <span class="r" id="us-state"></span></h3>
       <div class="body">
         <p class="foot" style="margin-top:0">Para abrir el dashboard desde internet, cada persona entra con <b>usuario y
@@ -2091,8 +2105,37 @@ async function dcLoad() {
        ${d.other_channel ? `<br><b>Ojo:</b> ${d.other_channel} ${d.other_channel === 1 ? "comando llegó" : "comandos llegaron"} de otro canal y no ${d.other_channel === 1 ? "lo contestó" : "los contestó"}: escribe en el canal configurado.` : ""}`
     : (DC_FIX[d.state] || "");
 }
+// one Discord channel per set up
+async function chLoad() {
+  if (S.me && S.me.role !== "owner") return;
+  let d;
+  try { d = await api("/api/discord/channels"); } catch (e) { $("ch-list").textContent = "⚠ " + e.message; return; }
+  const made = d.rows.filter(r => r.channel).length, on = d.rows.filter(r => r.on).length;
+  $("ch-state").innerHTML = made ? `<span class="badge good">${made} canales</span>` : '<span class="badge warn">sin canales</span>';
+  $("ch-list").innerHTML = d.rows.map(r => `<div class="chrow ${r.on ? "" : "off"}"><b>${esc(r.label)}</b>
+    <span>${r.channel ? "#" + esc(r.channel) : r.on ? "escribe en el canal general" : "apagado"}</span></div>`).join("");
+  $("ch-make").disabled = !d.bot;
+  $("ch-hist").disabled = !made || d.sending;
+  $("ch-msg").innerHTML = !d.bot ? "Primero conecta el bot de comandos (arriba)."
+    : d.sending ? "Enviando el historial a cada canal… (tarda un par de minutos)"
+    : d.error ? "⚠ " + esc(d.error)
+    : d.history && d.history.at ? `Historial enviado el ${esc(d.history.at)}.`
+    : made < on ? (on - made === 1 ? "Falta 1 set up por tener su canal." : `Faltan ${on - made} set ups por tener su canal.`) : "";
+}
+$("ch-make").addEventListener("click", async e => {
+  const b = e.currentTarget; b.disabled = true; $("ch-msg").textContent = "Creando canales…";
+  try { const r = await api("/api/discord/channels", { method: "POST" });
+    $("ch-msg").textContent = r.made.length ? `✅ Listo: ${r.made.length} canales nuevos.` : "✅ Ya estaban todos."; }
+  catch (err) { $("ch-msg").textContent = "⚠ " + err.message; }
+  setTimeout(chLoad, 600);
+});
+$("ch-hist").addEventListener("click", async e => {
+  const b = e.currentTarget; b.disabled = true;
+  try { await api("/api/discord/channels/history", { method: "POST" }); } catch (err) { $("ch-msg").textContent = "⚠ " + err.message; }
+  chLoad(); setTimeout(chLoad, 60000); setTimeout(chLoad, 150000);
+});
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); paintPush(); bkLoad(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); paintPush(); bkLoad(); chLoad(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";

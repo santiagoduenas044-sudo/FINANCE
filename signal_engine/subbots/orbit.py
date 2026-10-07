@@ -67,7 +67,8 @@ def make_publisher():
     adapters = [PushOutputAdapter()] if push_enabled() else []
     if os.environ.get(WEBHOOK_ENV, "").strip():
         from ..config.schema import DiscordOutputConfig
-        adapters.insert(0, DiscordOutputAdapter(DiscordOutputConfig(enabled=True, webhook_env=WEBHOOK_ENV)))
+        adapters.insert(0, DiscordOutputAdapter(DiscordOutputConfig(enabled=True, webhook_env=WEBHOOK_ENV),
+                                                main_setup=2))
     else:
         log.warning("%s no está en .env: ORBIT no escribe en Discord.", WEBHOOK_ENV)
     if not adapters:
