@@ -119,12 +119,14 @@ _STATUS_EMOJI = {
 }
 
 
-# What reaches Discord. BOT_DISCORD=corto (the default): one message when a
-# trade enters and one when it exits (every set up), the day's close, the
-# verse and fact of the day, a set up switched on/off, and errors. Heads-ups,
-# "how it is going", TP1/stop moves, ORBIT's box and BE+2, start/stop and
+# What reaches Discord. BOT_DISCORD=corto (the default): the heads-up before
+# a trade ("posible idea") and its cancellation if it does not happen, one
+# message when a trade enters and one when it exits (every set up), the day's
+# close, the verse and fact of the day, a set up switched on/off, and errors.
+# "How it is going", TP1/stop moves, ORBIT's box and BE+2, start/stop and
 # limit notices stay in the dashboard. BOT_DISCORD=todo sends everything.
-_SHORT_KINDS = {"trade_opened", "trade_closed", "daily_record"}
+_SHORT_KINDS = {"trade_idea", "trade_idea_cancelled", "trade_opened", "trade_closed",
+                "daily_record"}
 _SHORT_NOTES = {"open", "close", "verse", "fact", "switch", "test"}
 
 

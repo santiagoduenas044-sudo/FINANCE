@@ -1,5 +1,6 @@
-"""BOT_DISCORD=corto (the default): the channel only gets each trade's entry
-and exit, the day's close, the daily verse/fact and errors."""
+"""BOT_DISCORD=corto (the default): the channel gets the heads-up before a
+trade, each trade's entry and exit, the day's close, the daily verse/fact and
+errors."""
 from datetime import datetime, timezone
 
 import pytest
@@ -21,6 +22,8 @@ def _note(key):
 
 
 @pytest.mark.parametrize("event", [
+    OutputEvent.from_trade_idea({"event": "idea", "zone_id": "z1", "number": 7}),       # heads-up
+    OutputEvent.from_trade_idea({"event": "cancelled", "zone_id": "z1", "number": 7}),
     OutputEvent.from_trade_opened(TRADE),
     OutputEvent.from_trade_closed({**TRADE, "exit_reason": "STOP", "r_multiple": -1.0}),
     OutputEvent.from_daily_record("hoy", "2026-10-07"),
