@@ -430,6 +430,11 @@ class GhostConfig(BaseModel):
     # entry + be_offset_points; at 70%, stop to entry + 30% of the way (+ the
     # same offset). Same rule as the lab's "escalones" (strategy_lab.py).
     lock_steps: Optional[list[list[float]]] = None
+    # Paper fills like a real account: a market order (entry now, stop,
+    # invalidation, end-of-day flat) fills this many points worse (0.25 = 1
+    # NQ/MNQ tick); a bar that opens past the stop fills at that open.
+    slippage_points: float = 0.0
+    gap_fills: bool = False
     # No new entries around high-impact US news (signal_engine/news.py):
     # {"before": 10, "after": 15, "impacts": ["High"]} minutes. None = off.
     news_blackout: Optional[dict] = None

@@ -194,11 +194,6 @@ def _setup1_record(runtime, now, symbol: str = "NQ") -> str:
 # The day's message: every set up, grouped by bot, saying plainly whether it
 # won or lost (from api/bots.trade_log: every closed trade of every set up).
 # --------------------------------------------------------------------------- #
-_WHY_ES = {"TP1": "TP1", "TP2": "objetivo", "TP3": "objetivo", "STOP": "stop",
-           "EOD": "cierre del día", "INVALIDATION": "invalidado", "CANCELLED": "cancelado"}
-_BOT_ICON = {"GHOST": "👻", "ORBIT": "🛰️"}
-
-
 def _money(v: float) -> str:
     return f"{'+' if v >= 0 else '−'}${abs(v):,.0f}"
 
@@ -209,28 +204,6 @@ def _verdict(v: float, he: bool = True) -> str:
         return "QUEDÓ EN $0" if he else "QUEDARON EN $0"
     word = ("GANÓ" if v > 0 else "PERDIÓ") if he else ("GANARON" if v > 0 else "PERDIERON")
     return f"{word} {_money(v)}"
-
-
-def _tmark(t: dict) -> str:
-    pts = t.get("pts") or 0.0
-    return "✅" if pts > 0.01 else ("🛑" if pts < -0.01 else "➖")
-
-
-def _why(t: dict) -> str:
-    why = str(t.get("why") or "")
-    pts = t.get("pts") or 0.0
-    if why.upper() == "STOP" and pts > 0.01:
-        return "stop en ganancia"
-    if why.upper() == "STOP" and abs(pts) <= 0.01:
-        return "breakeven"
-    return _WHY_ES.get(why.upper(), why.lower() or "cerrado")
-
-
-def _hm(iso) -> str:
-    try:
-        return pd.Timestamp(iso).tz_convert("America/New_York").strftime("%H:%M")
-    except (ValueError, TypeError):
-        return "--:--"
 
 
 def day_message(log: dict, now) -> str:
@@ -253,40 +226,20 @@ def day_message(log: dict, now) -> str:
                        "on": so.get("kind") == "main" or so.get("enabled", True)})
     setups.sort(key=lambda s: s["setup"])
 
-    lines = ["Cada set up por separado · en papel · dólares con comisiones"]
-    for bot in ("GHOST", "ORBIT"):
-        group = [s for s in setups if s["bot"] == bot]
-        if not group:
+    lines = ["Cada set up por separado · en papel · dólares con comisiones", ""]
+    for s in setups:                                  # one line each, in number order
+        allv = sum(t["net_usd"] for t in s["trades"])
+        total = f" · total {_money(allv)}" if s["trades"] else ""
+        if not s["on"]:
+            lines.append(f"⚪ {s['label']} — apagado")
             continue
-        lines += ["", f"{_BOT_ICON.get(bot, '•')} **{bot}**"]
-        for s in group:
-            today = sorted((t for t in s["trades"] if t["day"] == day),
-                           key=lambda t: t.get("closed_at") or "")
-            alln = len(s["trades"])
-            allv = sum(t["net_usd"] for t in s["trades"])
-            wins = sum(1 for t in s["trades"] if (t.get("pts") or 0) > 0.01)
-            total = (f"total {_money(allv)} en {_n(alln)} · gana {wins / alln:.0%}"
-                     if alln else "todavía sin trades")
-            if not s["on"]:
-                lines.append(f"⚪ {s['label']} — apagado · {total}")
-                continue
-            if today:
-                v = sum(t["net_usd"] for t in today)
-                w = sum(1 for t in today if _tmark(t) == "✅")
-                lo = sum(1 for t in today if _tmark(t) == "🛑")
-                mark = "✅" if v >= 0.5 else ("🛑" if v <= -0.5 else "➖")
-                lines.append(f"{mark} **{s['label']}** — hoy **{_verdict(v)}** "
-                             f"({_n(len(today))}: {w} ✅ {lo} 🛑)")
-                for t in today[:6]:
-                    side = "COMPRA" if t.get("side") == "LONG" else "VENTA"
-                    lines.append(f"　{_tmark(t)} {_hm(t.get('closed_at'))} · {side} "
-                                 f"{(t.get('entry') or 0):,.2f} → {(t.get('exit') or 0):,.2f} · "
-                                 f"{_why(t)} · {_verdict(t['net_usd'])}")
-                if len(today) > 6:
-                    lines.append(f"　y {len(today) - 6} más (en la página, Historial)")
-            else:
-                lines.append(f"➖ **{s['label']}** — hoy sin trades")
-            lines.append(f"↳ {total}")
+        today = [t for t in s["trades"] if t["day"] == day]
+        if not today:
+            lines.append(f"➖ **{s['label']}** — hoy sin trades{total}")
+            continue
+        v = sum(t["net_usd"] for t in today)
+        mark = "✅" if v >= 0.5 else ("🛑" if v <= -0.5 else "➖")
+        lines.append(f"{mark} **{s['label']}** — hoy **{_verdict(v)}** ({_n(len(today))}){total}")
     return "\n".join(lines)
 
 

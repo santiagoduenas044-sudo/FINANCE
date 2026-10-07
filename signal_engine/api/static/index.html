@@ -753,8 +753,6 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   font: 700 10.5px var(--display); letter-spacing: .2em; text-transform: uppercase; color: var(--amber);
   background: rgba(var(--acc-rgb), .1); border: 1px solid rgba(var(--acc-rgb), .35); white-space: nowrap; }
 .pill2.bad { color: var(--critical); background: rgba(var(--bad-rgb), .1); border-color: rgba(var(--bad-rgb), .35); }
-.jbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.jbar .hsrc { margin-top: 0; }
 .review { width: 100%; display: flex; align-items: center; gap: 16px; padding: 14px 18px; margin-bottom: 18px; text-align: left;
   border-radius: var(--r); border: 1px solid rgba(var(--acc-rgb), .3); color: var(--ink-1);
   background: linear-gradient(90deg, rgba(var(--acc-rgb), .14), rgba(var(--acc-rgb), .03) 70%), var(--panel);
@@ -769,23 +767,6 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   background: var(--amber); box-shadow: 0 8px 22px -10px rgba(var(--acc-rgb), .9); }
 .review .go2 svg { width: 12px; height: 12px; fill: currentColor; }
 .jgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; margin-bottom: 18px; align-items: start; }
-.jk { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.jk .card { padding: 16px 18px; position: relative; overflow: hidden; }
-.jk .wide { grid-column: 1 / -1; }
-.jk .k { font: 700 10px var(--display); letter-spacing: .18em; text-transform: uppercase; color: var(--ink-3); }
-.jk .big { font: 700 34px/1.1 var(--display); letter-spacing: -.03em; margin-top: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.jk .mid { font: 700 24px/1.1 var(--display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.jk .sub { font: 500 11.5px var(--mono); color: var(--ink-3); margin-top: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jk .row2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
-.jk .wide .row2 { align-items: flex-end; }
-.jk svg.jspark { width: 46%; max-width: 260px; height: 56px; overflow: visible; flex: none; }
-.jk svg.gauge { width: 74px; height: 44px; flex: none; overflow: visible; }
-.jk svg.ring { width: 52px; height: 52px; flex: none; }
-.jk .wlbar { display: flex; gap: 2px; height: 6px; border-radius: 99px; overflow: hidden; margin-top: 12px; background: var(--panel-3); }
-.jk .wlbar i { display: block; height: 100%; }
-.jk .wlbar i:first-child { background: var(--good); border-radius: 99px 0 0 99px; }
-.jk .wlbar i:last-child { background: var(--critical); border-radius: 0 99px 99px 0; }
-.jk .wlk { display: flex; justify-content: space-between; font: 600 11.5px var(--mono); margin-top: 6px; }
 .jcal .calhd { display: flex; align-items: center; gap: 10px; padding: 16px 18px 6px; flex-wrap: wrap; }
 .jcal .calhd b { font: 700 15px var(--sans); text-transform: capitalize; min-width: 130px; }
 .jcal .calhd .sum { margin-left: auto; font: 600 12px var(--mono); color: var(--ink-3); }
@@ -821,17 +802,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 @media (max-width: 1180px) { .jgrid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 760px) {
   .review { flex-wrap: wrap; } .review .go2 { width: 100%; justify-content: center; }
-  .jk .big { font-size: 28px; } .jk .mid { font-size: 20px; }
   .jc { gap: 4px; padding: 6px 10px 14px; } .jc .d { min-height: 58px; padding: 6px; border-radius: 9px; }
   .jc .d .v { font-size: 11px; margin-top: 12px; max-width: 100%; } .jc .d .wl { display: none; } .jc .d .dn { font-size: 9.5px; top: 5px; right: 6px; }
-  .jk .wide .row2 { flex-direction: column; align-items: stretch; }
-  .jk svg.jspark { width: 100%; max-width: none; height: 46px; }
-  .jk .sub { white-space: normal; }
-  .jk .card { padding: 13px 12px; } .jk { gap: 10px; }
-  .jk .k { font-size: 9px; letter-spacing: .1em; }
-  .jk .mid { font-size: 20px; } .jk .sub, .jk .wlk { font-size: 10.5px; }
-  .jk .row2 { gap: 6px; }
-  .jk svg.gauge { width: 58px; height: 36px; } .jk svg.ring { width: 42px; height: 42px; }
   .jbar .hsrc { flex-wrap: nowrap; overflow-x: auto; width: 100%; padding-bottom: 2px; scrollbar-width: none; }
   .jbar .hsrc::-webkit-scrollbar { display: none; }
   .jbar .hsrc button { flex: none; }
@@ -959,15 +931,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
       <h3 class="sutitle">Tus set ups <span>cada uno por separado · toca uno para ver su mes</span>
         <button type="button" class="pdfbtn" id="j-pdf">Descargar récord (PDF)</button></h3>
       <div class="sugrid" id="j-setups"></div>
-      <div class="jbar" hidden>
-        <div class="seg" id="j-range" role="group" aria-label="Periodo">
-          <button type="button" data-r="month" aria-pressed="true">Mes</button>
-          <button type="button" data-r="week" aria-pressed="false">Semana</button>
-          <button type="button" data-r="all" aria-pressed="false">Todo</button></div>
-        </div>
       <button type="button" class="review" id="j-review" hidden></button>
       <div class="jgrid">
-        <div class="jk" id="j-kpis" hidden></div>
         <div class="card jcal">
           <div class="calhd"><button type="button" class="nav" id="j-prev" aria-label="Mes anterior">‹</button><b id="j-title"></b>
             <button type="button" class="nav" id="j-next" aria-label="Mes siguiente">›</button>
@@ -989,10 +954,6 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
       </div>
       <aside class="side">
         <div class="card now"><h3>Ahora</h3><div class="body" id="now"></div></div>
-        <div class="card" hidden><h3>Hoy <span class="r" id="today-date"></span></h3><div class="body"><div class="stats4" id="today"></div></div></div>
-        <div class="card" id="movers-card" hidden><h3>Qué mueve al NQ <span class="r" id="movers-sum"></span></h3>
-          <div class="body"><div id="movers"></div></div></div>
-        <div class="card" hidden><h3>Ideas de hoy <span class="r" id="ideas-n"></span></h3><div class="body"><ul class="ideas" id="ideas"></ul></div></div>
       </aside>
     </div>
   </section>
@@ -1173,6 +1134,9 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
       <div class="body" id="push-body"><p class="foot" style="margin:0">Revisando…</p></div></div>
     <div class="card mb" id="inst-card"><h3>Instalar como app <span class="r" id="inst-state"></span></h3>
       <div class="body" id="inst-body"></div></div>
+    <div class="card mb owner-only"><h3>Respaldo <span class="r" id="bk-state"></span></h3>
+      <div class="body"><p class="foot" style="margin:0 0 10px" id="bk-text">Revisando…</p>
+        <button type="button" class="pbtn" id="bk-dl">Descargar respaldo ahora</button></div></div>
     <div class="card mb"><h3>Apariencia</h3>
       <div class="body appear">
         <div><span class="k">Fondo</span><div class="seg" id="ap-theme" role="group" aria-label="Fondo">
@@ -1484,7 +1448,6 @@ async function pollTrades() {
   try { S.open = (await api("/api/ghost/trades/active")).trades || []; } catch { S.open = []; }
   try { S.closed = (await api("/api/ghost/trades/history?limit=500")).trades || []; } catch { S.closed = []; }
 }
-async function pollMovers() { try { S.movers = await api("/api/market/movers"); } catch { S.movers = null; } }
 async function pollIdeas() { try { S.ideas = await api("/api/ideas"); } catch { S.ideas = { ideas: [] }; } }
 async function pollDecisions() {
   try { S.decisions = (await api("/api/ghost/decisions?limit=200")).decisions || []; } catch { S.decisions = []; }
@@ -1703,54 +1666,6 @@ function renderNow() {
     <div class="headline">${st !== "ONLINE" ? "El bot no está activo" : sess && sess !== "RTH" ? "Mercado fuera de horario" : "Sin zonas cerca"}</div>
     <div class="sub">${st !== "ONLINE" ? "Pulsa Iniciar para que vuelva a buscar." : sess && sess !== "RTH"
       ? "Opera de 9:30 a 15:30 ET y cierra todo a las 16:55." : "Aviso con 🟡 cuando el precio se acerque a una zona."}</div>`;
-}
-
-function renderToday() {
-  const cl = todayClosed(), sym = S.symbol;
-  const wins = cl.filter(t => t.pnl_points > 0).length, losses = cl.filter(t => t.pnl_points < 0).length;
-  const pts = cl.reduce((s, t) => s + (t.pnl_points || 0), 0);
-  const ideas = S.ideas.day === fmtDate.format(new Date())
-    ? (S.ideas.ideas || []).filter(i => i.symbol === sym) : [];
-  $("today-date").textContent = fmtDay.format(new Date());
-  $("today").innerHTML = `
-    <div class="stat"><div class="k">Resultado cerrado</div><div class="v ${cls(pts)}">${sgn(pts)} pts</div><div class="s">${cl.length ? usd(pts, sym) : "—"}</div></div>
-    <div class="stat"><div class="k">Trades</div><div class="v">${cl.length}</div><div class="s">${wins} ganados · ${losses} perdidos</div></div>
-    <div class="stat"><div class="k">Ideas avisadas</div><div class="v">${ideas.filter(i => !i.direct).length}</div><div class="s">${ideas.filter(i => i.status === "CANCELLED").length} canceladas</div></div>
-    <div class="stat"><div class="k">Señales directas</div><div class="v">${ideas.filter(i => i.direct).length}</div><div class="s">sin aviso previo</div></div>`;
-}
-
-function renderMovers() {
-  const card = $("movers-card"), m = S.movers;
-  card.hidden = S.symbol !== "NQ";
-  if (card.hidden) return;
-  const all = m?.items || [], items = all.slice(0, 6);
-  if (!items.length) { $("movers").innerHTML = `<div class="empty">Sin cotizaciones de las acciones ahora.</div>`; $("movers-sum").textContent = ""; return; }
-  const max = Math.max(...items.map(q => Math.abs(q.nq_points ?? q.chg_pct)), 1e-9);
-  const tot = m.nq_points_total;
-  $("movers-sum").innerHTML = `${m.up}↑ ${m.down}↓` + (tot != null ? ` · <span class="${cls(tot)}">${sgn(tot, 0)} pts</span>` : "");
-  $("movers").innerHTML = items.map(q => {
-    const v = q.nq_points ?? q.chg_pct, w = Math.abs(v) / max * 50;
-    const col = v >= 0 ? css("--good") : css("--critical");
-    return `<div class="mv"><span class="s">${esc(q.symbol)}<span class="n">${esc(q.name)}</span></span>
-      <span class="bar"><i style="background:${col};width:${w}%;left:${v >= 0 ? 50 : 50 - w}%"></i></span>
-      <span class="p ${cls(q.chg_pct)}">${sgn(q.chg_pct)}%</span>
-      <span class="q ${cls(q.nq_points)}">${q.nq_points != null ? "≈" + sgn(q.nq_points, 0) : "—"}</span></div>`;
-  }).join("") + `<p class="foot">Las ${items.length} que más empujan al NQ hoy, en puntos (peso en el índice × su cambio)${all.length > items.length ? `; el total incluye ${all.length}` : ""}. Pesos aproximados.</p>`;
-}
-
-function renderIdeas() {
-  const list = (S.ideas.ideas || []).filter(i => i.symbol === S.symbol).slice().reverse();
-  $("ideas-n").textContent = S.ideas.day && S.ideas.day !== fmtDate.format(new Date()) ? "último día: " + S.ideas.day : list.length ? list.length : "";
-  if (!list.length) { $("ideas").innerHTML = `<li class="empty" style="display:block">Todavía no hay ideas hoy.</li>`; return; }
-  $("ideas").innerHTML = list.map(i => {
-    const t = i.trade, long = i.direction === "LONG";
-    const ic = i.status === "WATCHING" ? "🟡" : i.status === "CANCELLED" ? "⚪" : i.direct ? "⚡" : "🟢";
-    let res = `<span class="zero">${i.status === "WATCHING" ? "esperando" : i.status === "CANCELLED" ? "cancelada" : ""}</span>`;
-    if (t) res = t.is_open ? `<span class="${cls(t.pnl_points)}">${sgn(t.pnl_points, 1)} <small>abierta</small></span>`
-      : `<span class="${cls(t.pnl_points)}">${sgn(t.pnl_points, 1)} pts</span>`;
-    return `<li><span class="ic">${ic}</span><div><b>#${i.number} ${long ? "Compra" : "Venta"}</b> en ${num(i.mid)}
-      <div class="t">${hm(i.announced_at)} · zona ${num(i.bottom)}–${num(i.top)}</div></div><span class="res">${res}</span></li>`;
-  }).join("");
 }
 
 /* ═══════════════════════════ BOTS · central ═══════════════════════════ */
@@ -2177,7 +2092,7 @@ async function dcLoad() {
     : (DC_FIX[d.state] || "");
 }
 function renderSystem() {
-  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); paintPush(); }
+  if (!S.verLoaded) { S.verLoaded = true; updVersion(); plLoad(); renderUsers(); dcLoad(); paintPush(); bkLoad(); }
   const comps = S.status?.components || {};
   $("components").innerHTML = Object.entries(comps).map(([k, v]) => {
     const d = v.status === "OK" ? "ok" : v.status === "DEGRADED" ? "warn" : v.status === "DISABLED" ? "" : "bad";
@@ -3152,6 +3067,31 @@ $("sb-out").onclick = async () => {
   try { await fetch("/api/logout", { method: "POST" }); } catch {}
   location.href = "/login";
 };
+// the daily copy of the trades, users and practice
+async function bkLoad() {
+  if (S.me && S.me.role !== "owner") return;
+  try {
+    const b = await api("/api/backup");
+    $("bk-state").innerHTML = b.last ? '<span class="badge good">al día</span>' : '<span class="badge warn">sin copias</span>';
+    $("bk-text").innerHTML = b.last
+      ? `Cada día se guarda una copia de los trades de todos los set ups, los usuarios y la práctica. La última es del <b>${esc(b.last)}</b>
+         (${b.count} ${b.count === 1 ? "copia" : "copias"}, se guardan ${b.keep} días)${b.icloud ? " en <b>iCloud Drive → GHOST respaldos</b>" : ` en <span class="mono">${esc(b.dir || "")}</span>`}.`
+      : "Todavía no hay copias. La primera se hace sola en menos de una hora, o descárgala ahora.";
+  } catch (err) { $("bk-text").textContent = "⚠ " + err.message; }
+}
+$("bk-dl").addEventListener("click", async e => {
+  const b = e.currentTarget, was = b.textContent;
+  b.disabled = true; b.textContent = "Preparando…";
+  try {
+    const r = await api("/api/backup.zip", { raw: true });
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: `ghost-respaldo-${fmtDate.format(new Date())}.zip` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    b.textContent = was;
+  } catch (err) { b.textContent = "⚠ " + err.message; setTimeout(() => (b.textContent = was), 4000); }
+  b.disabled = false;
+});
 async function renderUsers() {
   if (S.me && S.me.role !== "owner") return;
   let d;
@@ -3207,7 +3147,7 @@ $("us-table").addEventListener("click", async e => {
    Lee /api/bots/trades (S.tlog). "Principales" = Set up 1 (GHOST) + Set up 2
    (ORBIT) con la versión que usan ahora; también se puede ver cada set up solo.
    Todo en dólares con comisiones (net_usd). */
-const J = { sel: "1", range: "month", month: null, day: null };
+const J = { sel: "1", month: null, day: null };
 const MONTHS_UP = m => MONTHS[m][0].toUpperCase() + MONTHS[m].slice(1);
 const money2 = v => `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function jSetups() {                       // [{n, label, id, current, kind}] in number order
@@ -3272,48 +3212,13 @@ function jStats(T) {
     avgW: W.length ? gw / W.length : null, avgL: L.length ? gl / L.length : null,
     by, days, winDays: days.filter(d => by[d] > 0).length, best, worst };
 }
-// gauges and curves (text stays in ink colors; the arc carries the value)
-function gaugeSvg(frac, tone) {
-  const f = Math.max(0, Math.min(1, frac || 0)), r = 30, cx = 37, cy = 38;
-  const pt = a => [cx - r * Math.cos(a), cy - r * Math.sin(a)];
-  const [x1, y1] = pt(0), [x2, y2] = pt(Math.PI), [xv, yv] = pt(Math.PI * f);
-  return `<svg class="gauge" viewBox="0 0 74 44" aria-hidden="true">
-    <path d="M${x1} ${y1} A${r} ${r} 0 0 1 ${x2} ${y2}" fill="none" stroke="var(--panel-3)" stroke-width="7" stroke-linecap="round"/>
-    ${f > 0 ? `<path d="M${x1} ${y1} A${r} ${r} 0 0 1 ${xv.toFixed(2)} ${yv.toFixed(2)}" fill="none" stroke="var(${tone})" stroke-width="7" stroke-linecap="round"/>` : ""}</svg>`;
-}
-function ringSvg(frac, tone) {
-  const f = Math.max(0, Math.min(1, frac || 0)), r = 21, c = 2 * Math.PI * r;
-  return `<svg class="ring" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="${r}" fill="none" stroke="var(--panel-3)" stroke-width="6"/>
-    <circle cx="26" cy="26" r="${r}" fill="none" stroke="var(${tone})" stroke-width="6" stroke-linecap="round"
-      stroke-dasharray="${(c * f).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 26 26)"/></svg>`;
-}
+// the month curve of the story (text stays in ink colors)
 function curve(vals, w, h, pad = 3) {      // [cum $] -> {line, area, zeroY} in a w x h box
   const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), r = (hi - lo) || 1;
   const P = vals.map((v, i) => [vals.length < 2 ? w / 2 : i / (vals.length - 1) * w, pad + (hi - v) / r * (h - 2 * pad)]);
   const line = P.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
   const zeroY = pad + hi / r * (h - 2 * pad);
   return { line, area: `${line} L${w} ${zeroY.toFixed(1)} L0 ${zeroY.toFixed(1)} Z`, zeroY };
-}
-function jSpark(T) {
-  if (T.length < 2) return "";
-  let c = 0; const vals = [0, ...T.map(t => c += t.net_usd || 0)];
-  const { line, area, zeroY } = curve(vals, 260, 56);
-  const tone = c >= 0 ? "--good" : "--critical";
-  return `<svg class="jspark" viewBox="0 0 260 56" preserveAspectRatio="none" role="img" aria-label="Curva de resultados: ${usd0(c)}">
-    <defs><linearGradient id="jsg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(${tone})" stop-opacity=".28"/>
-      <stop offset="1" stop-color="var(${tone})" stop-opacity="0"/></linearGradient></defs>
-    <line x1="0" x2="260" y1="${zeroY}" y2="${zeroY}" stroke="var(--rule-strong)" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>
-    <path d="${area}" fill="url(#jsg)"/><path d="${line}" fill="none" stroke="var(${tone})" stroke-width="2" stroke-linejoin="round"
-      vector-effect="non-scaling-stroke"/></svg>`;
-}
-function jRangeTrades(T) {
-  if (J.range === "all") return T;
-  if (J.range === "week") {
-    const today = fmtDate.format(new Date()), noon = new Date(today + "T12:00:00Z");
-    const w0 = new Date(noon.getTime() - ((noon.getUTCDay() + 6) % 7) * 864e5).toISOString().slice(0, 10);
-    return T.filter(t => t.day >= w0);
-  }
-  return T.filter(t => t.day.startsWith(J.month));
 }
 // the month the "your month is ready" banner offers: last month during the first
 // days of a new one (if it had trades), else this month so far
@@ -3324,15 +3229,13 @@ function reviewMonth(T) {
 }
 function renderJournal() {
   const L = S.tlog;
-  if (!L) { $("j-kpis").innerHTML = `<div class="card"><div class="empty">${S.tlogErr ? "No pude leer los trades." : "Cargando tu diario…"}</div></div>`; return; }
+  if (!L) { $("j-setups").innerHTML = `<div class="card"><div class="empty">${S.tlogErr ? "No pude leer los trades." : "Cargando tus set ups…"}</div></div>`; return; }
   const today = fmtDate.format(new Date());
   if (!J.month) J.month = today.slice(0, 7);
   const sus = jSetups();
   paintSetupGrid();
-  document.querySelectorAll("#j-range button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === J.range));
-  const all = jTrades(), T = jRangeTrades(all), st = jStats(T);
+  const all = jTrades();
   const [Y, M] = J.month.split("-").map(Number);
-  const per = J.range === "month" ? MONTHS[M - 1] : J.range === "week" ? "esta semana" : "todo";
   const who = (sus.find(s => String(s.n) === String(J.sel)) || {}).label || "";
 
   // the banner: the month in review
@@ -3344,14 +3247,8 @@ function renderJournal() {
     <span class="rv">${MONTHS_UP(rM - 1)} ${rY} · <span class="num ${cls(rS.v)}">${money2(rS.v)}</span> · ${rS.n} ${rS.n === 1 ? "trade" : "trades"} · ${esc(who)}</span></span>
     <span class="go2"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l11-7z"/></svg>Ver mi mes</span>`;
 
-  // the result: one number
-  const nT = x => `${x} ${x === 1 ? "trade" : "trades"}`;
-  $("j-kpis").innerHTML =
-    `<div class="card wide"><span class="k">${esc(who)} · ${esc(per)}</span>
-      <div class="row2"><div><div class="big ${st.n ? cls(st.v) : "zero"}">${st.n ? money2(st.v) : "$0.00"}</div>
-        <div class="sub">${st.n ? `${nT(st.n)} · ganó ${st.wins} · con comisiones` : "sin trades cerrados"}</div></div>${jSpark(T)}</div></div>`;
-
   // the calendar of the month (weekends only when there were trades on one)
+  const nT = x => `${x} ${x === 1 ? "trade" : "trades"}`;
   const mT = all.filter(t => t.day.startsWith(J.month)), mS = jStats(mT);
   $("j-title").textContent = `${MONTHS[M - 1]} ${Y}`;
   $("j-sum").innerHTML = mT.length ? `<span class="${cls(mS.v)}">${usd0(mS.v)}</span> · ${nT(mT.length)}` : "sin trades";
@@ -3390,8 +3287,7 @@ function renderJournal() {
       <span class="lbl">${esc(t.su)} · ${esc(WHY_ES[t.why] || t.why || "—")}</span><span class="u ${cls(t.net_usd)}">${usd0(t.net_usd)}</span></div>`).join("") : "";
 }
 $("j-setups").addEventListener("click", e => { const b = e.target.closest("button[data-js]"); if (!b) return;
-  J.sel = b.dataset.js; J.day = null; renderJournal(); $("j-range").scrollIntoView({ behavior: "smooth", block: "start" }); });
-$("j-range").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (!b) return; J.range = b.dataset.r; renderJournal(); });
+  J.sel = b.dataset.js; J.day = null; renderJournal(); $("j-review").scrollIntoView({ behavior: "smooth", block: "start" }); });
 $("j-cal").addEventListener("click", e => { const b = e.target.closest(".d.has"); if (!b) return; J.day = J.day === b.dataset.day ? null : b.dataset.day; renderJournal(); });
 const jShift = k => { const [y, m] = J.month.split("-").map(Number); J.month = new Date(Date.UTC(y, m - 1 + k, 1)).toISOString().slice(0, 7); J.day = null; renderJournal(); };
 $("j-prev").onclick = () => jShift(-1);
@@ -3482,7 +3378,7 @@ $("story").addEventListener("click", e => {
   const b = e.target.closest("[data-st]");
   if (b) { e.stopPropagation();
     if (b.dataset.st === "again") { ST.i = 0; paintStory(); }
-    else { closeStory(); J.month = ST.month; J.range = "month"; setView("panel"); $("j-cal").scrollIntoView({ behavior: "smooth", block: "center" }); }
+    else { closeStory(); J.month = ST.month; setView("panel"); $("j-cal").scrollIntoView({ behavior: "smooth", block: "center" }); }
     return; }
   e.clientX < innerWidth * 0.3 ? storyGo(-1) : storyGo(1);      // left third: back
 });
@@ -3516,7 +3412,7 @@ function paintSidebar() {
 /* ═══════════════════════════ ciclo ═══════════════════════════ */
 function renderAll() {
   paintHeader(); paintTitle(); paintSidebar();
-  if (S.view === "panel") { renderJournal(); renderChart(); renderNow(); renderToday(); renderMovers(); renderIdeas(); }
+  if (S.view === "panel") { renderJournal(); renderChart(); renderNow(); }
   else if (S.view === "bots") renderBots();
   else if (S.view === "history") renderHistory();
   else if (S.view === "backtest") renderBacktest();
@@ -3528,7 +3424,6 @@ async function refresh(force = false) {
   if (busy) return; busy = true;
   try {
     const jobs = [pollStatus(), pollTrades(), pollIdeas()];
-    if (force || S.tick % 12 === 0) jobs.push(pollMovers());
     if (force || S.tick++ % 3 === 0 || !S.chart) jobs.push(pollChart());
     if (S.view === "system") jobs.push(pollDecisions());
     if (S.view === "bots" || force || S.bots === undefined || S.tick % 6 === 0) jobs.push(pollBots());

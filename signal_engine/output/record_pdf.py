@@ -35,10 +35,39 @@ def _ny(ts) -> pd.Timestamp | None:
     return t.tz_localize(NY) if t.tzinfo is None else t.tz_convert(NY)
 
 
-def _night(t: dict) -> bool:
-    """Opened outside 09:30–16:00 ET."""
+# when it entered (ET): where a set up wins and where it loses
+BLOCKS = (("Noche", "16:00", "03:00"), ("Europa", "03:00", "09:30"),
+          ("Mañana NY", "09:30", "12:00"), ("Tarde NY", "12:00", "16:00"))
+
+
+def _block(t: dict) -> str | None:
     o = _ny(t.get("opened_at"))
-    return o is not None and not ("09:30" <= o.strftime("%H:%M") < "16:00")
+    if o is None:
+        return None
+    hm = o.strftime("%H:%M")
+    for name, a, b in BLOCKS:
+        if (a <= hm < b) if a < b else (hm >= a or hm < b):
+            return name
+    return None
+
+
+def where_lines(T: list[dict]) -> list[tuple[str, str]]:
+    """[(label, text)]: by time of entry and by side, for ONE set up's trades
+    (only the parts it traded in). Empty with fewer than 2 trades."""
+    if len(T) < 2:
+        return []
+
+    def part(rows):
+        v = sum(t.get("net_usd") or 0.0 for t in rows)
+        return f"{len(rows)} {'trade' if len(rows) == 1 else 'trades'} {_usd(v)}"
+    hours = [f"{name} {part(rows)}" for name, *_ in BLOCKS
+             if (rows := [t for t in T if _block(t) == name])]
+    sides = [f"{label} {part(rows)}" for side, label in (("LONG", "Compras"), ("SHORT", "Ventas"))
+             if (rows := [t for t in T if t.get("side") == side])]
+    out = [("Por horario (ET)", "   ·   ".join(hours[:2]))]
+    if hours[2:]:
+        out.append(("", "   ·   ".join(hours[2:])))
+    return out + [("Por lado", "   ·   ".join(sides))]
 
 
 def setups_of(log: dict, only: int | None = None) -> list[tuple[dict, list[dict]]]:
@@ -147,17 +176,13 @@ def _build(log: dict, only: int | None, now) -> bytes:
                         fig.text(0.07, 0.84, (f"{len(T)} trades · ganó {wins}" if T
                                               else "Todavía sin trades cerrados")
                                  + f" · {_verdict(so.get('fondeo'))}", fontsize=10, color=INK2)
-                        night = [t for t in T if _night(t)]
-                        if night and len(night) < len(T):
-                            day = [t for t in T if not _night(t)]
-                            sd = sum(t.get("net_usd") or 0.0 for t in day)
-                            sn = sum(t.get("net_usd") or 0.0 for t in night)
-                            fig.text(0.07, 0.82, f"De día (9:30–16:00): {len(day)} trades {_usd(sd)}"
-                                     f"   ·   De noche: {len(night)} trades {_usd(sn)}",
-                                     fontsize=9, color=INK2)
+                        for i, (label, line) in enumerate(where_lines(T)):
+                            y = 0.818 - i * 0.018
+                            fig.text(0.07, y, label, fontsize=8.5, color=INK3)
+                            fig.text(0.22, y, line, fontsize=8.5, color=INK2)
                         if len(T) > 1:
                             _curve(fig, T)
-                            top = 0.56
+                            top = 0.545
                         else:
                             top = 0.79
                     _table(fig, rows, top)
@@ -173,7 +198,7 @@ def _hline(fig, y: float):
 
 def _curve(fig, T: list[dict]) -> None:
     """The set up's money trade after trade (one line, one axis)."""
-    ax = fig.add_axes([0.11, 0.61, 0.72, 0.19])
+    ax = fig.add_axes([0.11, 0.59, 0.72, 0.17])
     eq, run = [0.0], 0.0
     for t in T:
         run += t.get("net_usd") or 0.0
@@ -191,7 +216,6 @@ def _curve(fig, T: list[dict]) -> None:
     ax.tick_params(colors=INK3, labelsize=7, length=0)
     ax.grid(axis="y", color=RULE, linewidth=0.5)
     ax.yaxis.set_major_formatter(lambda v, _p: _usd(v))
-    ax.set_xlabel("trades", fontsize=7, color=INK3)
     ax.text(len(eq) - 1, run, f" {_usd(run)}", fontsize=8, color=color, weight="bold", va="center")
 
 

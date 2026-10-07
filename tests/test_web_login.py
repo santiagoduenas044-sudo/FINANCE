@@ -129,3 +129,18 @@ def test_signups_are_throttled(tmp_path, monkeypatch):
     acc.add("santi", "clave-segura-1", "owner")
     codes = [c.post("/api/signup", json={"user": f"u{i}", "password": "practica-123"}).status_code for i in range(5)]
     assert codes[:3] == [200, 200, 200] and codes[3] == 429
+
+
+def test_failures_from_everywhere_do_not_lock_out_a_known_address(tmp_path, monkeypatch):
+    c, acc = _client(tmp_path, monkeypatch)
+    acc.add("santi", "clave-segura-1", "owner")
+    mine = {"x-forwarded-for": "100.1.1.1"}
+    assert c.post("/api/login", json={"user": "santi", "password": "clave-segura-1"},
+                  headers=mine).status_code == 200
+    for i in range(30):                              # a stranger, from 30 addresses
+        c.post("/api/login", json={"user": "santi", "password": "x"},
+               headers={"x-forwarded-for": f"9.9.9.{i}"})
+    assert c.post("/api/login", json={"user": "santi", "password": "clave-segura-1"},
+                  headers={"x-forwarded-for": "8.8.8.8"}).status_code == 429   # new address: braked
+    assert c.post("/api/login", json={"user": "santi", "password": "clave-segura-1"},
+                  headers=mine).status_code == 200                              # yours: still in

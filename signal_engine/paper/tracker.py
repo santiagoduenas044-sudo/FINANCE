@@ -44,7 +44,8 @@ class PaperTradeTracker:
                  be_trigger_r: float | None = None, be_offset_points: float = 0.0,
                  trail_start_r: float | None = None, trail_distance_r: float = 1.0,
                  be_at_progress: float | None = None,
-                 lock_steps: list | None = None):
+                 lock_steps: list | None = None,
+                 slippage_points: float = 0.0, gap_fills: bool = False):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
         # the stop to entry instead and that giveback becomes ~0R. Measured on
@@ -74,6 +75,13 @@ class PaperTradeTracker:
         self.lock_steps = sorted((float(a), float(b)) for a, b in (lock_steps or []))
         self.trail_start_r = trail_start_r
         self.trail_distance_r = trail_distance_r
+        # Costs of a real fill. slippage_points: a market order (an entry
+        # "now", a stop, an invalidation or the end-of-day flat) fills this
+        # much worse; a target is a resting limit and fills at its price.
+        # gap_fills: a bar that OPENS past the stop fills at that open, not at
+        # the stop (the price jumped over it). Both off = the old exact fills.
+        self.slippage_points = max(float(slippage_points or 0.0), 0.0)
+        self.gap_fills = bool(gap_fills)
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
         # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
@@ -91,7 +99,9 @@ class PaperTradeTracker:
                    be_trigger_r=gcfg.be_trigger_r,
                    be_offset_points=gcfg.be_offset_points, trail_start_r=gcfg.trail_start_r,
                    trail_distance_r=gcfg.trail_distance_r, be_at_progress=gcfg.be_at_progress,
-                   lock_steps=gcfg.lock_steps)
+                   lock_steps=gcfg.lock_steps,
+                   slippage_points=getattr(gcfg, "slippage_points", 0.0),
+                   gap_fills=getattr(gcfg, "gap_fills", False))
 
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
@@ -156,6 +166,10 @@ class PaperTradeTracker:
             return None
         if self.has_open(instrument):
             return None
+        if fill == "immediate" and self.slippage_points:
+            # a market entry: filled a little worse than the price that triggered it
+            context = {**(context or {}), "signal_entry": entry}
+            entry = entry + self.slippage_points if direction == "LONG" else entry - self.slippage_points
         risk = abs(entry - stop)
         trade = PaperTrade(
             signal_id=signal_id, instrument=instrument, direction=direction,
@@ -196,6 +210,7 @@ class PaperTradeTracker:
     def update_on_bar(self, trade: PaperTrade, bar: pd.Series,
                       bar_time: pd.Timestamp) -> None:
         high = float(bar["high"]); low = float(bar["low"]); close = float(bar["close"])
+        opn = float(bar["open"]) if "open" in bar and bar["open"] == bar["open"] else None
         trade.last_bar_time = bar_time
         trade.updated_at = bar_time
         trade.bars_held += 1
@@ -238,10 +253,11 @@ class PaperTradeTracker:
         # LONG: the HIGHER level (closer to entry) is hit first as price falls.
         if stop_hit or inval_hit:
             if inval_hit and (not stop_hit or _closer_to_entry(trade, inval, stop)):
-                self._close(trade, bar_time, inval, ExitReason.INVALIDATION,
-                            TradeStatus.INVALIDATED)
+                self._close(trade, bar_time, self._gap(trade, inval, opn), ExitReason.INVALIDATION,
+                            TradeStatus.INVALIDATED, market=True)
             else:
-                self._close(trade, bar_time, stop, ExitReason.STOP, TradeStatus.STOPPED)
+                self._close(trade, bar_time, self._gap(trade, stop, opn), ExitReason.STOP,
+                            TradeStatus.STOPPED, market=True)
             return
 
         # Targets (protective already ruled out this bar).
@@ -307,7 +323,7 @@ class PaperTradeTracker:
             if trade.instrument == instrument and trade.is_open:
                 trade.context = {**trade.context, "invalidation_note": reason}
                 self._close(trade, bar_time, price, ExitReason.INVALIDATION,
-                            TradeStatus.INVALIDATED)
+                            TradeStatus.INVALIDATED, market=True)
                 closed.append(trade)
         self._reconcile()
         return closed
@@ -322,14 +338,24 @@ class PaperTradeTracker:
         closed = []
         for trade in list(self.open_trades):
             if trade.instrument == instrument and trade.is_open:
-                self._close(trade, bar_time, price, ExitReason.EOD, TradeStatus.CLOSED)
+                self._close(trade, bar_time, price, ExitReason.EOD, TradeStatus.CLOSED,
+                            market=True)
                 closed.append(trade)
         self._reconcile()
         return closed
 
     # ------------------------------------------------------------------ #
+    def _gap(self, trade: PaperTrade, level: float, opn: float | None) -> float:
+        """Where a protective order really fills: at the level, or at the
+        bar's open when the price jumped past it (gap_fills)."""
+        if not self.gap_fills or opn is None:
+            return level
+        return min(level, opn) if trade.is_long else max(level, opn)
+
     def _close(self, trade: PaperTrade, when: pd.Timestamp, price: float,
-               reason: ExitReason, status: TradeStatus) -> None:
+               reason: ExitReason, status: TradeStatus, market: bool = False) -> None:
+        if market and self.slippage_points:
+            price = price - self.slippage_points if trade.is_long else price + self.slippage_points
         trade.status = status
         trade.exit_price = price
         trade.exit_reason = reason

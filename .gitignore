@@ -10,6 +10,7 @@ venv/
 
 # Generated data artifacts (reproducible from sample CSVs + config)
 data_store/
+backups/
 
 # Secrets / local environment (never commit real webhooks or tokens)
 .env

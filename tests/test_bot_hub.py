@@ -390,3 +390,17 @@ def test_record_pdf_endpoint(tmp_path):
     r = TestClient(app).get("/api/record.pdf")
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF") and "attachment" in r.headers["content-disposition"]
+
+
+def test_pdf_says_where_one_set_up_wins_and_loses():
+    from signal_engine.output.record_pdf import where_lines
+    T = [{"opened_at": "2026-10-06T21:30:00-04:00", "net_usd": 805.0, "side": "LONG"},
+         {"opened_at": "2026-10-06T10:30:00-04:00", "net_usd": -330.0, "side": "SHORT"},
+         {"opened_at": "2026-10-07T01:00:00-04:00", "net_usd": 700.0, "side": "LONG"}]
+    *hours, (lado, sides) = where_lines(T)
+    hours = " ".join(text for _label, text in hours)
+    assert lado == "Por lado"
+    assert "Noche 2 trades +$1,505" in hours and "Mañana NY 1 trade −$330" in hours
+    assert "Europa" not in hours                                  # only where it traded
+    assert sides.endswith("Compras 2 trades +$1,505   ·   Ventas 1 trade −$330")
+    assert where_lines(T[:1]) == []

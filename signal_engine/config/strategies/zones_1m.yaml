@@ -53,6 +53,11 @@ signals:
 
 ghost:
   min_rr: 0.5
+  # Fills like a real account (same rule as ORBIT): entries and stops are
+  # market orders, 1 tick (0.25 pt) worse; a jump over the stop fills at the
+  # jump. Targets are limit orders and fill at their price. From 2026-10-07.
+  slippage_points: 0.25
+  gap_fills: true
   partial_at_tp1: 0.0               # no partial: one target, whole position
   breakeven_after_tp1: false
   # Once price has covered 70% of the way to the target, the stop moves to

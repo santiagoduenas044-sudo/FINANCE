@@ -78,7 +78,7 @@ def test_record_command_on_discord():
     out = build_reply("!record", rt)
     assert out.startswith("Cada set up por separado")
     assert "principales" not in out and "GANARON" not in out          # never added together
-    assert "**Set up 1 · IMÁN 15**" in out and "👻 **GHOST**" in out
+    assert "**Set up 1 · IMÁN 15**" in out and "**Set up 2 · APERTURA**" in out
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
@@ -156,13 +156,10 @@ def test_day_message_says_plainly_who_won_and_who_lost():
     text = day_message(log, pd.Timestamp("2026-10-05 17:00", tz="America/New_York"))
     assert text.startswith("Cada set up por separado")
     assert "principales" not in text and "GANARON" not in text and "Mejor de hoy" not in text
-    assert text.index("👻 **GHOST**") < text.index("🛰️ **ORBIT**")
-    assert "✅ **Set up 1 · IMÁN 15** — hoy **GANÓ +$290** (1 trade: 1 ✅ 0 🛑)" in text
-    # today's trade sits under its own set up, with that set up's own total
-    s1 = text.split("**Set up 1 · IMÁN 15**")[1].split("**Set up")[0]
-    assert "✅ 16:55 · COMPRA 31,313.50 → 31,343.00 · cierre del día · GANÓ +$290" in s1
-    assert "↳ total −$65 en 2 trades · gana 50%" in s1                 # its v4 trades only
-    assert "🛑 **Set up 3 · IMÁN 1** — hoy **PERDIÓ −$120**" in text
-    assert "⚪ Set up 8 · CLÁSICO — apagado" in text
-    assert "➖ **Set up 2 · APERTURA** — hoy sin trades" in text
+    lines = text.splitlines()
+    assert len(lines) == 2 + 5                                         # one line per set up
+    assert "✅ **Set up 1 · IMÁN 15** — hoy **GANÓ +$290** (1 trade) · total −$65" in lines  # v4 only
+    assert lines.index("➖ **Set up 2 · APERTURA** — hoy sin trades") == 3   # number order
+    assert "🛑 **Set up 3 · IMÁN 1** — hoy **PERDIÓ −$120** (1 trade) · total −$120" in lines
+    assert "⚪ Set up 8 · CLÁSICO — apagado" in lines
     assert "✅ **Set up 6 · APERTURA 30** — hoy **GANÓ +$400**" in text

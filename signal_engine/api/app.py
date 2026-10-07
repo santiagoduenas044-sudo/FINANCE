@@ -48,7 +48,7 @@ _AUTH_EXEMPT_PREFIXES = ("/api/health", "/static", "/favicon")
 _AUTH_EXEMPT_EXACT = {"/", "/practica", "/login", "/api/login", "/api/logout", "/api/me",
                       "/api/signup", "/manifest.webmanifest", "/sw.js"}
 # what a read-only user (role viewer) may not even read
-_OWNER_ONLY_GET = ("/api/practice/link", "/api/users")
+_OWNER_ONLY_GET = ("/api/practice/link", "/api/users", "/api/backup")
 # what any signed-in user may change for themself (not only the owner)
 _SELF_SERVICE_POST = ("/api/push/", "/api/practice/state")
 # all a practice-only user (signed up from the link) can open
@@ -112,6 +112,9 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
     accounts = Accounts(Path(backtests.root))
     app.state.accounts = accounts
     throttle, throttle_all = Throttle(5, 900), Throttle(30, 900)
+    # addresses that logged in fine lately: the global brake (many failures
+    # from everywhere) must not lock the owner out of their own page
+    trusted: dict[str, float] = {}
 
     def auth_on() -> bool:
         return settings.auth_enabled or accounts.has_users()
@@ -164,7 +167,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             body = {}
         ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
               or (request.client.host if request.client else "?"))
-        if throttle.blocked(ip) or throttle_all.blocked("*"):
+        known = time.time() - trusted.get(ip, 0.0) < 30 * 86400
+        if throttle.blocked(ip) or (throttle_all.blocked("*") and not known):
             raise HTTPException(status_code=429, detail=(
                 "Demasiados intentos fallidos. Espera 15 minutos y vuelve a intentar."))
         name = str(body.get("user", "")).strip()
@@ -174,6 +178,7 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
             throttle_all.fail("*")
             raise HTTPException(status_code=401, detail="Usuario o contraseña incorrectos.")
         throttle.ok(ip)
+        trusted[ip] = time.time()
         resp = JSONResponse({"user": name, "role": role})
         resp.set_cookie(COOKIE, accounts.issue(name), max_age=SESSION_DAYS * 86400, httponly=True,
                         samesite="lax", secure=_https(request), path="/")
@@ -671,6 +676,22 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).exception("trade log failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+
+    @app.get("/api/backup")
+    def get_backup() -> dict:
+        """Where the daily copies of the data go and the newest one (owner)."""
+        from . import backup
+        return backup.status()
+
+    @app.get("/api/backup.zip")
+    def get_backup_zip() -> Response:
+        """Everything in data_store/ right now, as a zip to keep (owner)."""
+        from . import backup
+        day = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+        return Response(backup.zip_bytes(Path(backtests.root) / "data_store"),
+                        media_type="application/zip", headers={
+                            "Content-Disposition": f'attachment; filename="ghost-respaldo-{day}.zip"',
+                            "Cache-Control": "no-store"})
 
     @app.get("/api/record.pdf")
     def get_record_pdf(setup: int | None = None) -> Response:

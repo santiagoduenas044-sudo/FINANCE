@@ -61,6 +61,9 @@ def main() -> None:
     service = BotService(runtime, cycle_seconds=settings.cycle_seconds,
                          auto_start=settings.auto_start, logger=logger)
     service.start_background()
+    # A copy of data_store/ once a day (trades, users, practice). BOT_RESPALDO=off stops it.
+    from signal_engine.api.backup import start_daily
+    start_daily()
     # Optional read-only !status bot; a no-op unless DISCORD_BOT_TOKEN is set.
     start_command_bot(runtime, logger=logger)
     # Make the boot state unambiguous in the (launchd/journald) logs.

@@ -186,3 +186,25 @@ def test_a_set_up_alert_without_bars_still_goes_out():
                                            take_profits=[0.0], opened_at=T0)
     main._shadow_alert(ShadowSpec(id="z", name="IMÁN 1", setup=3), shadow, "open", trade)
     assert len(sent) == 1 and sent[0]["image"] is None
+
+
+def test_paper_fills_cost_a_tick_and_honour_gaps(tmp_path):
+    """Same rule as ORBIT: a market entry and a stop fill 1 tick worse; a bar
+    that opens past the stop fills at its open; a target fills at its price."""
+    tr = PaperTradeTracker(store_dir=tmp_path, slippage_points=0.25, gap_fills=True)
+    t = tr.open_trade(signal_id="g", instrument="NQ", direction="LONG", setup="zone_retrace",
+                      entry=100.0, stop=80.0, take_profits=[160.0], opened_at=T0)
+    assert t.entry == 100.25 and t.context["signal_entry"] == 100.0
+    tr.update_symbol("NQ", _bar(70, 72, 65, 68), T0 + pd.Timedelta(minutes=1))   # gaps under 80
+    assert t.exit_price == 69.75 and t.pnl_points == -30.5
+    w = tr.open_trade(signal_id="h", instrument="NQ", direction="SHORT", setup="zone_retrace",
+                      entry=100.0, stop=120.0, take_profits=[40.0], opened_at=T0)
+    tr.update_symbol("NQ", _bar(60, 61, 39, 41), T0 + pd.Timedelta(minutes=2))
+    assert w.entry == 99.75 and w.exit_price == 40.0 and w.pnl_points == 59.75
+
+
+def test_live_strategies_fill_like_a_real_account():
+    from signal_engine.config.schema import EngineConfig
+    for name in ("zones", "zones_1m", "zones_fijo"):
+        g = EngineConfig.load(strategy=name).ghost
+        assert g.slippage_points == 0.25 and g.gap_fills
