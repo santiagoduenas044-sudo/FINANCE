@@ -77,6 +77,9 @@ def test_replay_turns_the_4pm_flat_into_the_real_result():
     legacy = cfg.model_copy(update={"ghost": cfg.ghost.model_copy(
         update={"eod_close_time": None})})
     assert correct.replay(old, bars, legacy).closed_at == _t("16:00")
+    # a trade from after fills had costs: its entry slipped once live, and once here
+    newer = {**old, "context": {"idea_number": 4, "signal_entry": 30755.75}}
+    assert correct.replay(newer, bars, cfg).entry == 30755.5
 
 
 def test_trade_chart_is_a_png():

@@ -76,13 +76,20 @@ def replay(t: dict, bars: pd.DataFrame, cfg: EngineConfig):
     """Same entry/stop/targets, today's tracker + end-of-day rule."""
     g = cfg.ghost
     de = DataEngine(cfg)
+    ctx = dict(t.get("context") or {})
+    # a trade opened before fills had costs (no "signal_entry") is replayed
+    # without them; a newer one from the price that triggered it, so its
+    # entry slips exactly once, as it did live
+    if "signal_entry" not in ctx:
+        g = g.model_copy(update={"slippage_points": 0.0, "gap_fills": False})
     tr = PaperTradeTracker.from_config(g)
     opened = pd.Timestamp(t["opened_at"])
     trade = tr.open_trade(signal_id=t["signal_id"], instrument=t["instrument"],
-                          direction=t["direction"], setup=t["setup"], entry=t["entry"],
+                          direction=t["direction"], setup=t["setup"],
+                          entry=ctx.get("signal_entry", t["entry"]),
                           stop=initial_stop(t), take_profits=list(t["take_profits"]),
                           opened_at=opened, invalidation_price=t.get("invalidation_price", 0.0),
-                          timeframe=t.get("timeframe"), context=dict(t.get("context") or {}))
+                          timeframe=t.get("timeframe"), context=ctx)
     for ts, bar in bars[bars.index > opened].iterrows():
         tr.update_on_bar(trade, bar, ts)
         if trade.is_open and g.eod_close_enabled and \
