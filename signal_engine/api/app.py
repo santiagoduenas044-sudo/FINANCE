@@ -15,11 +15,13 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from ..config.runtime_settings import ServerSettings
@@ -669,6 +671,24 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         except Exception as exc:  # noqa: BLE001
             logging.getLogger(__name__).exception("trade log failed")
             raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+
+    @app.get("/api/record.pdf")
+    def get_record_pdf(setup: int | None = None) -> Response:
+        """The record of every set up (or just `setup`) as a PDF to download."""
+        from ..output.record_pdf import build_pdf
+        from .bots import trade_log
+        try:
+            log = trade_log(runtime, orbit_dir=getattr(app.state, "orbit_dir", None),
+                            shadows_dir=getattr(app.state, "shadows_dir", None))
+            pdf = build_pdf(log, only=setup)
+        except Exception as exc:  # noqa: BLE001
+            logging.getLogger(__name__).exception("record pdf failed")
+            raise HTTPException(status_code=500, detail=f"{type(exc).__name__}: {exc}")
+        name = f"record-set-up-{setup}" if setup else "record-set-ups"
+        day = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+        return Response(pdf, media_type="application/pdf", headers={
+            "Content-Disposition": f'attachment; filename="{name}-{day}.pdf"',
+            "Cache-Control": "no-store"})
 
     @app.post("/api/bots/{bot}/variants/{variant_id}")
     def switch_variant(bot: str, variant_id: str, on: bool) -> dict:

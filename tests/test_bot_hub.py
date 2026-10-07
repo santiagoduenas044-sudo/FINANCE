@@ -359,3 +359,34 @@ def test_funded_check_says_when_one_trade_breaks_the_account():
     fo = funded_check(rows, limit=1500)
     assert not fo["fits"] and fo["max_dd_usd"] == 5952 and fo["mnq"] == 1
     assert funded_check([], limit=1500)["fits"] is None
+
+
+def test_record_pdf_lists_each_set_up_on_its_own(tmp_path):
+    from signal_engine.output.record_pdf import build_pdf, setups_of
+    log = {"sources": [
+        {"id": "ghost", "setup": 1, "setup_label": "Set up 1 · IMÁN 15", "kind": "main",
+         "current": "v5", "bot": "GHOST", "position": "5 MNQ",
+         "fondeo": {"account": "25K", "n": 1, "fits": True, "few": True}},
+        {"id": "ghost:zonas_1m_noche", "setup": 4, "name": "Set up 4 · IMÁN 1 NOCHE",
+         "kind": "variant", "bot": "GHOST", "enabled": True}],
+        "trades": [
+        {"src": "ghost", "version": "v4", "day": "2026-10-01", "net_usd": -999.0},   # older version
+        {"src": "ghost", "version": "v5", "day": "2026-10-06", "opened_at": "2026-10-06T10:00:00-04:00",
+         "closed_at": "2026-10-06T10:40:00-04:00", "side": "LONG", "entry": 1.0, "exit": 2.0,
+         "pts": 1.0, "net_usd": 290.0, "why": "TP2"},
+        {"src": "ghost:zonas_1m_noche", "day": "2026-10-06", "opened_at": "2026-10-06T21:30:00-04:00",
+         "closed_at": "2026-10-06T22:00:00-04:00", "side": "SHORT", "entry": 2.0, "exit": 1.0,
+         "pts": 1.0, "net_usd": 805.0, "why": "TP2"}]}
+    sus = setups_of(log)
+    assert [(so["setup"], [t["net_usd"] for t in T]) for so, T in sus] == [(1, [290.0]), (4, [805.0])]
+    pdf = build_pdf(log)
+    assert pdf.startswith(b"%PDF") and len(pdf) > 2000
+    assert build_pdf(log, only=4).startswith(b"%PDF")
+
+
+def test_record_pdf_endpoint(tmp_path):
+    app = create_app(_runtime(DataEngine(EngineConfig.load(strategy="zones"))))
+    app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
+    r = TestClient(app).get("/api/record.pdf")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF") and "attachment" in r.headers["content-disposition"]

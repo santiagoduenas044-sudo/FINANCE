@@ -722,6 +722,10 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
 /* ── Panel: una tarjeta por set up (nunca sumados) ── */
 .sutitle { margin: 0 0 10px; font-size: 15px; font-weight: 650; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .sutitle span { font-size: 12px; font-weight: 500; color: var(--ink-3); }
+.pdfbtn { margin-left: auto; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--rule-strong);
+  background: transparent; color: var(--ink-1); font: 600 12px var(--sans); cursor: pointer; }
+.pdfbtn:hover { border-color: rgba(var(--acc-rgb), .6); }
+.pdfbtn:disabled { opacity: .6; cursor: progress; }
 .sugrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .sucard { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--r); text-align: left; color: var(--ink-1);
   background: var(--sheen), var(--panel); border: 1px solid var(--rule); box-shadow: var(--lift); min-width: 0; transition: border-color .15s, transform .15s; }
@@ -952,7 +956,8 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
   <!-- ═════════ 1 · PANEL ═════════ -->
   <section class="view" id="v-panel" data-active>
     <div id="journal">
-      <h3 class="sutitle">Tus set ups <span>cada uno por separado · toca uno para ver su mes</span></h3>
+      <h3 class="sutitle">Tus set ups <span>cada uno por separado · toca uno para ver su mes</span>
+        <button type="button" class="pdfbtn" id="j-pdf">Descargar récord (PDF)</button></h3>
       <div class="sugrid" id="j-setups"></div>
       <div class="jbar" hidden>
         <div class="seg" id="j-range" role="group" aria-label="Periodo">
@@ -1256,7 +1261,7 @@ async function api(path, opts = {}) {
     try { why = (await r.json()).detail || ""; } catch {}
     throw new Error(why || path + " → " + r.status);
   }
-  return r.json();
+  return opts.raw ? r : r.json();          // raw: a file (the PDF), not JSON
 }
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const num = (v, d = 2) => (v == null || !isFinite(v)) ? "—" : Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
@@ -3239,6 +3244,21 @@ function fundedLine(fo) {
     : fo.few ? ["wait", `${fo.account}: faltan trades para saber`] : ["ok", `Sirve para ${fo.account}`];
   return `<span class="sfo ${k}">${esc(t)}</span>`;
 }
+// the record of every set up as a PDF (each set up on its own pages)
+$("j-pdf").addEventListener("click", async e => {
+  const b = e.currentTarget, was = b.textContent;
+  b.disabled = true; b.textContent = "Preparando PDF…";
+  try {
+    const r = await api("/api/record.pdf", { raw: true });
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement("a"),
+      { href: url, download: `record-set-ups-${fmtDate.format(new Date())}.pdf` });
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    b.textContent = was;
+  } catch (err) { b.textContent = "⚠ No se pudo: " + err.message; setTimeout(() => (b.textContent = was), 4000); }
+  b.disabled = false;
+});
 function jStats(T) {
   const n = T.length, v = T.reduce((s, t) => s + (t.net_usd || 0), 0);
   const W = T.filter(t => (t.net_usd || 0) > 0), L = T.filter(t => (t.net_usd || 0) < 0);
