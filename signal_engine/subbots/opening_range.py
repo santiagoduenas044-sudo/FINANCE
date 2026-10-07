@@ -422,7 +422,7 @@ class OpeningRangeBot:
                 f"**{_usd(sum(usd))}** con comisiones")
 
     def record_text(self, last: int = 10) -> str:
-        """For the !apertura command: totals, worst drop and the last trades."""
+        """For the !apertura command: totals and the last trades."""
         s = self.s
         lines = [f"🛰️ **{self.name}** — estrategia APERTURA (ruptura de la caja 9:30–9:45) "
                  f"· {s.position} · en papel"]
@@ -436,16 +436,11 @@ class OpeningRangeBot:
             lines.append("_todavía no hay trades cerrados_")
             return "\n".join(lines)
         usd = [x["usd"] for x in self.closed]
-        eq = peak = dd = 0.0
-        for u in usd:
-            eq += u
-            peak = max(peak, eq)
-            dd = max(dd, peak - eq)
         wins = sum(1 for u in usd if u > 0)
         won, lost = sum(u for u in usd if u > 0), sum(u for u in usd if u < 0)
         lines.append(f"**Total:** {len(usd)} trades · gana {wins / len(usd):.0%} · "
                      f"ganado +${won:,.0f} · perdido −${abs(lost):,.0f} · "
-                     f"**neto {_usd(sum(usd))}** · peor caída {_usd(-dd)}")
+                     f"**neto {_usd(sum(usd))}**")
         lines.append("")
         for x in self.closed[-last:][::-1]:
             mark = "✅" if x["usd"] > 0 else "🛑"

@@ -118,16 +118,10 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
              _line(f"Hoy {day:%d-%b}", today, pv, fee), _line("Esta semana", week, pv, fee)]
     if trades:
         pts = [t.pnl_points for t in trades]
-        eq = peak = dd = 0.0
-        for p in pts:
-            eq += p
-            peak = max(peak, eq)
-            dd = max(dd, peak - eq)
         wins = sum(1 for p in pts if p > 0.01)
         first = trading_day(trades[0].closed_at)
         lines.append(f"**Total desde {first:%d-%b}:** {_n(len(pts))} · gana {wins / len(pts):.0%} · "
-                     f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)}"
-                     + (f" · peor caída {usd(-dd, pv)}" if dd > 0 else ""))
+                     f"{won_lost(pts, pv)}{after_fees(pts, pv, fee)}")
     for name in sorted({version_of(t) for t in older}):
         opts = [t.pnl_points for t in older if version_of(t) == name]     # each version on its own
         lines.append(f"_{older_label.format(names=name)}:_ {_n(len(opts))} · "
