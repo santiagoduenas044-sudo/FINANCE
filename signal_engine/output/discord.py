@@ -119,6 +119,38 @@ _STATUS_EMOJI = {
 }
 
 
+# What reaches Discord. BOT_DISCORD=corto (the default): one message when a
+# trade enters and one when it exits (every set up), the day's close, the
+# verse and fact of the day, a set up switched on/off, and errors. Heads-ups,
+# "how it is going", TP1/stop moves, ORBIT's box and BE+2, start/stop and
+# limit notices stay in the dashboard. BOT_DISCORD=todo sends everything.
+_SHORT_KINDS = {"trade_opened", "trade_closed", "daily_record"}
+_SHORT_NOTES = {"open", "close", "verse", "fact", "switch", "test"}
+
+
+def discord_mode() -> str:
+    return "todo" if os.environ.get("BOT_DISCORD", "").strip().lower() in (
+        "todo", "all", "completo") else "corto"
+
+
+def worth_sending(event: OutputEvent) -> bool:
+    """False for the messages BOT_DISCORD=corto keeps out of the channel."""
+    if discord_mode() == "todo":
+        return True
+    if event.kind in _SHORT_KINDS:
+        return True
+    if event.kind == "runtime_status":
+        return (event.status_payload or {}).get("status") == "BOT_ERROR"
+    if event.kind != "note":
+        return False
+    parts = event.dedup_key.split(":")[1:]           # "note:<key>"
+    if not parts:
+        return False
+    if parts[0] == "setup":                          # setup:<id>:<sid>:open / setup:<id>:open:<id>
+        return any(p in ("open", "close") for p in (parts[2:3] + parts[-1:]))
+    return parts[0] in _SHORT_NOTES
+
+
 def build_discord_payload(event: OutputEvent) -> dict:
     """Pure function: OutputEvent -> Discord webhook JSON payload (embed).
     Only the daily close keeps the "paper trading" footer: on every message
@@ -636,6 +668,9 @@ class DiscordOutputAdapter(OutputAdapter):
         if not self._webhook:
             log.warning("Discord emit skipped: webhook env=%s not set. kind=%s",
                         self.config.webhook_env, event.kind)
+            return False
+        if not worth_sending(event):
+            log.debug("Discord emit skipped: BOT_DISCORD=corto. kind=%s", event.kind)
             return False
         if self.config.deduplication_enabled and event.dedup_key in self._seen:
             log.debug("Discord emit dedup: already sent dedup_key=%.8s… kind=%s",

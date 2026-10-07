@@ -297,7 +297,8 @@ class PushOutputAdapter(OutputAdapter):
 
     def emit(self, event: OutputEvent) -> bool:
         try:
-            cat = category_of(event)
+            from .discord import worth_sending
+            cat = category_of(event) if worth_sending(event) else None   # same as Discord
             if cat is None or event.dedup_key in self._sent or not self.store.all():
                 return False
             self._sent.add(event.dedup_key)

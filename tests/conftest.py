@@ -124,3 +124,10 @@ def weekdays(start: date, n: int) -> list[date]:
             out.append(d)
         d += timedelta(days=1)
     return out
+
+
+@pytest.fixture(autouse=True)
+def _discord_sends_everything(monkeypatch):
+    """Most tests check every kind of Discord message; BOT_DISCORD=corto (the
+    live default) has its own tests in test_discord_quiet.py."""
+    monkeypatch.setenv("BOT_DISCORD", "todo")
