@@ -134,6 +134,12 @@ class GhostBrain:
             if ev is not None:
                 reasons.append(NoTradeReason.NEWS)
                 extra["news"] = f"{ev.when:%H:%M} {ev.title}"
+        # with the trend only (when this strategy asks for it)
+        if cfg.trend_filter == "vwap":
+            want = "ABOVE" if direction == "LONG" else "BELOW"
+            if ms.vwap_side != want:
+                reasons.append(NoTradeReason.AGAINST_TREND)
+                extra["trend"] = f"precio {ms.vwap_side} del VWAP"
         # Phase 15: max_open_per_symbol=1 => any open trade on the symbol blocks.
         if has_active is not None and has_active(sig.instrument, direction, sig.setup):
             reasons.append(NoTradeReason.ACTIVE_TRADE)

@@ -97,7 +97,8 @@ def test_ghost_shadows_get_the_live_bars(tmp_path):
 
     shadows = build_ghost_shadows(ContractRegistry.load(), base=tmp_path)
     assert [s.id for s, _ in shadows] == ["zonas_1m", "zonas_1m_noche", "zonas_15m_fijo",
-                                          "zonas_15m_noticias"]
+                                          "zonas_15m_noticias", "zonas_15m_tendencia",
+                                          "zonas_1m_noche_tendencia", "zonas_1m_noche_noticias"]
     engine = DataEngine(EngineConfig.load(strategy="zones"))
     rt = _runtime(engine)
     rt.shadows = shadows

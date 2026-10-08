@@ -32,7 +32,7 @@ _REASONS_ES = {
     "setup_incomplete": "la señal no estaba completa", "stop_too_tight": "stop muy corto",
     "stop_too_wide": "stop muy largo", "risk_rejected": "control de riesgo",
     "daily_limit": "límite del día", "insufficient_confluence": "poca confluencia",
-    "news_event": "noticia fuerte",
+    "news_event": "noticia fuerte", "against_trend": "contra la tendencia (VWAP)",
 }
 
 

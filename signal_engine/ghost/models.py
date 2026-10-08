@@ -69,6 +69,7 @@ class NoTradeReason(str, Enum):
     INVALID_TRADE_PLAN = "invalid_trade_plan"  # entry/stop/tp inconsistent
     DUPLICATE = "duplicate"                  # same signal_id already processed
     NEWS = "news_event"                      # inside a high-impact news window
+    AGAINST_TREND = "against_trend"          # trend_filter: buy under VWAP / sell over it
 
 
 def _iso(ts) -> str | None:

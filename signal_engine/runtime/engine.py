@@ -1317,6 +1317,7 @@ _IDEA_REJECT_ES = {
     "stale_data": "los datos llegaron atrasados",
     "daily_limit": "ya se alcanzó el límite del día",
     "news_event": "había una noticia fuerte en ese momento",
+    "against_trend": "iba contra la tendencia del día (el otro lado del VWAP)",
 }
 
 

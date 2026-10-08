@@ -438,6 +438,9 @@ class GhostConfig(BaseModel):
     # No new entries around high-impact US news (signal_engine/news.py):
     # {"before": 10, "after": 15, "impacts": ["High"]} minutes. None = off.
     news_blackout: Optional[dict] = None
+    # Only trade with the day's trend: "vwap" = buy only above the session
+    # VWAP and sell only below it. None = off.
+    trend_filter: Optional[str] = None
     # Trailing: after trail_start_r R in favour, the stop follows the best
     # price at trail_distance_r R behind it.
     trail_start_r: Optional[float] = None

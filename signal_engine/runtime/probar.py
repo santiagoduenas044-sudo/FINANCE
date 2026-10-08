@@ -51,6 +51,7 @@ REASONS_ES = {
     "risk_rejected": "el control de riesgo la bloqueó",
     "daily_limit": "ya se alcanzó el límite del día (pérdida máxima)",
     "news_event": "había una noticia fuerte en ese momento",
+    "against_trend": "iba contra la tendencia del día (el otro lado del VWAP)",
 }
 
 

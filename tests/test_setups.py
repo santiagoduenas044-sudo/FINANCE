@@ -208,3 +208,30 @@ def test_live_strategies_fill_like_a_real_account():
     for name in ("zones", "zones_1m", "zones_fijo"):
         g = EngineConfig.load(strategy=name).ghost
         assert g.slippage_points == 0.25 and g.gap_fills
+
+
+def test_trend_filter_only_trades_with_the_vwap():
+    from signal_engine.config.schema import GhostConfig
+    from signal_engine.ghost.brain import GhostBrain
+    from signal_engine.ghost.models import NoTradeReason
+    from tests.test_phase15_authority import _exec_ta_with_atr, _fake_signal, _mk_state
+
+    def against(trend, direction, side):
+        brain = GhostBrain(GhostConfig(min_confluence_score=0.0, block_htf_conflict=False,
+                                       block_against_structure=False, trend_filter=trend))
+        sig = _fake_signal(direction, entry=5000, stop=4990 if direction == "LONG" else 5010,
+                           tps=(5030,) if direction == "LONG" else (4970,))
+        dec = brain._decide_signal(sig, _mk_state(vwap_side=side), _exec_ta_with_atr(3.0),
+                                   None, False, False, has_active=None)
+        return NoTradeReason.AGAINST_TREND in dec.no_trade_reasons
+    assert not against("vwap", "LONG", "ABOVE") and against("vwap", "LONG", "BELOW")
+    assert not against("vwap", "SHORT", "BELOW") and against("vwap", "SHORT", "ABOVE")
+    assert not against(None, "LONG", "BELOW")                      # off: no change
+
+
+def test_the_new_set_ups_exist_with_their_rules():
+    from signal_engine.runtime.shadows import load_specs
+    specs = {s.setup: s for s in load_specs("ghost")}
+    assert specs[10].label == "Set up 10 · IMÁN 15 TENDENCIA"
+    assert specs[11].overrides["ghost"]["trend_filter"] == "vwap"
+    assert specs[12].overrides["ghost"]["news_blackout"]["impacts"] == ["High"]
