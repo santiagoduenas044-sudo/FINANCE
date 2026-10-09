@@ -279,3 +279,14 @@ def test_cancelled_idea_goes_out_with_what_happened():
     payload, name = sent[0]
     assert "CANCELADA" in payload["embeds"][0]["title"]
     assert payload["embeds"][0]["image"] == {"url": f"attachment://{name}"}
+
+
+def test_direct_signal_risk_is_measured_from_the_real_entry():
+    """9-oct: a direct sell entered at 31,025.75, far under the zone's middle
+    (31,106.88). The stop at 31,102.30 is ~77 pts away, not ~5."""
+    trade = {"signal_id": "d1", "instrument": "NQ", "direction": "SHORT", "entry": 31025.75,
+             "stop": 31102.30, "tp1": 30797.10, "tp2": 30797.10,
+             "context": {"idea_number": 1, "idea_direct": True, "zone_mid": 31106.88,
+                         "usd_per_point": {"5 MNQ": 10.0}}}
+    lines = build_discord_payload(OutputEvent.from_trade_opened(trade))["embeds"][0]["description"].splitlines()
+    assert lines[1] == "🛑 SL 31,102.30 · ~77 pts ≈ $765 5 MNQ"

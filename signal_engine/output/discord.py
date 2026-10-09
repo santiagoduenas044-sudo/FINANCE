@@ -467,7 +467,9 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
     mid = ctx.get("zone_mid", entry)
     title = (f"⚡ {_tag(p)}SEÑAL DIRECTA #{num} — {side} · {sym}" if ctx.get("idea_direct")
              else f"🟢 {_tag(p)}IDEA #{num} — {side} · {sym}")
-    risk = abs(mid - stop) if mid is not None and stop is not None else None
+    # what this trade really risks: from where it enters (not the zone's
+    # middle — a direct signal can enter far from it)
+    risk = abs(entry - stop) if entry is not None and stop is not None else None
     lines = [f"✅ **Entra ahora {_px(entry)}** · óptima {_px(mid)}",
              f"🛑 SL {_px(stop)}" + (f" · ~{risk:.0f} pts{_usd(risk, ctx.get('usd_per_point'))}"
                                      if risk is not None else ""),
