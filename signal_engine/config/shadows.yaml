@@ -16,6 +16,16 @@
 #        overrides = changes on top, version = the GHOST version it replays.
 # orbit: settings = changes to APERTURA's rules (opening_range.OrbSettings).
 
+# retired: true = the set up never runs again (no switch turns it back on);
+#        its record stays and shows in the dashboard and the PDF.
+#
+# 11-oct-2026 clean-up: only the set ups worth following keep running
+# (1 · FVG 15, 4 · FVG 1, 13 · FVG 1 EUROPA). The others repeated the same
+# trades or lost (APERTURA never reached its target in 15 trades).
+
+# the bots' own strategies that are retired (ORBIT = APERTURA, Set up 2)
+retired: [orbit]
+
 ghost:
   - id: setups_clasicos
     setup: 8
@@ -24,18 +34,20 @@ ghost:
     strategy: legacy
     version: v1
     enabled: false
+    retired: true
 
   - id: zonas_1m
     setup: 3
-    name: "IMÁN 1"
-    about: "La versión de 1 min tal cual corría (v2): zonas de 5 min, entrada con vela de 1 min, BE+2 al 70 %, 9:30–15:30."
+    name: "FVG 1 DÍA"
+    about: "FVG 1 solo de día (9:30–15:30). Repetía los trades de día del Set up 4 y perdía."
     strategy: zones_1m
     version: v2
+    retired: true
 
   - id: zonas_1m_noche
     setup: 4
-    name: "IMÁN 1 NOCHE"
-    about: "La misma versión de 1 min, también de noche (como v3)."
+    name: "FVG 1"
+    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %."
     strategy: zones_1m
     version: v3
     overrides:
@@ -43,64 +55,81 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
 
+  - id: zonas_1m_europa
+    setup: 13
+    name: "FVG 1 EUROPA"
+    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba."
+    strategy: zones_1m
+    overrides:
+      ghost:
+        valid_sessions: ["RTH", "ETH"]
+        entry_hours: ["03:00", "09:30"]
+
   - id: zonas_15m_fijo
     setup: 9
-    name: "IMÁN 15 FIJO"
-    about: "Set up 1 como estaba hasta el 6 de octubre: stop fijo de 20–35 pts y objetivo 3×, sin importar el tamaño de las velas. Para comparar con el stop según el mercado."
+    name: "FVG 15 FIJO"
+    about: "Set up 1 con el stop fijo de 20–35 pts de antes del 6 de octubre."
     strategy: zones_fijo
     version: v4
+    retired: true
 
   - id: zonas_15m_noticias
     setup: 5
-    name: "IMÁN 15 CALMA"
-    about: "La versión principal, pero sin entrar de 10 min antes a 15 min después de una noticia fuerte de EE.UU. (CPI, empleo, FOMC…)."
+    name: "FVG 15 CALMA"
+    about: "Set up 1 sin entrar cerca de noticias fuertes. Tomaba los mismos trades que el 1."
     strategy: zones
     overrides:
       ghost:
         news_blackout: {before: 10, after: 15, impacts: ["High"]}
+    retired: true
 
   - id: zonas_15m_tendencia
     setup: 10
-    name: "IMÁN 15 TENDENCIA"
-    about: "Set up 1, pero solo a favor de la tendencia del día: compra solo con el precio arriba del VWAP y vende solo abajo."
+    name: "FVG 15 VWAP"
+    about: "Set up 1 solo a favor del VWAP. El filtro no ayudó."
     strategy: zones
     overrides:
       ghost:
         trend_filter: vwap
+    retired: true
 
   - id: zonas_1m_noche_tendencia
     setup: 11
-    name: "IMÁN 1 NOCHE TENDENCIA"
-    about: "Set up 4, pero solo a favor de la tendencia: compra solo con el precio arriba del VWAP y vende solo abajo."
+    name: "FVG 1 VWAP"
+    about: "Set up 4 solo a favor del VWAP. El filtro no ayudó."
     strategy: zones_1m
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         trend_filter: vwap
+    retired: true
 
   - id: zonas_1m_noche_noticias
     setup: 12
-    name: "IMÁN 1 NOCHE CALMA"
-    about: "Set up 4, pero sin entrar de 10 min antes a 15 min después de una noticia fuerte de EE.UU. (CPI, empleo, FOMC…)."
+    name: "FVG 1 CALMA"
+    about: "Set up 4 sin entrar cerca de noticias fuertes."
     strategy: zones_1m
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         news_blackout: {before: 10, after: 15, impacts: ["High"]}
+    retired: true
 
 orbit:
   - id: apertura_30m
     setup: 6
     name: "APERTURA 30"
-    about: "La caja de 9:30 a 10:00 en vez de 9:45; todo lo demás igual."
+    about: "La caja de 9:30 a 10:00 en vez de 9:45. Nunca llegó al objetivo."
     settings:
       range_minutes: 30
+    retired: true
 
   - id: apertura_tp2
     setup: 7
     name: "APERTURA 2×"
-    about: "La misma caja de 15 min con el objetivo a 2× el stop en vez de 1.5×."
+    about: "La misma caja con el objetivo a 2× el stop. Nunca llegó al objetivo."
     settings:
       target_mult: 2.0
+    retired: true

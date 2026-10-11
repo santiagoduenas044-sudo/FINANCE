@@ -127,7 +127,7 @@ _STATUS_EMOJI = {
 # limit notices stay in the dashboard. BOT_DISCORD=todo sends everything.
 _SHORT_KINDS = {"trade_idea", "trade_idea_cancelled", "trade_opened", "trade_closed",
                 "daily_record"}
-_SHORT_NOTES = {"open", "close", "verse", "fact", "switch", "test"}
+_SHORT_NOTES = {"open", "close", "verse", "fact", "switch", "test", "briefing"}
 
 
 def discord_mode() -> str:
@@ -431,7 +431,7 @@ def _targets_line(tp1, final, ref=None, per_point: dict | None = None, *,
 # Short on purpose: a signal is read in a few seconds on a phone. Every line is
 # a number to act on; the rules behind them live in the strategy, not the text.
 def _tag(p: dict) -> str:
-    """"Set up 1 · IMÁN 15 · " before a bot's own titles (empty without a tag)."""
+    """"Set up 1 · FVG 15 · " before a bot's own titles (empty without a tag)."""
     return f"{p['setup_tag']} · " if p.get("setup_tag") else ""
 
 

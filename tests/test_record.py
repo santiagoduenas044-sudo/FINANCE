@@ -69,7 +69,7 @@ def test_daily_record_once_after_the_flat():
     rt._maybe_daily_record("NQ", _t("2026-09-30 16:56"))
     assert len(sent) == 2                                     # next day, again once
     e = build_discord_payload(OutputEvent.from_daily_record(sent[0][1], sent[0][0]))["embeds"][0]
-    assert e["title"] == "🔔 Cierre del día · 29-Sep" and "Set up 1 · IMÁN 15" in e["description"]
+    assert e["title"] == "🔔 Cierre del día · 29-Sep" and "Set up 1 · FVG 15" in e["description"]
     assert e["footer"]["text"].startswith("Trading simulado en papel")
 
 
@@ -78,7 +78,7 @@ def test_record_command_on_discord():
     out = build_reply("!record", rt)
     assert out.startswith("Cada set up por separado")
     assert "principales" not in out and "GANARON" not in out          # never added together
-    assert "**Set up 1 · IMÁN 15**" in out and "**Set up 2 · APERTURA**" in out
+    assert "**Set up 1 · FVG 15**" in out and "**Set up 2 · APERTURA**" in out
     assert build_reply("!récord", rt) == out
     trades = build_reply("!trades", rt)
     assert "$" in trades and not re.search(r"\d(\.\d+)?R\b", trades)
@@ -95,27 +95,27 @@ def test_record_shows_net_after_commissions():
 
 
 def test_day_message_counts_only_the_version_running_now():
-    """The 16:55 message used to add the old 1-minute trades to IMÁN 15's
+    """The 16:55 message used to add the old 1-minute trades to FVG 15's
     record. Now today / week / total are the current version's, the older
     versions get one line apart, and the parallel variants one line each."""
     from signal_engine.output.record import variant_lines
     from signal_engine.versions import ghost_version_of
     tr = _tracker()                                   # untagged 1-min-era trades: v2 / v3
-    tr.closed_trades[-1].context["bot_version"] = "v4"   # the BE+2 one: IMÁN 15
+    tr.closed_trades[-1].context["bot_version"] = "v4"   # the BE+2 one: FVG 15
     shadow = SimpleNamespace(paper_tracker=_tracker())
-    spec = SimpleNamespace(name="IMÁN 1 · zonas 1 min de día")
+    spec = SimpleNamespace(name="FVG 1 DÍA · zonas 1 min de día")
     now = _t("2026-09-29 16:56")
     text = build_record(tr.closed_trades, now, 10.0, "5 MNQ", version_of=ghost_version_of,
-                        current="v4", title="GHOST v4 IMÁN 15",
+                        current="v4", title="GHOST v4 FVG 15",
                         extras=variant_lines([(spec, shadow)], now, 10.0, "5 MNQ"))
-    assert text.startswith("📒 **GHOST v4 IMÁN 15** · 5 MNQ")
+    assert text.startswith("📒 **GHOST v4 FVG 15** · 5 MNQ")
     assert "Hoy 29-Sep:** 1 trade · 1 ✅" in text and "perdido $0" in text and "**neto +$20**" in text
     assert "Total desde 29-Sep:** 1 trade · gana 100%" in text and "peor caída" not in text
     assert "_Versión anterior v2, aparte:_ 1 trade" in text          # each old version on its own
     assert "_Versión anterior v3, aparte:_ 1 trade" in text and "v2, v3" not in text
-    assert "∥ **IMÁN 1**: hoy 2 trades −$230 · total 3 trades +$520" in text
-    last = text.split("**Últimos trades · GHOST v4 IMÁN 15**")[1]
-    assert last.count("\n") == 1                     # only IMÁN 15's trade is listed
+    assert "∥ **FVG 1 DÍA**: hoy 2 trades −$230 · total 3 trades +$520" in text
+    last = text.split("**Últimos trades · GHOST v4 FVG 15**")[1]
+    assert last.count("\n") == 1                     # only FVG 15's trade is listed
 
 
 def test_daily_record_uses_the_current_version(tmp_path):
@@ -124,7 +124,7 @@ def test_daily_record_uses_the_current_version(tmp_path):
     rt = _runtime(tr, sent)
     rt._maybe_daily_record("NQ", _t("2026-09-29 16:57"))
     # its trades are all from the 1-minute versions: none counts as Set up 1
-    assert "➖ **Set up 1 · IMÁN 15** — hoy sin trades" in sent[0][1]
+    assert "➖ **Set up 1 · FVG 15** — hoy sin trades" in sent[0][1]
 
 
 def test_day_message_says_plainly_who_won_and_who_lost():
@@ -132,9 +132,9 @@ def test_day_message_says_plainly_who_won_and_who_lost():
     T = "2026-10-05T{}:00-04:00"
     log = {"sources": [
         {"id": "ghost", "bot": "GHOST", "kind": "main", "setup": 1, "current": "v4",
-         "setup_label": "Set up 1 · IMÁN 15", "position": "5 MNQ"},
+         "setup_label": "Set up 1 · FVG 15", "position": "5 MNQ"},
         {"id": "ghost:zonas_1m", "bot": "GHOST", "kind": "variant", "setup": 3,
-         "name": "Set up 3 · IMÁN 1", "enabled": True},
+         "name": "Set up 3 · FVG 1 DÍA", "enabled": True},
         {"id": "ghost:setups_clasicos", "bot": "GHOST", "kind": "variant", "setup": 8,
          "name": "Set up 8 · CLÁSICO", "enabled": False},
         {"id": "orbit", "bot": "ORBIT", "kind": "main", "setup": 2, "current": "v3",
@@ -158,8 +158,8 @@ def test_day_message_says_plainly_who_won_and_who_lost():
     assert "principales" not in text and "GANARON" not in text and "Mejor de hoy" not in text
     lines = text.splitlines()
     assert len(lines) == 2 + 5                                         # one line per set up
-    assert "✅ **Set up 1 · IMÁN 15** — hoy **GANÓ +$290** (1 trade) · total −$65" in lines  # v4 only
+    assert "✅ **Set up 1 · FVG 15** — hoy **GANÓ +$290** (1 trade) · total −$65" in lines  # v4 only
     assert lines.index("➖ **Set up 2 · APERTURA** — hoy sin trades") == 3   # number order
-    assert "🛑 **Set up 3 · IMÁN 1** — hoy **PERDIÓ −$120** (1 trade) · total −$120" in lines
+    assert "🛑 **Set up 3 · FVG 1 DÍA** — hoy **PERDIÓ −$120** (1 trade) · total −$120" in lines
     assert "⚪ Set up 8 · CLÁSICO — apagado" in lines
     assert "✅ **Set up 6 · APERTURA 30** — hoy **GANÓ +$400**" in text

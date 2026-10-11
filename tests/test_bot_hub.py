@@ -266,28 +266,28 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     rt = _runtime(DataEngine(EngineConfig.load(strategy="zones")))
     rt.paper_tracker = PaperTradeTracker(store_dir=tmp_path / "paper")
     rt.paper_tracker.closed_trades += [
-        _ghost_trade("2026-09-25 10:05", "1m", 40.0, 1),      # v2 · IMÁN 1
+        _ghost_trade("2026-09-25 10:05", "1m", 40.0, 1),      # v2 · FVG 1 DÍA
         _ghost_trade("2026-09-25 11:05", "1m", 60.0, 2),      # v2
-        _ghost_trade("2026-09-28 21:05", "1m", -10.0, 3),     # v3 · IMÁN 1 NOCHE
-        _ghost_trade("2026-09-30 10:45", "15m", 25.0, 4)]     # v4 · IMÁN 15
+        _ghost_trade("2026-09-28 21:05", "1m", -10.0, 3),     # v3 · FVG 1
+        _ghost_trade("2026-09-30 10:45", "15m", 25.0, 4)]     # v4 · FVG 15
     app = create_app(rt)
     app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
     c = TestClient(app)
     st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
     # each part on its own: v4 (stop fijo), v5 (según el mercado, la de ahora), Set up 9
-    parts = {p.get("version") or p.get("variant"): p for p in st["IMÁN 15"]["live"]["detail"]}
+    parts = {p.get("version") or p.get("variant"): p for p in st["FVG 15"]["live"]["detail"]}
     only = parts["v4"]
     pv = only["net_usd"] / 25.0                                   # $ per point of GHOST's size
     assert only["n"] == 1                                         # not the 1-minute trades
     assert parts["v5"]["n"] == 0 and parts["v5"]["name"].startswith("Set up 1")
     assert parts["zonas_15m_fijo"]["name"].startswith("Set up 9")
-    real = [p for p in st["IMÁN 1"]["live"]["detail"] if p["kind"] == "real"]
+    real = [p for p in st["FVG 1 DÍA"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
                      "name": "GHOST v2 (antes)", "n": 2, "net_usd": 100.0 * pv}]
-    assert st["IMÁN 1"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
-    assert st["IMÁN 1"]["live"]["detail"][-1]["name"].startswith("Set up 3")
-    assert st["IMÁN 15"]["setups"] == [1, 9] and st["IMÁN 1"]["setups"] == [3]
-    assert [p["n"] for p in st["IMÁN 1 NOCHE"]["live"]["detail"] if p["kind"] == "real"] == [1]
+    assert st["FVG 1 DÍA"]["live"]["detail"][-1]["kind"] == "paper"  # plus its parallel run
+    assert st["FVG 1 DÍA"]["live"]["detail"][-1]["name"].startswith("Set up 3")
+    assert st["FVG 15"]["setups"] == [1, 9] and st["FVG 1 DÍA"]["setups"] == [3]
+    assert [p["n"] for p in st["FVG 1"]["live"]["detail"] if p["kind"] == "real"] == [1]
     assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
     assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None
     # the trade log behind the calendar: every trade, with its version and day
@@ -365,10 +365,10 @@ def test_funded_check_says_when_one_trade_breaks_the_account():
 def test_record_pdf_lists_each_set_up_on_its_own(tmp_path):
     from signal_engine.output.record_pdf import build_pdf, setups_of
     log = {"sources": [
-        {"id": "ghost", "setup": 1, "setup_label": "Set up 1 · IMÁN 15", "kind": "main",
+        {"id": "ghost", "setup": 1, "setup_label": "Set up 1 · FVG 15", "kind": "main",
          "current": "v5", "bot": "GHOST", "position": "5 MNQ",
          "fondeo": {"account": "25K", "n": 1, "fits": True, "few": True}},
-        {"id": "ghost:zonas_1m_noche", "setup": 4, "name": "Set up 4 · IMÁN 1 NOCHE",
+        {"id": "ghost:zonas_1m_noche", "setup": 4, "name": "Set up 4 · FVG 1",
          "kind": "variant", "bot": "GHOST", "enabled": True}],
         "trades": [
         {"src": "ghost", "version": "v4", "day": "2026-10-01", "net_usd": -999.0},   # older version

@@ -140,7 +140,7 @@ def ghost_variants(runtime, sym: str, pv: float, today, shadows_dir: Path | None
             "id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
             "about": spec.about, "version": spec.version,
             "since": _since(store_dir("ghost", spec.id, base)),
-            "enabled": on, "running": rt is not None, "now": now_txt,
+            "enabled": on, "retired": spec.retired, "running": rt is not None, "now": now_txt,
             "open_usd": round(sum(t.pnl_points for t in s_open) * pv, 2)
             if s_open and rt is not None else None,
             "today": _record([t.pnl_points * pv for t in s_closed
@@ -274,7 +274,7 @@ def orbit_variants(shadows_dir: Path | None, now: pd.Timestamp) -> list[dict]:
         usd = [float(c.get("usd", 0)) for c in bot.closed]
         out.append({"id": spec.id, "name": spec.label, "code": spec.code, "setup": spec.setup,
                     "about": spec.about, "now": now_txt, "since": _since(d),
-                    "version": spec.version, "enabled": on,
+                    "version": spec.version, "enabled": on, "retired": spec.retired,
                     "open_usd": open_usd,
                     "today": _record([float(c.get("usd", 0)) for c in bot.closed
                                       if c.get("day") == today]),
@@ -288,6 +288,7 @@ def orbit_card(store_dir: Path | None, now: pd.Timestamp, shadows_dir: Path | No
     store_dir = Path(store_dir or STORE_DIR)
     s = settings()
     base = {"name": bot_name(), "color": "violet", "strategy": "APERTURA",
+            "retired": _orbit_retired(),
             "setup": MAIN_SETUP["ORBIT"], "setup_label": main_setup_label("ORBIT"),
             "position": s.position, "fee_per_trade": commission_per_trade(s.position),
             "variants": orbit_variants(shadows_dir, now)}
@@ -413,6 +414,11 @@ def overview(runtime, orbit_dir: Path | None = None, now=None, commit: dict | No
                    "news": news_today(getattr(runtime, "news", None), now)})
 
 
+def _orbit_retired() -> bool:
+    from ..runtime.shadows import main_retired
+    return main_retired("orbit")
+
+
 def setup_rows(bots: list[dict]) -> list[dict]:
     """The set ups' control table: every strategy that trades (the bots
     themselves and their parallel set ups) in number order, with what it is
@@ -422,7 +428,7 @@ def setup_rows(bots: list[dict]) -> list[dict]:
         # $ per trade still to take off: GHOST's records are before commissions,
         # ORBIT's already after them
         fee = (b.get("fee_per_trade") or 0.0) if b["name"] == "GHOST" else 0.0
-        if b.get("setup"):
+        if b.get("setup") and not b.get("retired"):
             main = b.get("main") or {}
             now = (b.get("now") or [{}])[0].get("text", "")
             rows.append({"setup": b["setup"], "label": b.get("setup_label") or b["name"],
@@ -432,6 +438,8 @@ def setup_rows(bots: list[dict]) -> list[dict]:
                          "today": main.get("today") or b.get("today"),
                          "total": main.get("total") or b.get("total")})
         for v in b.get("variants") or []:
+            if v.get("retired"):
+                continue
             rows.append({"setup": v.get("setup") or 99, "label": v["name"], "bot": b["name"],
                          "kind": "variant", "id": v["id"], "on": v["enabled"], "fee": fee,
                          "since": v.get("since"),
@@ -458,7 +466,7 @@ def setups_text(rows: list[dict]) -> str:
 def strategy_cards(bots: list[dict], lab_dir: Path | None = None) -> list[dict]:
     """The catalogue with each strategy's OWN paper record: the bot versions
     that traded it for real plus its parallel variants, never another
-    strategy's trades (IMÁN 15 counts GHOST v4 only; IMÁN 1 gets v2's)."""
+    strategy's trades (FVG 15 counts GHOST v4 only; FVG 1 DÍA gets v2's)."""
     cards = {b["name"]: b for b in bots}
     variants = {v["id"]: (b["name"], v) for b in bots for v in b.get("variants", [])}
     lab = latest_lab_rows(lab_dir)
@@ -617,13 +625,16 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
         sources.append({"id": src, "bot": "GHOST", "kind": "variant", "name": spec.label,
                         "setup": spec.setup,
                         "about": spec.about, "enabled": is_on("ghost", spec, base),
+                        "retired": spec.retired,
                         "position": label, "fee": fee})
         trades += _ghost_rows(tr, sym, pv, fee, src, version=spec.version or "paralelo")
 
     # ORBIT and its variants
     s = settings()
     odir = Path(orbit_dir or STORE_DIR)
+    from ..runtime.shadows import main_retired
     sources.append({"id": "orbit", "bot": "ORBIT", "kind": "main", "name": bot_name(),
+                    "retired": main_retired("orbit"),
                     "setup": MAIN_SETUP["ORBIT"], "setup_label": main_setup_label("ORBIT"),
                     "position": s.position, "fee": 0,
                     "versions": [{"version": v, "title": t, "name": version_name("ORBIT", v),
@@ -636,6 +647,7 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
         sources.append({"id": src, "bot": "ORBIT", "kind": "variant", "name": spec.label,
                         "setup": spec.setup,
                         "about": spec.about, "enabled": is_on("orbit", spec, base),
+                        "retired": spec.retired,
                         "position": s.position, "fee": 0})
         d = store_dir("orbit", spec.id, base)
         if (d / "apertura_trades.jsonl").exists():

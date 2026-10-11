@@ -89,6 +89,7 @@ class BotService:
             # is exactly the one the operator needs while away from home.
             self.runtime.maybe_send_status_digest()
             self.runtime.maybe_send_daily_notes()
+            self.runtime.maybe_send_briefing()
         except Exception:  # noqa: BLE001 - the loop must survive anything
             self.errors += 1
             self.logger.exception("unexpected error in service tick (loop continues)")

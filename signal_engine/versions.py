@@ -16,16 +16,16 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
         ("v1", "2026-09-15", "CLÁSICO · setups clásicos",
          "Ruptura de apertura, barrida de liquidez y vuelta al VWAP en velas de 5 min, "
          "con un filtro de confluencia."),
-        ("v2", "2026-09-24", "IMÁN 1 · zonas 1 min de día",
+        ("v2", "2026-09-24", "FVG 1 DÍA · zonas 1 min de día",
          "Huecos de precio (FVG) de 5 min, entra si una vela de 1 min reacciona en la zona. "
          "Stop 20–35 pts, objetivo 3× el stop, de 9:30 a 15:30."),
-        ("v3", "2026-09-27", "IMÁN 1 NOCHE · zonas 1 min día y noche",
+        ("v3", "2026-09-27", "FVG 1 · zonas 1 min día y noche",
          "La misma versión de 1 min, también de noche, con el stop a entrada +2 al 70 % "
          "del camino."),
-        ("v4", "2026-09-29", "IMÁN 15 · zonas 15 min de día",
+        ("v4", "2026-09-29", "FVG 15 · zonas 15 min de día",
          "Huecos de 15 min confirmados por una vela de 15 min. Stop 20–35 pts desde la "
          "entrada, objetivo 3×, entradas 9:30–15:30, cierre 16:55, sin límites diarios."),
-        ("v5", "2026-10-06", "IMÁN 15 · zonas 15 min, stop según el mercado",
+        ("v5", "2026-10-06", "FVG 15 · zonas 15 min, stop según el mercado",
          "Las mismas reglas, pero el stop, el objetivo y el tamaño de las zonas siguen el "
          "tamaño de las velas de 15 min: 20–35 pts cuando la vela media es de 20; con velas "
          "de 45, 45–79 pts y objetivo 3×. La versión fija sigue en paralelo (Set up 9)."),
@@ -51,45 +51,53 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # status: "en vivo" (a bot trades it) · "en paralelo" / "apagada" (decided by
 # its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
-    {"code": "IMÁN 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
+    {"code": "FVG 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
      "real": {"GHOST": ["v4", "v5"]}, "shadows": ["zonas_15m_fijo"],
-     "text": "Huecos de precio de 15 min, primer regreso, objetivo 3× el stop. Desde el 6 de "
-             "octubre el stop sigue el tamaño de las velas (Set up 1); con stop fijo de 20–35 "
-             "pts corre en paralelo (Set up 9).",
+     "text": "Huecos de precio (FVG) de 15 min: espera el primer regreso del precio al hueco y "
+             "entra cuando una vela reacciona; objetivo 3× el stop. Desde el 6 de octubre el "
+             "stop sigue el tamaño de las velas (Set up 1).",
      "lab": "5 años, 5 MNQ: +$25 por trade en 2021–23 y +$12 en 2024–26. Gana en los dos "
             "periodos, pero todavía sin suficiente confianza."},
     {"code": "APERTURA", "name": "Ruptura de la caja de apertura", "bot": "ORBIT",
-     "status": "en vivo", "real": {"ORBIT": ["v1", "v2", "v3"]},
-     "text": "Ruptura de la caja de 9:30 a 9:45, objetivo 1.5× el stop, entrada +2 al 70 %.",
+     "status": "descartada", "real": {"ORBIT": ["v1", "v2", "v3"]},
+     "text": "Ruptura de la caja de 9:30 a 9:45, objetivo 1.5× el stop, entrada +2 al 70 %. "
+             "Retirada el 11 de oct: en vivo nunca llegó al objetivo y sus stops eran de "
+             "100–190 pts.",
      "lab": "5 años, 5 MNQ: +$109,070, peor caída −$16,969. La única que pasó la prueba "
             "a ciegas."},
-    {"code": "IMÁN 1", "name": "Zonas 1 min · de día", "bot": "GHOST", "status": "en paralelo",
+    {"code": "FVG 1 DÍA", "name": "Zonas 1 min · de día", "bot": "GHOST", "status": "en paralelo",
      "real": {"GHOST": ["v2"]}, "shadows": ["zonas_1m"],
      "text": "La primera estrategia de zonas de GHOST (huecos de 5 min confirmados en 1 min), "
              "de 9:30 a 15:30. Fue la principal del 24 al 26 de sep; ahora corre en papel al "
-             "lado de IMÁN 15 para compararlas.",
+             "lado de FVG 15 para compararlas.",
      "lab": "5 años, 5 MNQ: −$91,774."},
-    {"code": "IMÁN 1 NOCHE", "name": "Zonas 1 min · día y noche", "bot": "GHOST",
+    {"code": "FVG 1", "name": "Zonas 1 min · día y noche", "bot": "GHOST",
      "status": "en paralelo", "real": {"GHOST": ["v3"]}, "shadows": ["zonas_1m_noche"],
-     "text": "IMÁN 1 también fuera del horario de día. Fue la principal el 27 y 28 de sep.",
+     "text": "Huecos (FVG) de 5 min con entrada en una vela de 1 min, de día y de noche. Fue "
+             "la principal el 27 y 28 de sep.",
      "lab": "5 años, 5 MNQ: cerca de −$167,000."},
-    {"code": "IMÁN 15 CALMA", "name": "Zonas 15 min sin noticias", "bot": "GHOST",
+    {"code": "FVG 1 EUROPA", "name": "Zonas 1 min solo en horario de Europa", "bot": "GHOST",
+     "status": "en paralelo", "shadows": ["zonas_1m_europa"],
+     "text": "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), donde el Set up 4 ganaba "
+             "(21 trades, +$2,323 al 10 de oct).",
+     "lab": "Nueva (11 de oct); se mide en papel."},
+    {"code": "FVG 15 CALMA", "name": "Zonas 15 min sin noticias", "bot": "GHOST",
      "status": "en paralelo", "shadows": ["zonas_15m_noticias"],
-     "text": "IMÁN 15 sin entrar de 10 min antes a 15 min después de CPI, empleo, FOMC y "
+     "text": "FVG 15 sin entrar de 10 min antes a 15 min después de CPI, empleo, FOMC y "
              "otras noticias fuertes de EE.UU.",
      "lab": "Sin prueba de 5 años (no hay calendario histórico); se mide en papel."},
-    {"code": "IMÁN 15 TENDENCIA", "name": "Zonas 15 min a favor del VWAP", "bot": "GHOST",
+    {"code": "FVG 15 VWAP", "name": "Zonas 15 min a favor del VWAP", "bot": "GHOST",
      "status": "en paralelo", "shadows": ["zonas_15m_tendencia"],
-     "text": "IMÁN 15 que solo compra con el precio arriba del VWAP del día y solo vende "
+     "text": "FVG 15 que solo compra con el precio arriba del VWAP del día y solo vende "
              "abajo: no opera contra la corriente.",
      "lab": "Nueva (8 de oct); se mide en papel."},
-    {"code": "IMÁN 1 NOCHE TENDENCIA", "name": "Zonas 1 min día y noche a favor del VWAP",
+    {"code": "FVG 1 VWAP", "name": "Zonas 1 min día y noche a favor del VWAP",
      "bot": "GHOST", "status": "en paralelo", "shadows": ["zonas_1m_noche_tendencia"],
-     "text": "IMÁN 1 NOCHE que solo compra arriba del VWAP y solo vende abajo.",
+     "text": "FVG 1 que solo compra arriba del VWAP y solo vende abajo.",
      "lab": "Nueva (8 de oct); se mide en papel."},
-    {"code": "IMÁN 1 NOCHE CALMA", "name": "Zonas 1 min día y noche sin noticias",
+    {"code": "FVG 1 CALMA", "name": "Zonas 1 min día y noche sin noticias",
      "bot": "GHOST", "status": "en paralelo", "shadows": ["zonas_1m_noche_noticias"],
-     "text": "IMÁN 1 NOCHE sin entrar de 10 min antes a 15 min después de una noticia fuerte.",
+     "text": "FVG 1 sin entrar de 10 min antes a 15 min después de una noticia fuerte.",
      "lab": "Sin prueba de 5 años (no hay calendario histórico); se mide en papel."},
     {"code": "APERTURA 30", "name": "Caja de apertura de 30 min", "bot": "ORBIT",
      "status": "en paralelo", "shadows": ["apertura_30m"],
@@ -211,7 +219,7 @@ MAIN_SETUP = {"GHOST": 1, "ORBIT": 2}
 
 
 def main_setup_label(bot: str) -> str:
-    """"Set up 1 · IMÁN 15": the bot's number and the code it trades now."""
+    """"Set up 1 · FVG 15": the bot's number and the code it trades now."""
     code = version_title(bot, current_version(bot)).split(" · ")[0]
     return f"Set up {MAIN_SETUP[bot]} · {code}"
 

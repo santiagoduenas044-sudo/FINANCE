@@ -266,6 +266,8 @@ def category_of(event: OutputEvent) -> str | None:
             return "setups"
         if head in ("verse", "fact"):
             return "inspiration"
+        if head == "briefing":
+            return "daily"
         if head in ("open", "close", "be", "box", "none", "missed"):
             return "trades"                     # ORBIT itself: Set up 2
     return None

@@ -24,6 +24,10 @@ class FakeDiscord:
             hook = {"id": str(self.next), "token": f"tok{self.next}", "name": body["name"]}
             self.hooks.setdefault(ch, []).append(hook)
             return hook
+        if method == "PATCH" and path.startswith("/channels/"):
+            ch = next(c for c in self.channels if c["id"] == path.split("/")[2])
+            ch.update(body)
+            return ch
         if method == "GET" and path.startswith("/channels/"):
             return {"guild_id": "g1"}
         if path == "/guilds/g1/channels":
@@ -49,7 +53,8 @@ def test_the_bot_makes_one_channel_per_set_up_that_is_on(store):
     on = [s for s in dch.setups() if s["on"]]
     assert r["total"] == len(on) and len(r["made"]) == len(on)
     names = [c["name"] for c in api.channels if c["type"] == 0]
-    assert "set-up-1-iman-15" in names and "set-up-4-iman-1-noche" in names
+    assert "set-up-1-fvg-15" in names and "set-up-4-fvg-1" in names and "set-up-13-fvg-1-europa" in names
+    assert not any("apertura" in n for n in names)                       # retired: no channel
     assert all(c["parent_id"] == api.channels[0]["id"] for c in api.channels if c["type"] == 0)
     saved = json.loads(store.read_text())
     assert saved["setups"]["4"]["webhook"].startswith("https://discord.com/api/webhooks/")
@@ -97,15 +102,25 @@ def test_history_goes_to_each_set_up_channel(store):
     T = [{"src": "ghost:zonas_1m_noche", "day": f"2026-10-0{i % 9 + 1}", "net_usd": 805.0 if i % 2 else -330.0,
           "opened_at": "2026-10-06T21:30:00-04:00", "side": "LONG", "entry": 1.0, "exit": 2.0, "why": "TP2"}
          for i in range(20)]
-    log = {"sources": [{"id": "ghost:zonas_1m_noche", "setup": 4, "name": "Set up 4 · IMÁN 1 NOCHE",
+    log = {"sources": [{"id": "ghost:zonas_1m_noche", "setup": 4, "name": "Set up 4 · FVG 1",
                         "kind": "variant"},
-                       {"id": "ghost:zonas_1m", "setup": 3, "name": "Set up 3 · IMÁN 1", "kind": "variant"}],
+                       {"id": "ghost:zonas_1m", "setup": 3, "name": "Set up 3 · FVG 1 DÍA", "kind": "variant"}],
            "trades": T}
     posts = []
     sent = dch.send_history(log, post=lambda url, p: posts.append((url, p)) or 204, path=store, pause=0)
     assert sent == {"4": {"trades": 20, "messages": 3}}               # no channel for 3: skipped
     assert all(url == "https://hook4" for url, _ in posts)
     head = posts[0][1]["embeds"][0]
-    assert head["title"] == "📒 Historial · Set up 4 · IMÁN 1 NOCHE"
+    assert head["title"] == "📒 Historial · Set up 4 · FVG 1"
     assert "20 trades · ganó 10 · +$4,750" in head["description"]
     assert "✅ 06-10 21:30 · COMPRA 1.00 → 2.00 · objetivo · **+$805**" in posts[1][1]["embeds"][0]["description"]
+
+
+def test_channels_with_the_old_name_are_renamed(store):
+    api = FakeDiscord()
+    dch.create_channels(api=api, path=store)
+    old = next(c for c in api.channels if c.get("name") == "set-up-4-fvg-1")
+    old["name"] = "set-up-4-iman-1-noche"                                 # as it was made on 9-oct
+    dch.create_channels(api=api, path=store)
+    assert old["name"] == "set-up-4-fvg-1"
+    assert ("PATCH", f"/channels/{old['id']}") in api.calls

@@ -37,6 +37,7 @@ class ShadowSpec:
     version: str | None = None           # the bot version it reproduces (versions.py)
     enabled: bool = True                 # default; the dashboard switch overrides it
     setup: int | None = None             # its number: "Set up 3"
+    retired: bool = False                # retired: never runs again; its record stays
 
     @property
     def code(self) -> str:
@@ -44,7 +45,7 @@ class ShadowSpec:
 
     @property
     def label(self) -> str:
-        """"Set up 3 · IMÁN 1": the short name used everywhere."""
+        """"Set up 3 · FVG 1 DÍA": the short name used everywhere."""
         return f"Set up {self.setup} · {self.code}" if self.setup else self.code
 
 
@@ -68,7 +69,18 @@ def switches(base: Path = SHADOWS_DIR) -> dict:
 
 
 def is_on(bot: str, spec: ShadowSpec, base: Path = SHADOWS_DIR) -> bool:
+    if spec.retired:
+        return False
     return bool(switches(base).get(bot, {}).get(spec.id, spec.enabled))
+
+
+def main_retired(bot: str, path: Path | None = None) -> bool:
+    """A bot's own strategy retired in shadows.yaml (`retired: [orbit]`)."""
+    try:
+        raw = yaml.safe_load(Path(path or SHADOWS_FILE).read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return False
+    return bot.lower() in [str(b).lower() for b in raw.get("retired") or []]
 
 
 def set_on(bot: str, spec_id: str, on: bool, base: Path = SHADOWS_DIR) -> None:

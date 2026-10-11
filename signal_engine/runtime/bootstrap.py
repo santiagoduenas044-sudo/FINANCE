@@ -221,7 +221,7 @@ def build_runtime(
     if data_dir is None:
         from ..output.inspiration import DailyNotes
         runtime.daily_notes = DailyNotes(DEFAULT_PAPER_DIR.parent / "inspiration.json")
-    # "Set up 1 · IMÁN 15" on GHOST's own Discord messages (the live bot only)
+    # "Set up 1 · FVG 15" on GHOST's own Discord messages (the live bot only)
     if ghost is not None and data_dir is None:
         from ..versions import main_setup_label
         runtime.setup_tag = main_setup_label("GHOST")

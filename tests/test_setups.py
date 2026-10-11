@@ -26,7 +26,7 @@ def test_every_set_up_has_its_own_number_and_a_short_name():
     for sp in specs:
         assert " · " not in sp.name                          # the code only
         assert sp.label == f"Set up {sp.setup} · {sp.name}"
-    assert main_setup_label("GHOST") == "Set up 1 · IMÁN 15"
+    assert main_setup_label("GHOST") == "Set up 1 · FVG 15"
     assert main_setup_label("ORBIT") == "Set up 2 · APERTURA"
 
 
@@ -54,14 +54,14 @@ def test_alert_note_in_points_and_dollars(tmp_path):
     t = tr.open_trade(signal_id="c", instrument="NQ", direction="LONG", setup="zone_retrace",
                       entry=20_000.0, stop=19_975.0, take_profits=[20_075.0], opened_at=T0)
     pv = {"5 MNQ": 10.0}
-    title, text, _ = alert_note("Set up 3 · IMÁN 1", "open", t, pv)
-    assert title == "🟢 Set up 3 · IMÁN 1 — COMPRA NQ"
+    title, text, _ = alert_note("Set up 3 · FVG 1 DÍA", "open", t, pv)
+    assert title == "🟢 Set up 3 · FVG 1 DÍA — COMPRA NQ"
     assert text.splitlines() == ["✅ **Entrada 20,000.00**",
                                  "🛑 Stop 19,975.00 · 25.0 pts · −$250",
                                  "🎯 Objetivo 20,075.00 · 75.0 pts · +$750"]
     tr.update_symbol("NQ", _bar(20_000, 20_080, 19_990, 20_070), T0 + pd.Timedelta(minutes=1))
-    title, text, _ = alert_note("Set up 3 · IMÁN 1", "close", t, pv, tr.closed_trades)
-    assert title == "✅ Set up 3 · IMÁN 1 — objetivo · +75.00 pts"
+    title, text, _ = alert_note("Set up 3 · FVG 1 DÍA", "close", t, pv, tr.closed_trades)
+    assert title == "✅ Set up 3 · FVG 1 DÍA — objetivo · +75.00 pts"
     first, record = text.splitlines()
     assert first == "20,000.00 → 20,075.00 · **+$750**"
     assert record.startswith("Récord: 1 trade · ganó 1 · **+$7") and "con comisiones" in record
@@ -85,7 +85,7 @@ class _FakeRuntime:
 
 
 def test_run_ghost_shadows_tells_each_entry_once(tmp_path):
-    spec = ShadowSpec(id="zonas_1m", name="IMÁN 1", setup=3)
+    spec = ShadowSpec(id="zonas_1m", name="FVG 1 DÍA", setup=3)
     rt = _FakeRuntime(tmp_path)
     heard = []
     bars = {"1m": pd.DataFrame({"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0]},
@@ -93,7 +93,7 @@ def test_run_ghost_shadows_tells_each_entry_once(tmp_path):
     for _ in range(2):          # the same candle twice: run (and tell) only once
         run_ghost_shadows([(spec, rt)], "NQ", bars, T0,
                           notify=lambda sp, r, kind, t: heard.append((sp.label, kind, t.signal_id)))
-    assert heard == [("Set up 3 · IMÁN 1", "open", "s1")]
+    assert heard == [("Set up 3 · FVG 1 DÍA", "open", "s1")]
 
 
 def test_orbit_set_up_publisher_tells_trades_only_with_its_own_key():
@@ -114,18 +114,18 @@ def test_orbit_set_up_publisher_respects_the_off_switch(monkeypatch):
 
 def test_ghost_own_messages_carry_set_up_1():
     p = {"direction": "LONG", "instrument": "NQ", "entry": 1.0, "stop": 0.0, "tp1": 2.0,
-         "tp2": 3.0, "signal_id": "z", "setup_tag": "Set up 1 · IMÁN 15",
+         "tp2": 3.0, "signal_id": "z", "setup_tag": "Set up 1 · FVG 15",
          "context": {"idea_number": 7, "zone_mid": 1.0}}
     payload = _build_idea_trade_opened_payload(OutputEvent.from_trade_opened(p))
-    assert payload["embeds"][0]["title"].startswith("🟢 Set up 1 · IMÁN 15 · IDEA #7")
+    assert payload["embeds"][0]["title"].startswith("🟢 Set up 1 · FVG 15 · IDEA #7")
 
 
 def test_control_table_lists_every_set_up_in_order():
     rec = {"n": 2, "net_usd": 150.0}
     bots = [
-        {"name": "GHOST", "setup": 1, "setup_label": "Set up 1 · IMÁN 15", "status": "ONLINE",
+        {"name": "GHOST", "setup": 1, "setup_label": "Set up 1 · FVG 15", "status": "ONLINE",
          "now": [{"text": "Busca huecos."}], "open_usd": None, "main": {"today": rec, "total": rec},
-         "variants": [{"id": "zonas_1m", "name": "Set up 3 · IMÁN 1", "setup": 3, "enabled": False,
+         "variants": [{"id": "zonas_1m", "name": "Set up 3 · FVG 1 DÍA", "setup": 3, "enabled": False,
                        "now": "Apagado.", "open_usd": None, "today": {"n": 0}, "total": rec}]},
         {"name": "ORBIT", "setup": 2, "setup_label": "Set up 2 · APERTURA", "status": "ONLINE",
          "now": [{"text": "Caja lista."}], "open_usd": None, "today": {"n": 0}, "total": rec,
@@ -135,8 +135,8 @@ def test_control_table_lists_every_set_up_in_order():
     assert [r["setup"] for r in rows] == [1, 2, 3]
     assert [r["on"] for r in rows] == [True, True, False]
     text = setups_text(rows)
-    assert "🟢 **Set up 1 · IMÁN 15** (GHOST) · hoy 2 trades +$150" in text
-    assert "⚪ **Set up 3 · IMÁN 1**" in text
+    assert "🟢 **Set up 1 · FVG 15** (GHOST) · hoy 2 trades +$150" in text
+    assert "⚪ **Set up 3 · FVG 1 DÍA**" in text
 
 
 def test_ghost_set_up_alerts_carry_a_chart(tmp_path):
@@ -148,7 +148,7 @@ def test_ghost_set_up_alerts_carry_a_chart(tmp_path):
     idx = pd.date_range(T0 - pd.Timedelta(minutes=59), periods=60, freq="1min")
     one = pd.DataFrame({"open": 20_000.0, "high": 20_010.0, "low": 19_990.0,
                         "close": 20_000.0}, index=idx)
-    spec = ShadowSpec(id="zonas_1m_noche", name="IMÁN 1 NOCHE", setup=4)
+    spec = ShadowSpec(id="zonas_1m_noche", name="FVG 1", setup=4)
     shadow = _FakeRuntime(tmp_path)
     shadow._point_values = lambda s: {"5 MNQ": 10.0}
     sent = []
@@ -184,7 +184,7 @@ def test_a_set_up_alert_without_bars_still_goes_out():
     trade = PaperTradeTracker().open_trade(signal_id="x", instrument="NQ", direction="SHORT",
                                            setup="zone_retrace", entry=1.0, stop=2.0,
                                            take_profits=[0.0], opened_at=T0)
-    main._shadow_alert(ShadowSpec(id="z", name="IMÁN 1", setup=3), shadow, "open", trade)
+    main._shadow_alert(ShadowSpec(id="z", name="FVG 1 DÍA", setup=3), shadow, "open", trade)
     assert len(sent) == 1 and sent[0]["image"] is None
 
 
@@ -232,6 +232,6 @@ def test_trend_filter_only_trades_with_the_vwap():
 def test_the_new_set_ups_exist_with_their_rules():
     from signal_engine.runtime.shadows import load_specs
     specs = {s.setup: s for s in load_specs("ghost")}
-    assert specs[10].label == "Set up 10 · IMÁN 15 TENDENCIA"
+    assert specs[10].label == "Set up 10 · FVG 15 VWAP"
     assert specs[11].overrides["ghost"]["trend_filter"] == "vwap"
     assert specs[12].overrides["ghost"]["news_blackout"]["impacts"] == ["High"]

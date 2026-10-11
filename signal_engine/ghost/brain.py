@@ -54,6 +54,15 @@ def _map_base_reason(text: str) -> NoTradeReason:
 SESSION_REOPEN = "18:00"
 
 
+def outside_entry_hours(hhmm: str, hours: list[str] | None) -> bool:
+    """True when `hhmm` is outside the [start, end) ET window (wraps midnight)."""
+    if not hours:
+        return False
+    start, end = hours[0], hours[1]
+    inside = (start <= hhmm < end) if start < end else (hhmm >= start or hhmm < end)
+    return not inside
+
+
 def entry_window_closed(hhmm: str, last_entry_time: str | None) -> bool:
     """No new entries from `last_entry_time` until the daily reopen: e.g.
     16:15 -> 18:00 is closed, 18:00 onwards (the overnight session) is open
@@ -123,6 +132,8 @@ class GhostBrain:
         if data_stale:
             reasons.append(NoTradeReason.STALE_DATA)
         if ms.session not in cfg.valid_sessions:
+            reasons.append(NoTradeReason.INVALID_SESSION)
+        if outside_entry_hours(sig.timestamp.strftime("%H:%M"), cfg.entry_hours):
             reasons.append(NoTradeReason.INVALID_SESSION)
         if entry_window_closed(sig.timestamp.strftime("%H:%M"), cfg.last_entry_time):
             reasons.append(NoTradeReason.TOO_LATE)

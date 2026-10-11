@@ -1807,13 +1807,14 @@ function lastStrip(b) {
 }
 
 function parTable(b) {
-  const vs = (b.variants || []).slice().sort((x, y) => (x.setup || 99) - (y.setup || 99));
+  // the ones that run first; the retired ones at the end, without a switch
+  const vs = (b.variants || []).slice().sort((x, y) => (!!x.retired - !!y.retired) || (x.setup || 99) - (y.setup || 99));
   if (!vs.length) return "";
   const R = 'style="text-align:right"';
   const bot = b.name === "GHOST" ? "ghost" : "orbit";
   const row = (name, about, now, t, a, open, main, v) => `<tr class="go ${main ? "main" : v && !v.enabled ? "off" : ""}"
       data-hist="${main ? bot + (b.main ? "@" + b.main.version : "") : bot + ":" + esc(v.id)}">
-      <td class="pn"><span class="tglcell">${v ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.id)}"
+      <td class="pn"><span class="tglcell">${v && v.retired ? '<span class="badge">retirado</span>' : v ? `<button class="tgl" type="button" data-bot="${bot}" data-variant="${esc(v.id)}"
           aria-pressed="${v.enabled}" aria-label="${v.enabled ? "Apagar" : "Encender"} ${esc(name)}" title="${esc(about)}"></button>` : ""}
         <span>${esc(name)}${main ? ' <span class="badge good">principal</span>' : ""}<span class="pa">${esc(now)}${v && v.since ? ` · desde el ${esc(v.since)}` : ""}</span></span></span></td>
       <td class="num ${cls(t.n ? t.net_usd : null)}" ${R}>${t.n ? usd0(t.net_usd) : "—"}${open != null ? `<span class="pa">abierto ${usd0(open)}</span>` : ""}</td>
@@ -3194,7 +3195,7 @@ const J = { sel: "1", month: null, day: null };
 const MONTHS_UP = m => MONTHS[m][0].toUpperCase() + MONTHS[m].slice(1);
 const money2 = v => `${v < 0 ? "−" : "+"}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 function jSetups() {                       // [{n, label, id, current, kind}] in number order
-  return ((S.tlog || {}).sources || []).filter(so => so.setup)
+  return ((S.tlog || {}).sources || []).filter(so => so.setup && !so.retired)   // retired: only in the PDF / history
     .map(so => ({ n: so.setup, label: so.setup_label || so.name, id: so.id, current: so.current, kind: so.kind,
       on: so.kind === "main" || so.enabled !== false, fo: so.fondeo }))
     .sort((a, b) => a.n - b.n);

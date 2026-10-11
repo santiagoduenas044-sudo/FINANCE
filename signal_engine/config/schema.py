@@ -469,6 +469,9 @@ class GhostConfig(BaseModel):
     # intraday move — it is closed by the clock, not by the market. None
     # disables the guard.
     last_entry_time: Optional[str] = "15:30"
+    # Only enter between these two ET times, e.g. ["03:00", "09:30"] (Europe).
+    # Wraps midnight when the first is later than the second. None = any time.
+    entry_hours: Optional[list[str]] = None
     # Daily limits on the operator's position (ghost.contracts), counted per
     # trading day (18:00 ET -> 17:00 ET, like Apex). None disables each one.
     # They live here, not in the RiskEngine: that engine stops at the

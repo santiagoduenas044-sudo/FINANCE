@@ -113,7 +113,7 @@ class BotRuntime:
     # economic calendar (signal_engine/news.py), shared with the shadows
     news: object = field(default=None, init=False)
     daily_notes: object = field(default=None, init=False)   # verse + curious fact (output/inspiration.py)
-    # "Set up 1 · IMÁN 15": put on this bot's own Discord messages (None = none)
+    # "Set up 1 · FVG 15": put on this bot's own Discord messages (None = none)
     setup_tag: str | None = field(default=None, init=False)
     # Phase 13: read-only metadata about each symbol's real data source
     # ({symbol: {"source", "delayed", "simulated"}}), so the dashboard can show
@@ -426,6 +426,30 @@ class BotRuntime:
             self._update_discord_health()
         except Exception as exc:  # noqa: BLE001
             log.warning("trade notification failed (%s)", type(exc).__name__)
+
+    def maybe_send_briefing(self, now: datetime | None = None) -> bool:
+        """The 9:00 ET plan of the day on Discord (output/briefing.py): key
+        levels, the day's lean and the news. Once a weekday. Never raises."""
+        if self.output_dispatcher is None:
+            return False
+        from ..output import briefing
+        now = now or datetime.now(timezone.utc)
+        try:
+            if not briefing.due(now):
+                return False
+            feed = (self.live_feeds or {}).get("NQ") or next(iter((self.live_feeds or {}).values()), None)
+            m1 = feed.get_tf_bars().get("1m") if feed is not None else None
+            if m1 is None or m1.empty:
+                return False
+            title, text, color, png = briefing.build(m1, now, news=getattr(self, "news", None))
+            self.output_dispatcher.publish_note(
+                title=title, text=text, color=color, image=png,
+                key=f"briefing:{pd.Timestamp(now).tz_convert('America/New_York').date()}")
+            briefing.mark_sent(now)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.warning("plan del día falló (%s)", type(exc).__name__)
+            return False
 
     def maybe_send_daily_notes(self, now: datetime | None = None) -> int:
         """The morning verse and the midday curious fact on Discord (once a

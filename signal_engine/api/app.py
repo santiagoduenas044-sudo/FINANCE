@@ -769,7 +769,7 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
         return {"bot": bot, "id": variant_id, "on": on}
 
     def _say_switch(bot: str, spec, on: bool) -> None:
-        """"🟢 Set up 3 · IMÁN 1 encendido" in the bot's Discord channel."""
+        """"🟢 Set up 3 · FVG 1 DÍA encendido" in the bot's Discord channel."""
         try:
             if bot == "ghost":
                 disp = getattr(runtime, "output_dispatcher", None)

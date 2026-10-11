@@ -117,12 +117,12 @@ def test_adapter_sends_once_per_event(tmp_path):
     wp_send = wp.send
     try:
         wp.send = lambda st, msg, cat, roles=None: sent.append((msg["title"], cat)) or 1
-        ev = OutputEvent.from_note("🟢 Set up 3 · IMÁN 1 — COMPRA NQ", "x", 1, "setup:zonas_1m:s1:open")
+        ev = OutputEvent.from_note("🟢 Set up 3 · FVG 1 DÍA — COMPRA NQ", "x", 1, "setup:zonas_1m:s1:open")
         assert a.emit(ev) and not a.emit(ev)
         assert not a.emit(OutputEvent.from_note("en línea", "x", 1, "online:1"))
     finally:
         wp.send = wp_send
-    assert sent == [("🟢 Set up 3 · IMÁN 1 — COMPRA NQ", "setups")]
+    assert sent == [("🟢 Set up 3 · FVG 1 DÍA — COMPRA NQ", "setups")]
 
 
 def test_matches_the_rfc_8291_example():

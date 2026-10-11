@@ -96,7 +96,7 @@ def build_bot(publish=None, store_dir: Path = STORE_DIR) -> OpeningRangeBot:
                            title=main_setup_label("ORBIT"))
 
 
-def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
+def run_once(bot: OpeningRangeBot | None, fetch=yahoo_bars, shadows=()) -> bool:
     """One poll. False when the data could not be read (retried next time).
     `shadows`: parallel APERTURA set ups fed the same bars."""
     try:
@@ -104,7 +104,8 @@ def run_once(bot: OpeningRangeBot, fetch=yahoo_bars, shadows=()) -> bool:
     except Exception as exc:  # noqa: BLE001 - a bad poll must never stop the bot
         log.warning("sin datos de Yahoo (%s)", type(exc).__name__)
         return False
-    bot.on_bars(bars)
+    if bot is not None:                      # None: APERTURA retired, only its set ups run
+        bot.on_bars(bars)
     for _spec, shadow in shadows:
         try:
             shadow.on_bars(bars)
@@ -282,9 +283,16 @@ def main() -> int:
     publish = make_publisher()
     bot = build_bot(publish)
     name = bot.name
-    log.info("%s en línea (estrategia APERTURA, %s en papel, datos en %s)", name,
-             bot.s.position, STORE_DIR)
+    from ..runtime.shadows import main_retired
+    if main_retired("orbit"):
+        log.info("%s: APERTURA está retirada (config/shadows.yaml); no opera ni avisa.", name)
+        bot = None
+    if bot is not None:
+        log.info("%s en línea (estrategia APERTURA, %s en papel, datos en %s)", name,
+                 bot.s.position, STORE_DIR)
     try:
+        if bot is None:
+            raise RuntimeError("retired")
         publish(title=f"🛰️ {name} en línea",
                 text="Estrategia **APERTURA**: caja de 9:30 a 9:45, entra cuando una vela de "
                      "5 min cierra fuera, stop del otro lado, objetivo 1.5× el stop, BE+2 al 70 %, "

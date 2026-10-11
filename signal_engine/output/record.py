@@ -97,7 +97,7 @@ def build_record(closed: list, now, pv: float, position: str, last: int = 8,
     With `version_of` (trade -> "v4") and `current` ("v4"), today / this week
     / total count ONLY the version running now (as the dashboard does); the
     older versions get one line of their own, so their trades never inflate
-    the current strategy's record. `title` names it ("Set up 1 · IMÁN 15"),
+    the current strategy's record. `title` names it ("Set up 1 · FVG 15"),
     `who` says which bot runs it ("GHOST v4"); `extras` are lines added
     before the last trades (every set up's day)."""
     trades = sorted((t for t in closed if t.closed_at is not None), key=lambda t: _ts(t.closed_at))

@@ -50,8 +50,9 @@ def setups() -> list[dict]:
     """[{n, id, label, about, on}] for the bots and every parallel set up."""
     from ..runtime.shadows import is_on, load_specs
     from ..versions import MAIN_SETUP, main_setup_label
+    from ..runtime.shadows import main_retired
     out = [{"n": MAIN_SETUP[b], "id": b.lower(), "label": main_setup_label(b),
-            "about": "", "on": True} for b in ("GHOST", "ORBIT")]
+            "about": "", "on": not main_retired(b)} for b in ("GHOST", "ORBIT")]
     for bot in ("ghost", "orbit"):
         for sp in load_specs(bot):
             try:
@@ -198,6 +199,10 @@ def create_channels(api=_api, path: Path = STORE, only_on: bool = True) -> dict:
                                {"name": name, "type": 0, "parent_id": cat["id"],
                                 "topic": (s["about"] or s["label"])[:1000]})
                     made.append(s["label"])
+                name = _slug(s["label"])
+                if ch.get("name") != name:                   # renamed set up (IMÁN -> FVG)
+                    ch = api("PATCH", f"/channels/{ch['id']}", {"name": name}) or {**ch, "name": name}
+                    row = {**row, "name": ch["name"]}
                 if not row.get("webhook") or str(row.get("channel")) != str(ch["id"]):
                     hooks = api("GET", f"/channels/{ch['id']}/webhooks") or []
                     hook = next((h for h in hooks if h.get("name") == WEBHOOK_NAME and h.get("token")), None) \
