@@ -233,7 +233,7 @@ def _table(fig, rows: list[dict], top: float) -> None:
         usd = t.get("net_usd") or 0.0
         pts = t.get("pts")
         cells = (
-            (t.get("day") or "", INK2),
+            (f"{o:%Y-%m-%d}" if o is not None else (t.get("day") or ""), INK2),  # the real date it entered
             (f"{o:%H:%M}" if o is not None else "—", INK2),
             ("COMPRA" if t.get("side") == "LONG" else "VENTA", INK),
             (f"{_n(t.get('entry'))} → {_n(t.get('exit'))}", INK),
