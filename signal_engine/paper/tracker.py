@@ -176,7 +176,8 @@ class PaperTradeTracker:
             # a market entry: filled a little worse than the price that triggered it
             context = {**(context or {}), "signal_entry": entry}
             entry = entry + self.slippage_points if direction == "LONG" else entry - self.slippage_points
-        if self.partial_at_progress and take_profits and self.partial_at_tp1 > 0:
+        if self.partial_at_progress and len(take_profits or []) == 1 and self.partial_at_tp1 > 0:
+            # one target only: a plan that already has its own TP1 keeps it
             final = take_profits[-1]
             first = entry + self.partial_at_progress * (final - entry)
             take_profits = [round(first * 4) / 4, final]          # on the 0.25 tick
