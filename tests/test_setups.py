@@ -235,3 +235,44 @@ def test_the_new_set_ups_exist_with_their_rules():
     assert specs[10].label == "Set up 10 · FVG 15 VWAP"
     assert specs[11].overrides["ghost"]["trend_filter"] == "vwap"
     assert specs[12].overrides["ghost"]["news_blackout"]["impacts"] == ["High"]
+
+
+def test_lock_in_halfway_closes_two_of_five_and_protects_the_rest(tmp_path):
+    from signal_engine.paper.tracker import whole_contract_partial
+    tr = PaperTradeTracker(store_dir=tmp_path, partial_at_tp1=whole_contract_partial(0.4, 5),
+                           breakeven_after_tp1=True, be_offset_points=2.0,
+                           partial_at_progress=0.5)
+    t = tr.open_trade(signal_id="p", instrument="NQ", direction="LONG", setup="zone_retrace",
+                      entry=100.0, stop=70.0, take_profits=[190.0], opened_at=T0)
+    assert t.tp1 == 145.0 and t.tp2 == 190.0                           # halfway, then the target
+    before = ({x.signal_id for x in tr.open_trades}, len(tr.closed_trades), set())
+    tr.update_symbol("NQ", _bar(100, 150, 99, 148), T0 + pd.Timedelta(minutes=1))   # reaches 50 %
+    assert [k for k, _ in trade_events(tr, *before)] == ["partial"]
+    assert t.is_open and t.partial_fraction == 0.4 and t.stop == 102.0
+    tr.update_symbol("NQ", _bar(148, 149, 95, 96), T0 + pd.Timedelta(minutes=2))     # comes back
+    # 2 MNQ banked +45, 3 MNQ out at entry +2: 0.4*45 + 0.6*2 = +19.2 pts (not -30)
+    assert t.exit_price == 102.0 and abs(t.pnl_points - 19.2) < 1e-9
+
+
+def test_partial_note_says_what_was_locked(tmp_path):
+    tr = PaperTradeTracker(store_dir=tmp_path, partial_at_tp1=0.4, breakeven_after_tp1=True,
+                           be_offset_points=2.0, partial_at_progress=0.5)
+    t = tr.open_trade(signal_id="q", instrument="NQ", direction="SHORT", setup="zone_retrace",
+                      entry=200.0, stop=230.0, take_profits=[110.0], opened_at=T0)
+    tr.update_symbol("NQ", _bar(200, 201, 150, 152), T0 + pd.Timedelta(minutes=1))
+    title, text, _ = alert_note("Set up 13 · FVG 1 EUROPA", "partial", t, {"5 MNQ": 10.0})
+    assert title == "💰 Set up 13 · FVG 1 EUROPA — aseguró +45.00 pts"
+    assert text.splitlines()[0] == "Cerró 2 de 5 MNQ en 155.00 · **+$180**"
+    assert "Stop de los demás a 198.00" in text
+
+
+def test_set_up_1_and_13_lock_in_halfway_and_4_stays_as_it_was():
+    from signal_engine.config.schema import EngineConfig
+    from signal_engine.runtime.shadows import load_specs
+    from signal_engine.versions import current_version
+    g = EngineConfig.load(strategy="zones").ghost
+    assert g.partial_at_progress == 0.5 and g.partial_at_tp1 == 0.4 and g.breakeven_after_tp1
+    assert current_version("GHOST") == "v6"
+    specs = {s.setup: s for s in load_specs("ghost")}
+    assert specs[13].overrides["ghost"]["partial_at_progress"] == 0.5
+    assert "partial_at_progress" not in specs[4].overrides["ghost"]

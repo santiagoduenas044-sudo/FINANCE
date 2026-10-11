@@ -77,8 +77,11 @@ ghost:
   # jump. Targets are limit orders and fill at their price. From 2026-10-07.
   slippage_points: 0.25
   gap_fills: true
-  partial_at_tp1: 0.0               # no partial: one target, whole position
-  breakeven_after_tp1: false
+  # Lock in gains (v6, 11-oct): halfway to the target close 2 of the 5 MNQ
+  # and move the stop of the other 3 to entry + 2; they go on to the target.
+  partial_at_tp1: 0.4
+  partial_at_progress: 0.5
+  breakeven_after_tp1: true
   # No breakeven: in the lab the BE+2 at 70% saved some trades and cost
   # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
   be_at_progress: null

@@ -29,6 +29,9 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
          "Las mismas reglas, pero el stop, el objetivo y el tamaño de las zonas siguen el "
          "tamaño de las velas de 15 min: 20–35 pts cuando la vela media es de 20; con velas "
          "de 45, 45–79 pts y objetivo 3×. La versión fija sigue en paralelo (Set up 9)."),
+        ("v6", "2026-10-11", "FVG 15 · asegura a la mitad",
+         "Las reglas de v5, y a la mitad del camino al objetivo cierra 2 de los 5 MNQ y sube "
+         "el stop de los otros 3 a entrada +2; esos siguen hasta el objetivo."),
     ],
     "ORBIT": [
         ("v1", "2026-09-29", "APERTURA · 1 MNQ",
@@ -52,7 +55,7 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
     {"code": "FVG 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
-     "real": {"GHOST": ["v4", "v5"]}, "shadows": ["zonas_15m_fijo"],
+     "real": {"GHOST": ["v4", "v5", "v6"]}, "shadows": ["zonas_15m_fijo"],
      "text": "Huecos de precio (FVG) de 15 min: espera el primer regreso del precio al hueco y "
              "entra cuando una vela reacciona; objetivo 3× el stop. Desde el 6 de octubre el "
              "stop sigue el tamaño de las velas (Set up 1).",
@@ -177,6 +180,7 @@ VERSION_NAMES: dict[tuple[str, str], str] = {
     ("GHOST", "v3"): "Zonas de 1 minuto, día y noche",
     ("GHOST", "v4"): "Zonas de 15 minutos",
     ("GHOST", "v5"): "Zonas de 15 minutos, stop según el mercado",
+    ("GHOST", "v6"): "FVG de 15 minutos que asegura a la mitad",
     ("ORBIT", "v1"): "Caja de apertura con 1 MNQ",
     ("ORBIT", "v2"): "Caja de apertura con 1 NQ",
     ("ORBIT", "v3"): "Caja de apertura con 5 MNQ",

@@ -759,6 +759,8 @@ def create_app(runtime: BotRuntime, settings: ServerSettings | None = None,
                 variant_id not in {sp.id for sp in sh.load_specs(bot)}:
             raise HTTPException(status_code=404, detail="no existe esa variante")
         spec = next(sp for sp in sh.load_specs(bot) if sp.id == variant_id)
+        if getattr(spec, "retired", False):
+            raise HTTPException(status_code=409, detail=f"{spec.label} está retirado: ya no corre.")
         was = sh.is_on(bot, spec, base)
         if bot == "ghost":
             sh.switch_ghost_shadow(runtime, variant_id, on, base)

@@ -58,12 +58,16 @@ ghost:
   - id: zonas_1m_europa
     setup: 13
     name: "FVG 1 EUROPA"
-    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba."
+    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2."
     strategy: zones_1m
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]
         entry_hours: ["03:00", "09:30"]
+        # lock in gains: halfway close 2 of 5 MNQ, the rest with stop at entry + 2
+        partial_at_tp1: 0.4
+        partial_at_progress: 0.5
+        breakeven_after_tp1: true
 
   - id: zonas_15m_fijo
     setup: 9

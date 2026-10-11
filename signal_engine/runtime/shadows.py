@@ -174,22 +174,28 @@ def switch_ghost_shadow(runtime, spec_id: str, on: bool, base: Path = SHADOWS_DI
     return True
 
 
-def trade_events(tracker, before_open: set, before_closed: int) -> list[tuple[str, object]]:
-    """[("open"|"close", PaperTrade)] that happened in `tracker` since the
-    snapshot (open signal ids, number of closed trades). A trade that opened
-    and closed on the same bar gives both."""
+def trade_events(tracker, before_open: set, before_closed: int,
+                 before_partial: set | None = None) -> list[tuple[str, object]]:
+    """[("open"|"partial"|"close", PaperTrade)] that happened in `tracker`
+    since the snapshot (open signal ids, number of closed trades, ids that had
+    already locked in part). A trade that opened and closed on the same bar
+    gives both; "partial" = it closed part of the position on the way."""
     if tracker is None:
         return []
     closed = tracker.closed_trades[before_closed:]
     opened = {t.signal_id: t for t in list(tracker.open_trades) + list(closed)
               if t.signal_id not in before_open}
-    return [("open", t) for t in opened.values()] + [("close", t) for t in closed]
+    partial = [t for t in tracker.open_trades if t.is_open and t.tp1_hit and t.partial_fraction
+               and t.signal_id not in (before_partial or set())] if before_partial is not None else []
+    return [("open", t) for t in opened.values()] + [("partial", t) for t in partial] + \
+        [("close", t) for t in closed]
 
 
-def _snapshot(tracker) -> tuple[set, int]:
+def _snapshot(tracker) -> tuple[set, int, set]:
     if tracker is None:
-        return set(), 0
-    return {t.signal_id for t in tracker.open_trades}, len(tracker.closed_trades)
+        return set(), 0, set()
+    return ({t.signal_id for t in tracker.open_trades}, len(tracker.closed_trades),
+            {t.signal_id for t in tracker.open_trades if t.tp1_hit})
 
 
 def run_ghost_shadows(shadows: list, symbol: str, tf_bars: dict, now, decision_time=None,
@@ -248,6 +254,16 @@ def alert_note(label: str, kind: str, trade, pv: dict | None,
     def money(pts: float) -> str:
         return f" · {usd(pts, per_pt)}" if per_pt else ""
 
+    if kind == "partial":
+        got = abs(trade.tp1 - trade.entry)
+        n = int(position.split()[0]) if position and position.split()[0].isdigit() else 0
+        k = round(trade.partial_fraction * n) if n else 0
+        part = f"Cerró {k} de {n} MNQ" if k else f"Cerró el {trade.partial_fraction:.0%}"
+        money_k = f" · **+${got * per_pt * trade.partial_fraction:,.0f}**" if per_pt else ""
+        return (f"💰 {label} — aseguró +{got:.2f} pts",
+                f"{part} en {_px(trade.tp1)}{money_k}\n"
+                f"🛑 Stop de los demás a {_px(trade.stop)}: ya no puede perder\n"
+                f"🎯 Siguen a {_px(trade.tp2)}", 0x2ECC71)
     if kind == "open":
         risk = abs(trade.entry - trade.stop)
         target = trade.tp2 if trade.tp2 is not None else trade.tp1

@@ -415,6 +415,10 @@ class GhostConfig(BaseModel):
     # Fraction of the position banked at TP1 ("took partials"); the rest runs
     # to TP2 with the stop at breakeven. 0 = all-or-nothing.
     partial_at_tp1: float = 0.0
+    # Lock in gains: a first exit at this fraction of the way to the target
+    # (0.5 = halfway). partial_at_tp1 of the position is closed there and the
+    # rest goes on with its stop at entry + be_offset_points. None = off.
+    partial_at_progress: Optional[float] = None
     # Stop management (paper/tracker.py). Each rule only ever tightens the
     # stop and takes effect from the next bar. None disables it.
     # Breakeven once the trade has run this many R in its favour, with an

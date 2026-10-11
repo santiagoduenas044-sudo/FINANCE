@@ -121,12 +121,13 @@ _STATUS_EMOJI = {
 
 # What reaches Discord. BOT_DISCORD=corto (the default): the heads-up before
 # a trade ("posible idea") and its cancellation if it does not happen, one
-# message when a trade enters and one when it exits (every set up), the day's
+# message when a trade enters, one when it locks in part of the gain (💰) and
+# one when it exits (every set up), the day's
 # close, the verse and fact of the day, a set up switched on/off, and errors.
 # "How it is going", TP1/stop moves, ORBIT's box and BE+2, start/stop and
 # limit notices stay in the dashboard. BOT_DISCORD=todo sends everything.
 _SHORT_KINDS = {"trade_idea", "trade_idea_cancelled", "trade_opened", "trade_closed",
-                "daily_record"}
+                "trade_tp1", "daily_record"}
 _SHORT_NOTES = {"open", "close", "verse", "fact", "switch", "test", "briefing"}
 
 
@@ -149,7 +150,7 @@ def worth_sending(event: OutputEvent) -> bool:
     if not parts:
         return False
     if parts[0] == "setup":                          # setup:<id>:<sid>:open / setup:<id>:open:<id>
-        return any(p in ("open", "close") for p in (parts[2:3] + parts[-1:]))
+        return any(p in ("open", "close", "partial") for p in (parts[2:3] + parts[-1:]))
     return parts[0] in _SHORT_NOTES
 
 
@@ -514,11 +515,11 @@ def _build_trade_tp1_payload(event: OutputEvent) -> dict:
     entry, tp1 = p.get("entry"), p.get("tp1")
     gained = abs(tp1 - entry) if entry is not None and tp1 is not None else None
     frac = p.get("partial_fraction") or 0
-    head = f"🎯 {name} — TP1" + (f" +{gained:.2f} pts" if gained is not None else "")
+    head = f"💰 {name} — aseguró" + (f" +{gained:.2f} pts" if gained is not None else "")
     return _embed(
         head + f" · {p.get('instrument', '?')}",
         _closed_part(frac, p.get("position_label"))
-        + f"stop a BE {_px(entry)} · resto a {_px(p.get('tp2'))}",
+        + f"stop de los demás a {_px(p.get('stop'))}: ya no puede perder · siguen a {_px(p.get('tp2'))}",
         _WIN_COLOR, event.disclaimer)
 
 

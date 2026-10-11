@@ -45,7 +45,8 @@ class PaperTradeTracker:
                  trail_start_r: float | None = None, trail_distance_r: float = 1.0,
                  be_at_progress: float | None = None,
                  lock_steps: list | None = None,
-                 slippage_points: float = 0.0, gap_fills: bool = False):
+                 slippage_points: float = 0.0, gap_fills: bool = False,
+                 partial_at_progress: float | None = None):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
         # the stop to entry instead and that giveback becomes ~0R. Measured on
@@ -81,6 +82,10 @@ class PaperTradeTracker:
         # gap_fills: a bar that OPENS past the stop fills at that open, not at
         # the stop (the price jumped over it). Both off = the old exact fills.
         self.slippage_points = max(float(slippage_points or 0.0), 0.0)
+        # A first exit at this fraction of the way to the target (0.5 =
+        # halfway): partial_at_tp1 closes there, the rest goes on to the
+        # target with its stop at entry + be_offset_points.
+        self.partial_at_progress = partial_at_progress
         self.gap_fills = bool(gap_fills)
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
@@ -101,7 +106,8 @@ class PaperTradeTracker:
                    trail_distance_r=gcfg.trail_distance_r, be_at_progress=gcfg.be_at_progress,
                    lock_steps=gcfg.lock_steps,
                    slippage_points=getattr(gcfg, "slippage_points", 0.0),
-                   gap_fills=getattr(gcfg, "gap_fills", False))
+                   gap_fills=getattr(gcfg, "gap_fills", False),
+                   partial_at_progress=getattr(gcfg, "partial_at_progress", None))
 
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
@@ -170,6 +176,10 @@ class PaperTradeTracker:
             # a market entry: filled a little worse than the price that triggered it
             context = {**(context or {}), "signal_entry": entry}
             entry = entry + self.slippage_points if direction == "LONG" else entry - self.slippage_points
+        if self.partial_at_progress and take_profits and self.partial_at_tp1 > 0:
+            final = take_profits[-1]
+            first = entry + self.partial_at_progress * (final - entry)
+            take_profits = [round(first * 4) / 4, final]          # on the 0.25 tick
         risk = abs(entry - stop)
         trade = PaperTrade(
             signal_id=signal_id, instrument=instrument, direction=direction,
@@ -280,7 +290,9 @@ class PaperTradeTracker:
                     # levels were already evaluated above, so the move can
                     # never retroactively close a trade that was still alive.
                     # Never loosens a stop a trailing rule already tightened.
-                    trade.stop = self._tighter(trade, trade.stop, trade.entry)
+                    off = self.be_offset_points if self.partial_at_progress else 0.0
+                    be = trade.entry + off if trade.is_long else trade.entry - off
+                    trade.stop = self._tighter(trade, trade.stop, be)
         self._manage_stop(trade)
         self._save_open()
 

@@ -29,12 +29,13 @@ def test_partials_are_whole_contracts():
     assert PaperTradeTracker.from_config(g).partial_at_tp1 == pytest.approx(0.6)
 
 
-def test_live_strategy_is_one_3r_target_without_breakeven():
+def test_live_strategy_is_one_3r_target_that_locks_in_halfway():
     cfg = EngineConfig.load(strategy="zones")
     z = cfg.setups.zone_retrace
     assert (z.fixed_target_r, z.single_target) == (3.0, True)
-    assert cfg.ghost.partial_at_tp1 == 0.0 and cfg.ghost.breakeven_after_tp1 is False
-    # no BE+2 at 70% any more: in the lab it took money away from the zones
+    # v6 (11-oct): halfway, 2 of 5 MNQ out and the stop of the rest to entry + 2
+    assert cfg.ghost.partial_at_tp1 == 0.4 and cfg.ghost.breakeven_after_tp1 is True
+    assert cfg.ghost.partial_at_progress == 0.5 and cfg.ghost.be_offset_points == 2.0
     assert cfg.ghost.be_at_progress is None
 
 
@@ -133,7 +134,8 @@ def _walk(tracker, direction, bars):
 
 
 # these check where the stop moves, not what a fill costs
-NO_COSTS = {"slippage_points": 0.0, "gap_fills": False}
+NO_COSTS = {"slippage_points": 0.0, "gap_fills": False,
+            "partial_at_progress": None, "partial_at_tp1": 0.0, "breakeven_after_tp1": False}
 
 
 def test_breakeven_plus_at_70_percent_of_the_way():

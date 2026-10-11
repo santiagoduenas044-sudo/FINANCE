@@ -365,6 +365,9 @@ class BotRuntime:
             if kind == "open":
                 return self._trade_chart(bars, trade, f"{spec.label} · {trade.instrument} · "
                                                       f"{side} · entrada")
+            if kind == "partial":
+                return self._trade_chart(bars, trade, f"{spec.label} · {trade.instrument} · "
+                                                      f"{side} · aseguró a la mitad")
             return self._trade_chart(bars, trade, f"{spec.label} · "
                                      + self._close_title(trade, trade.instrument))
         except Exception as exc:  # noqa: BLE001 - a chart is never worth a message
