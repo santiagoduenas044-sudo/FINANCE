@@ -26,6 +26,7 @@ from ..features.analyzer import MarketAnalysis
 from ..signals.models import NoTrade, Signal
 from .confluence import score_confluence
 from .context import build_market_state
+from .levels import in_the_way, levels_at
 from .models import GhostDecision, MarketState, NoTradeReason
 from .targets import apply_plan, plan_targets
 
@@ -188,6 +189,13 @@ class GhostBrain:
             reasons.append(NoTradeReason.CONFLICTING_TIMEFRAME)
         if cfg.block_against_structure and ms.structure.opposes(direction):
             reasons.append(NoTradeReason.AGAINST_STRUCTURE)
+        # "espacio libre": a support / resistance in the way to the target
+        if cfg.clear_path and sig.take_profits:
+            lv = in_the_way(direction, sig.entry, sig.take_profits[-1],
+                            levels_at(ctx.execution.bars, ctx.decision_time), cfg.clear_path)
+            if lv is not None:
+                reasons.append(NoTradeReason.LEVEL_IN_THE_WAY)
+                extra["level"] = f"{lv.price:.2f} {lv.label}"
 
         confluence = score_confluence(direction, ms, sig, exec_ta, cfg)
         plan_dict = ({"far_r": plan.far_r, "band": plan.band,
@@ -207,6 +215,8 @@ class GhostBrain:
             detail_extra += f" cooldown_until={cd.get('cooldown_until')}"
         if extra.get("news"):
             detail_extra += f" news={extra['news']}"
+        if extra.get("level"):
+            detail_extra += f" level={extra['level']}"
 
         if reasons:
             return GhostDecision(

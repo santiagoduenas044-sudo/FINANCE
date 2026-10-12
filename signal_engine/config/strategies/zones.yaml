@@ -82,6 +82,10 @@ ghost:
   partial_at_tp1: 0.4
   partial_at_progress: 0.5
   breakeven_after_tp1: true
+  # Espacio libre (v7, 12-oct): no trade when yesterday's high/low/close, the
+  # night's high/low or a level the price turned at 3+ times sits in the
+  # first half of the way to the target.
+  clear_path: 0.5
   # No breakeven: in the lab the BE+2 at 70% saved some trades and cost
   # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
   be_at_progress: null

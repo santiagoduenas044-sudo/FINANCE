@@ -70,6 +70,7 @@ class NoTradeReason(str, Enum):
     DUPLICATE = "duplicate"                  # same signal_id already processed
     NEWS = "news_event"                      # inside a high-impact news window
     AGAINST_TREND = "against_trend"          # trend_filter: buy under VWAP / sell over it
+    LEVEL_IN_THE_WAY = "level_in_the_way"    # clear_path: support/resistance before the target
 
 
 def _iso(ts) -> str | None:

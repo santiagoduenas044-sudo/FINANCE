@@ -643,7 +643,7 @@ class BotRuntime:
         def _zone_rejected(d, reasons: list[str]) -> None:
             zid = (d.signal.market_context or {}).get("zone_id") if d.signal else None
             if zid:
-                zone_rejections[zid] = _idea_reject_reason(reasons)
+                zone_rejections[zid] = _idea_reject_reason(reasons, d.detail or "")
 
         # 3) route each decision. Same signal_id end-to-end.
         log.info("GHOST cycle instrument=%s decisions=%d", symbol, len(decisions))
@@ -1345,13 +1345,19 @@ _IDEA_REJECT_ES = {
     "daily_limit": "ya se alcanzó el límite del día",
     "news_event": "había una noticia fuerte en ese momento",
     "against_trend": "iba contra la tendencia del día (el otro lado del VWAP)",
+    "level_in_the_way": "tenía un soporte o resistencia en el camino al objetivo",
 }
 
 
-def _idea_reject_reason(reasons: list[str]) -> str:
+def _idea_reject_reason(reasons: list[str], detail: str = "") -> str:
     for r in reasons:
         if r in _IDEA_REJECT_ES:
-            return "reaccionó, pero " + _IDEA_REJECT_ES[r]
+            text = "reaccionó, pero " + _IDEA_REJECT_ES[r]
+            if r == "level_in_the_way" and " level=" in detail:
+                # "level=21480.25 máximo de ayer" -> "(21,480 · máximo de ayer)"
+                px, _, name = detail.split(" level=", 1)[1].partition(" ")
+                text += f" ({float(px):,.0f} · {name})"
+            return text
     return "reaccionó, pero el filtro de riesgo la descartó (" + ", ".join(reasons) + ")"
 
 

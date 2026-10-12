@@ -476,6 +476,12 @@ class GhostConfig(BaseModel):
     # Only enter between these two ET times, e.g. ["03:00", "09:30"] (Europe).
     # Wraps midnight when the first is later than the second. None = any time.
     entry_hours: Optional[list[str]] = None
+    # "Espacio libre": skip the trade when a key level (yesterday's high/low/
+    # close, the night's high/low, a level the price turned at 3+ times) sits
+    # within this share of the way to the target — a long right under a
+    # resistance, a short right on top of a support. 0.5 = the first half
+    # must be clear. None = off.
+    clear_path: Optional[float] = None
     # Daily limits on the operator's position (ghost.contracts), counted per
     # trading day (18:00 ET -> 17:00 ET, like Apex). None disables each one.
     # They live here, not in the RiskEngine: that engine stops at the

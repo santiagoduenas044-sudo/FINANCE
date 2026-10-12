@@ -52,6 +52,7 @@ REASONS_ES = {
     "daily_limit": "ya se alcanzó el límite del día (pérdida máxima)",
     "news_event": "había una noticia fuerte en ese momento",
     "against_trend": "iba contra la tendencia del día (el otro lado del VWAP)",
+    "level_in_the_way": "tenía un soporte o resistencia en el camino al objetivo",
 }
 
 

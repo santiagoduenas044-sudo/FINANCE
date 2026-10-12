@@ -33,6 +33,7 @@ _REASONS_ES = {
     "stop_too_wide": "stop muy largo", "risk_rejected": "control de riesgo",
     "daily_limit": "límite del día", "insufficient_confluence": "poca confluencia",
     "news_event": "noticia fuerte", "against_trend": "contra la tendencia (VWAP)",
+    "level_in_the_way": "soporte/resistencia en el camino",
 }
 
 

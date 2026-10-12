@@ -47,18 +47,19 @@ ghost:
   - id: zonas_1m_noche
     setup: 4
     name: "FVG 1"
-    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %."
+    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
     version: v3
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
+        clear_path: 0.5            # espacio libre (12-oct)
 
   - id: zonas_1m_europa
     setup: 13
     name: "FVG 1 EUROPA"
-    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2."
+    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
     overrides:
       ghost:
@@ -68,6 +69,7 @@ ghost:
         partial_at_tp1: 0.4
         partial_at_progress: 0.5
         breakeven_after_tp1: true
+        clear_path: 0.5            # espacio libre (12-oct)
 
   - id: zonas_15m_fijo
     setup: 9
