@@ -7,3 +7,6 @@ extends: zones
 setups:
   zone_retrace:
     point_mode: points
+
+ghost:
+  clear_path: null                  # the v4 rules: no "espacio libre" check
