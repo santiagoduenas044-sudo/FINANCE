@@ -71,6 +71,8 @@ class NoTradeReason(str, Enum):
     NEWS = "news_event"                      # inside a high-impact news window
     AGAINST_TREND = "against_trend"          # trend_filter: buy under VWAP / sell over it
     LEVEL_IN_THE_WAY = "level_in_the_way"    # clear_path: support/resistance before the target
+    LATE_ENTRY = "late_entry"                # max_chase_r: price already ran from the zone
+    CHOPPY = "choppy_market"                 # chop_min_er: the market goes back and forth
 
 
 def _iso(ts) -> str | None:

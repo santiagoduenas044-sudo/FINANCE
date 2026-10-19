@@ -19,12 +19,15 @@
 # retired: true = the set up never runs again (no switch turns it back on);
 #        its record stays and shows in the dashboard and the PDF.
 #
-# 11-oct-2026 clean-up: only the set ups worth following keep running
-# (1 · FVG 15, 4 · FVG 1, 13 · FVG 1 EUROPA). The others repeated the same
-# trades or lost (APERTURA never reached its target in 15 trades).
+# 11-oct-2026 clean-up: only 1, 4 and 13 kept running. 19-oct-2026: the
+# operator turned them ALL back on to compare (one of them had been in
+# profit), and added the 1-hour versions (14, 15).
 
-# the bots' own strategies that are retired (ORBIT = APERTURA, Set up 2)
-retired: [orbit]
+# the bots' own strategies that are retired (e.g. [orbit] = APERTURA, Set up 2)
+retired: []
+
+# every dashboard switch goes back to the defaults below once per new date
+switches_reset: "2026-10-19"
 
 ghost:
   - id: setups_clasicos
@@ -33,21 +36,18 @@ ghost:
     about: "La primera versión (v1): ruptura de apertura, barrida de liquidez y VWAP en velas de 5 min."
     strategy: legacy
     version: v1
-    enabled: false
-    retired: true
 
   - id: zonas_1m
     setup: 3
     name: "FVG 1 DÍA"
-    about: "FVG 1 solo de día (9:30–15:30). Repetía los trades de día del Set up 4 y perdía."
+    about: "FVG 1 solo de día (9:30–15:30)."
     strategy: zones_1m
     version: v2
-    retired: true
 
   - id: zonas_1m_noche
     setup: 4
     name: "FVG 1"
-    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino."
+    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino, si llega tarde o si el mercado va en serrucho."
     strategy: zones_1m
     version: v3
     overrides:
@@ -55,11 +55,13 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         clear_path: 0.5            # espacio libre (12-oct)
+        max_chase_r: 0.75          # no entrar tarde (19-oct)
+        chop_min_er: 0.1           # no entrar en serrucho (19-oct)
 
   - id: zonas_1m_europa
     setup: 13
     name: "FVG 1 EUROPA"
-    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino."
+    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino, si llega tarde o si el mercado va en serrucho."
     strategy: zones_1m
     overrides:
       ghost:
@@ -70,6 +72,24 @@ ghost:
         partial_at_progress: 0.5
         breakeven_after_tp1: true
         clear_path: 0.5            # espacio libre (12-oct)
+        max_chase_r: 0.75          # no entrar tarde (19-oct)
+        chop_min_er: 0.1           # no entrar en serrucho (19-oct)
+
+  - id: zonas_1h
+    setup: 14
+    name: "FVG 1H"
+    about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad. Con los mismos filtros: espacio libre, no entrar tarde y no entrar en serrucho."
+    strategy: zones_1h
+    overrides:
+      ghost:
+        valid_sessions: ["RTH", "ETH"]
+        last_entry_time: "16:15"
+
+  - id: zonas_1h_dia
+    setup: 15
+    name: "FVG 1H DÍA"
+    about: "FVG 1H solo de día: entradas de 9:30 a 15:30, todo cerrado a las 16:55."
+    strategy: zones_1h
 
   - id: zonas_15m_fijo
     setup: 9
@@ -77,39 +97,35 @@ ghost:
     about: "Set up 1 con el stop fijo de 20–35 pts de antes del 6 de octubre."
     strategy: zones_fijo
     version: v4
-    retired: true
 
   - id: zonas_15m_noticias
     setup: 5
     name: "FVG 15 CALMA"
-    about: "Set up 1 sin entrar cerca de noticias fuertes. Tomaba los mismos trades que el 1."
+    about: "Set up 1 sin entrar cerca de noticias fuertes."
     strategy: zones
     overrides:
       ghost:
         news_blackout: {before: 10, after: 15, impacts: ["High"]}
-    retired: true
 
   - id: zonas_15m_tendencia
     setup: 10
     name: "FVG 15 VWAP"
-    about: "Set up 1 solo a favor del VWAP. El filtro no ayudó."
+    about: "Set up 1 solo a favor del VWAP."
     strategy: zones
     overrides:
       ghost:
         trend_filter: vwap
-    retired: true
 
   - id: zonas_1m_noche_tendencia
     setup: 11
     name: "FVG 1 VWAP"
-    about: "Set up 4 solo a favor del VWAP. El filtro no ayudó."
+    about: "Set up 4 solo a favor del VWAP."
     strategy: zones_1m
     overrides:
       ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         trend_filter: vwap
-    retired: true
 
   - id: zonas_1m_noche_noticias
     setup: 12
@@ -121,21 +137,18 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         news_blackout: {before: 10, after: 15, impacts: ["High"]}
-    retired: true
 
 orbit:
   - id: apertura_30m
     setup: 6
     name: "APERTURA 30"
-    about: "La caja de 9:30 a 10:00 en vez de 9:45. Nunca llegó al objetivo."
+    about: "La caja de 9:30 a 10:00 en vez de 9:45."
     settings:
       range_minutes: 30
-    retired: true
 
   - id: apertura_tp2
     setup: 7
     name: "APERTURA 2×"
-    about: "La misma caja con el objetivo a 2× el stop. Nunca llegó al objetivo."
+    about: "La misma caja con el objetivo a 2× el stop."
     settings:
       target_mult: 2.0
-    retired: true

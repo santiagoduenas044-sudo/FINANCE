@@ -36,6 +36,10 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
          "Las reglas de v6, y no entra si un soporte o resistencia (máximo, mínimo o cierre "
          "de ayer, máximo o mínimo de la noche, o un nivel que frenó al precio 3 veces) está "
          "en la primera mitad del camino al objetivo."),
+        ("v8", "2026-10-19", "FVG 15 · con filtros",
+         "Las reglas de v7 y tres filtros más: no entra tarde (si el precio ya se alejó de "
+         "la zona más de 0.75× el stop), nunca un stop de más de 50 pts ($500 con 5 MNQ) y "
+         "no entra si las últimas 2 horas fueron serrucho (el precio fue y vino sin avanzar)."),
     ],
     "ORBIT": [
         ("v1", "2026-09-29", "APERTURA · 1 MNQ",
@@ -59,17 +63,17 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
     {"code": "FVG 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
-     "real": {"GHOST": ["v4", "v5", "v6", "v7"]}, "shadows": ["zonas_15m_fijo"],
+     "real": {"GHOST": ["v4", "v5", "v6", "v7", "v8"]}, "shadows": ["zonas_15m_fijo"],
      "text": "Huecos de precio (FVG) de 15 min: espera el primer regreso del precio al hueco y "
              "entra cuando una vela reacciona; objetivo 3× el stop. Desde el 6 de octubre el "
              "stop sigue el tamaño de las velas (Set up 1).",
      "lab": "5 años, 5 MNQ: +$25 por trade en 2021–23 y +$12 en 2024–26. Gana en los dos "
             "periodos, pero todavía sin suficiente confianza."},
     {"code": "APERTURA", "name": "Ruptura de la caja de apertura", "bot": "ORBIT",
-     "status": "descartada", "real": {"ORBIT": ["v1", "v2", "v3"]},
+     "status": "en vivo", "real": {"ORBIT": ["v1", "v2", "v3"]},
      "text": "Ruptura de la caja de 9:30 a 9:45, objetivo 1.5× el stop, entrada +2 al 70 %. "
-             "Retirada el 11 de oct: en vivo nunca llegó al objetivo y sus stops eran de "
-             "100–190 pts.",
+             "Estuvo apagada del 11 al 19 de oct (no llegaba al objetivo y sus stops eran de "
+             "100–190 pts); se volvió a encender para compararla.",
      "lab": "5 años, 5 MNQ: +$109,070, peor caída −$16,969. La única que pasó la prueba "
             "a ciegas."},
     {"code": "FVG 1 DÍA", "name": "Zonas 1 min · de día", "bot": "GHOST", "status": "en paralelo",
@@ -88,6 +92,16 @@ STRATEGIES: list[dict] = [
      "text": "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), donde el Set up 4 ganaba "
              "(21 trades, +$2,323 al 10 de oct).",
      "lab": "Nueva (11 de oct); se mide en papel."},
+    {"code": "FVG 1H", "name": "Zonas 1 hora · día y noche", "bot": "GHOST",
+     "status": "en paralelo", "shadows": ["zonas_1h"],
+     "text": "La estrategia de FVG 15 en velas de 1 hora: hueco entre velas de 1 hora, entra "
+             "cuando una vela de 1 hora reacciona en el primer regreso. Stops más grandes "
+             "(según las velas de 1 hora, hasta 120 pts), objetivo 3×, asegura a la mitad.",
+     "lab": "Nueva (19 de oct); se mide en papel."},
+    {"code": "FVG 1H DÍA", "name": "Zonas 1 hora · solo de día", "bot": "GHOST",
+     "status": "en paralelo", "shadows": ["zonas_1h_dia"],
+     "text": "FVG 1H con entradas solo de 9:30 a 15:30.",
+     "lab": "Nueva (19 de oct); se mide en papel."},
     {"code": "FVG 15 CALMA", "name": "Zonas 15 min sin noticias", "bot": "GHOST",
      "status": "en paralelo", "shadows": ["zonas_15m_noticias"],
      "text": "FVG 15 sin entrar de 10 min antes a 15 min después de CPI, empleo, FOMC y "
@@ -186,6 +200,7 @@ VERSION_NAMES: dict[tuple[str, str], str] = {
     ("GHOST", "v5"): "Zonas de 15 minutos, stop según el mercado",
     ("GHOST", "v6"): "FVG de 15 minutos que asegura a la mitad",
     ("GHOST", "v7"): "FVG de 15 minutos con espacio libre",
+    ("GHOST", "v8"): "FVG de 15 minutos con filtros",
     ("ORBIT", "v1"): "Caja de apertura con 1 MNQ",
     ("ORBIT", "v2"): "Caja de apertura con 1 NQ",
     ("ORBIT", "v3"): "Caja de apertura con 5 MNQ",

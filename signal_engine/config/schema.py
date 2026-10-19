@@ -482,6 +482,13 @@ class GhostConfig(BaseModel):
     # resistance, a short right on top of a support. 0.5 = the first half
     # must be clear. None = off.
     clear_path: Optional[float] = None
+    # No entrar tarde: skip when the entry is already this many stops past the
+    # zone's middle in the trade's direction (price ran without us). None = off.
+    max_chase_r: Optional[float] = None
+    # Serrucho (chop): skip when the last 2 hours went nowhere — net move of
+    # the 5-minute closes / total path walked below this (0 = pure back and
+    # forth, 1 = straight line). None = off.
+    chop_min_er: Optional[float] = None
     # Daily limits on the operator's position (ghost.contracts), counted per
     # trading day (18:00 ET -> 17:00 ET, like Apex). None disables each one.
     # They live here, not in the RiskEngine: that engine stops at the

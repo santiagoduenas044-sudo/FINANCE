@@ -95,8 +95,10 @@ def test_ghost_shadows_get_the_live_bars(tmp_path):
     from signal_engine.runtime.shadows import build_ghost_shadows
     from tests.test_bot_runtime import _pipeline
 
+    from signal_engine.runtime.shadows import load_specs
     shadows = build_ghost_shadows(ContractRegistry.load(), base=tmp_path)
-    assert [s.id for s, _ in shadows] == ["zonas_1m_noche", "zonas_1m_europa"]   # retired ones never run
+    assert {s.id for s, _ in shadows} == {s.id for s in load_specs("ghost")}   # all on (19-oct)
+    assert {"zonas_1h", "zonas_1h_dia"} <= {s.id for s, _ in shadows}
     engine = DataEngine(EngineConfig.load(strategy="zones"))
     rt = _runtime(engine)
     rt.shadows = shadows
@@ -122,7 +124,7 @@ def test_orbit_feeds_its_variants(tmp_path):
     spec = type("S", (), {"id": "x"})()
     assert orbit.run_once(Fake(), fetch=lambda: "bars", shadows=[(spec, Fake())])
     assert seen == ["bars", "bars"]
-    assert orbit.build_shadows(tmp_path) == []          # APERTURA 30 and 2× are retired
+    assert [s.id for s, _ in orbit.build_shadows(tmp_path)] == ["apertura_30m", "apertura_tp2"]
 
 
 def test_hub_lists_the_variants(tmp_path):
@@ -131,8 +133,8 @@ def test_hub_lists_the_variants(tmp_path):
     d = TestClient(app).get("/api/bots").json()
     orbit = d["bots"][1]
     assert [v["id"] for v in orbit["variants"]] == ["apertura_30m", "apertura_tp2"]
-    assert all(v["retired"] and not v["enabled"] for v in orbit["variants"])
-    assert orbit["retired"] is True
+    assert all(not v["retired"] and v["enabled"] for v in orbit["variants"])
+    assert orbit["retired"] is False                     # APERTURA back on (19-oct)
     assert any(s["status"] == "en paralelo" for s in d["strategies"])
 
 
@@ -147,8 +149,10 @@ def test_switches_default_and_persist(tmp_path):
     assert not is_on("ghost", spec["zonas_1m_noche"], tmp_path)
     set_on("ghost", "zonas_1m_noche", True, tmp_path)
     assert is_on("ghost", spec["zonas_1m_noche"], tmp_path)
+    from dataclasses import replace
+    gone = replace(spec["setups_clasicos"], retired=True)
     set_on("ghost", "setups_clasicos", True, tmp_path)                # retired: stays off
-    assert not is_on("ghost", spec["setups_clasicos"], tmp_path)
+    assert not is_on("ghost", gone, tmp_path)
 
 
 def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
@@ -158,22 +162,22 @@ def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
     c = TestClient(app)
     assert c.post("/api/bots/ghost/variants/zonas_1m_noche?on=true").json()["on"] is True
     c.post("/api/bots/ghost/variants/zonas_1m_europa?on=true")
-    assert {s.id for s, _ in rt.shadows} == {"zonas_1m_noche", "zonas_1m_europa"}   # several at once
+    assert {"zonas_1m_noche", "zonas_1m_europa"} <= {s.id for s, _ in rt.shadows}   # several at once
     c.post("/api/bots/ghost/variants/zonas_1m_noche?on=false")
-    assert [s.id for s, _ in rt.shadows] == ["zonas_1m_europa"]
-    r = c.post("/api/bots/ghost/variants/setups_clasicos?on=true")              # retired
-    assert r.status_code == 409 and "retirado" in r.json()["detail"]
+    assert "zonas_1m_noche" not in {s.id for s, _ in rt.shadows}
+    assert "zonas_1m_europa" in {s.id for s, _ in rt.shadows}
+    c.post("/api/bots/ghost/variants/setups_clasicos?on=false")
     ghost = c.get("/api/bots").json()["bots"][0]
     v = {x["id"]: x for x in ghost["variants"]}
     assert v["zonas_1m_europa"]["enabled"] and v["zonas_1m_europa"]["running"]
     assert not v["zonas_1m_noche"]["enabled"] and v["zonas_1m_noche"]["now"] == "Apagado."
-    assert v["setups_clasicos"]["retired"]
+    assert not any(x["retired"] for x in ghost["variants"])
     vers = {x["version"]: x for x in ghost["versions"]}
     assert vers["v1"]["variant"] == "setups_clasicos" and vers["v1"]["variant_on"] is False
-    assert vers["v3"]["variant_on"] is False and vers["v7"]["current"]
+    assert vers["v3"]["variant_on"] is False and vers["v8"]["current"]
     assert vers["v4"]["variant"] == "zonas_15m_fijo"                 # the fixed-stop Set up 9
     # ORBIT runs elsewhere: the switch is saved for it to pick up
-    assert c.post("/api/bots/orbit/variants/apertura_tp2?on=true").status_code == 409
+    assert c.post("/api/bots/orbit/variants/apertura_tp2?on=true").json()["on"] is True
     assert c.post("/api/bots/ghost/variants/nope?on=true").status_code == 404
 
 
@@ -279,12 +283,12 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
     c = TestClient(app)
     st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
-    # each part on its own: v4 (stop fijo), v7 (la de ahora), Set up 9; v5, v6 had no trades here
+    # each part on its own: v4 (stop fijo), v8 (la de ahora), Set up 9; v5-v7 had no trades here
     parts = {p.get("version") or p.get("variant"): p for p in st["FVG 15"]["live"]["detail"]}
     only = parts["v4"]
     pv = only["net_usd"] / 25.0                                   # $ per point of GHOST's size
     assert only["n"] == 1                                         # not the 1-minute trades
-    assert parts["v7"]["n"] == 0 and parts["v7"]["name"].startswith("Set up 1") and "v5" not in parts and "v6" not in parts
+    assert parts["v8"]["n"] == 0 and parts["v8"]["name"].startswith("Set up 1") and not {"v5", "v6", "v7"} & set(parts)
     assert parts["zonas_15m_fijo"]["name"].startswith("Set up 9")
     real = [p for p in st["FVG 1 DÍA"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
@@ -293,7 +297,7 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     assert st["FVG 1 DÍA"]["live"]["detail"][-1]["name"].startswith("Set up 3")
     assert st["FVG 15"]["setups"] == [1, 9] and st["FVG 1 DÍA"]["setups"] == [3]
     assert [p["n"] for p in st["FVG 1"]["live"]["detail"] if p["kind"] == "real"] == [1]
-    assert st["CLÁSICO"]["status"] == "apagada"                  # its variant is off
+    assert st["CLÁSICO"]["status"] == "en paralelo"              # back on (19-oct)
     assert st["RELLENO"]["status"] == "por probar" and st["RELLENO"]["lab_run"] is None
     # the trade log behind the calendar: every trade, with its version and day
     log = c.get("/api/bots/trades").json()

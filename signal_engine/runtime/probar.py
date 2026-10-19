@@ -53,6 +53,9 @@ REASONS_ES = {
     "news_event": "había una noticia fuerte en ese momento",
     "against_trend": "iba contra la tendencia del día (el otro lado del VWAP)",
     "level_in_the_way": "tenía un soporte o resistencia en el camino al objetivo",
+    "late_entry": "llegó tarde: el precio ya se había ido lejos de la zona",
+    "choppy_market": "el mercado iba de lado (serrucho) en las últimas 2 horas",
+    "stop_too_wide": "el stop era demasiado largo",
 }
 
 

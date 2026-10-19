@@ -13,17 +13,30 @@ from signal_engine.runtime.shadows import is_on, load_specs, main_retired
 NY = "America/New_York"
 
 
-def test_only_the_set_ups_worth_following_run(tmp_path):
-    on = {sp.setup: sp.label for b in ("ghost", "orbit") for sp in load_specs(b) if is_on(b, sp, tmp_path)}
-    assert on == {4: "Set up 4 · FVG 1", 13: "Set up 13 · FVG 1 EUROPA"}
-    assert main_retired("orbit") and not main_retired("ghost")
+def test_every_set_up_runs_again(tmp_path):
+    on = {sp.setup for b in ("ghost", "orbit") for sp in load_specs(b) if is_on(b, sp, tmp_path)}
+    assert on == {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}         # 19-oct: all back on
+    assert not main_retired("orbit") and not main_retired("ghost")
 
 
 def test_a_retired_set_up_cannot_be_switched_back_on(tmp_path):
+    from dataclasses import replace
+
     from signal_engine.runtime.shadows import set_on
-    spec = next(s for s in load_specs("orbit") if s.id == "apertura_tp2")
+    spec = replace(next(s for s in load_specs("orbit") if s.id == "apertura_tp2"), retired=True)
     set_on("orbit", "apertura_tp2", True, tmp_path)
     assert not is_on("orbit", spec, tmp_path)
+
+
+def test_old_switches_go_back_to_on_once(tmp_path):
+    import json
+
+    from signal_engine.runtime.shadows import set_on, switches
+    (tmp_path / "enabled.json").write_text(json.dumps({"ghost": {"zonas_1m": False}}))
+    spec = next(s for s in load_specs("ghost") if s.id == "zonas_1m")
+    assert is_on("ghost", spec, tmp_path)                        # the 11-oct "off" is gone
+    set_on("ghost", "zonas_1m", False, tmp_path)                 # a new switch stays
+    assert not is_on("ghost", spec, tmp_path) and switches(tmp_path)["_reset"]
 
 
 def test_orbit_runs_nothing_of_its_own_when_retired():

@@ -1,0 +1,27 @@
+# FVG 1H (19-oct-2026): the same strategy as FVG 15 (GHOST's zones) one step
+# up, on 1-hour candles. A fair-value gap between 1-hour candles marks the
+# zone, and the entry is when a 1-hour candle reacts there (closes back past
+# the zone's middle) on the first return. Stop and target follow the size of
+# the 1-hour candles: 20-35 pts for an average candle of 20 pts, so with
+# 60-pt candles the stop is 60-105 pts, capped at 120. Target 3x the stop;
+# halfway it closes 2 of the 5 MNQ and the rest go on with the stop at
+# entry + 2 (like FVG 15). Fewer trades, bigger moves. New: measured on paper.
+extends: zones
+
+timeframe_roles:
+  context: "1H"
+  structure: "1H"                   # the zones and their confirmation live here
+  execution: "1m"                   # stop / target still checked every minute
+
+setups:
+  zone_retrace:
+    timeframe: "1H"
+    zone_timeframe: "1H"
+    zone_lookback_bars: 12          # zones from the last 12 hours
+    atr_timeframe: "1H"
+    confirm_bars: 2                 # the reaction within 2 hours of the touch
+
+ghost:
+  # one-hour stops are bigger by nature: the 50-pt cap of FVG 15 would turn
+  # down nearly every trade; the strategy's own 120-pt ceiling stays
+  max_stop_points: {NQ: 0, MNQ: 0}

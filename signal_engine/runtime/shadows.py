@@ -61,11 +61,35 @@ def _state_file(base: Path) -> Path:
     return Path(base) / "enabled.json"
 
 
+def _reset_mark(path: Path | None = None) -> str | None:
+    """`switches_reset: "<date>"` in shadows.yaml: every switch goes back to
+    the set up's default once (to turn them all on again after a clean-up)."""
+    try:
+        raw = yaml.safe_load(Path(path or SHADOWS_FILE).read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    mark = raw.get("switches_reset")
+    return str(mark) if mark else None
+
+
 def switches(base: Path = SHADOWS_DIR) -> dict:
     try:
-        return json.loads(_state_file(base).read_text())
+        state = json.loads(_state_file(base).read_text())
     except (OSError, ValueError):
-        return {}
+        state = {}
+    mark = _reset_mark()
+    if mark and state and state.get("_reset") != mark:
+        state = {"_reset": mark}
+        _write(base, state)
+    return state
+
+
+def _write(base: Path, state: dict) -> None:
+    f = _state_file(base)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(state, indent=1))
+    tmp.replace(f)
 
 
 def is_on(bot: str, spec: ShadowSpec, base: Path = SHADOWS_DIR) -> bool:
@@ -86,11 +110,9 @@ def main_retired(bot: str, path: Path | None = None) -> bool:
 def set_on(bot: str, spec_id: str, on: bool, base: Path = SHADOWS_DIR) -> None:
     state = switches(base)
     state.setdefault(bot, {})[spec_id] = bool(on)
-    f = _state_file(base)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=1))
-    tmp.replace(f)
+    if _reset_mark():
+        state["_reset"] = _reset_mark()
+    _write(base, state)
 
 
 def load_specs(bot: str, path: Path = SHADOWS_FILE) -> list[ShadowSpec]:

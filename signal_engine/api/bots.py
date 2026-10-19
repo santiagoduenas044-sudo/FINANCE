@@ -34,6 +34,7 @@ _REASONS_ES = {
     "daily_limit": "límite del día", "insufficient_confluence": "poca confluencia",
     "news_event": "noticia fuerte", "against_trend": "contra la tendencia (VWAP)",
     "level_in_the_way": "soporte/resistencia en el camino",
+    "late_entry": "llegó tarde", "choppy_market": "serrucho",
 }
 
 

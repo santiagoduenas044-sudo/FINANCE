@@ -26,7 +26,7 @@ from ..features.analyzer import MarketAnalysis
 from ..signals.models import NoTrade, Signal
 from .confluence import score_confluence
 from .context import build_market_state
-from .levels import in_the_way, levels_at
+from .levels import efficiency, in_the_way, levels_at
 from .models import GhostDecision, MarketState, NoTradeReason
 from .targets import apply_plan, plan_targets
 
@@ -196,6 +196,20 @@ class GhostBrain:
             if lv is not None:
                 reasons.append(NoTradeReason.LEVEL_IN_THE_WAY)
                 extra["level"] = f"{lv.price:.2f} {lv.label}"
+        # no entrar tarde: how far the entry already is past the zone's middle
+        mid = (sig.market_context or {}).get("zone_mid")
+        if cfg.max_chase_r and mid is not None and sig.entry != sig.stop:
+            ran = (sig.entry - mid) if direction == "LONG" else (mid - sig.entry)
+            chase = ran / abs(sig.entry - sig.stop)
+            if chase > cfg.max_chase_r:
+                reasons.append(NoTradeReason.LATE_ENTRY)
+                extra["chase"] = f"{ran:.1f}pts={chase:.2f}x"
+        # serrucho: the last 2 hours went back and forth
+        if cfg.chop_min_er:
+            er = efficiency(ctx.execution.bars, ctx.decision_time)
+            if er is not None and er < cfg.chop_min_er:
+                reasons.append(NoTradeReason.CHOPPY)
+                extra["chop"] = f"{er:.2f}"
 
         confluence = score_confluence(direction, ms, sig, exec_ta, cfg)
         plan_dict = ({"far_r": plan.far_r, "band": plan.band,
@@ -215,6 +229,10 @@ class GhostBrain:
             detail_extra += f" cooldown_until={cd.get('cooldown_until')}"
         if extra.get("news"):
             detail_extra += f" news={extra['news']}"
+        if extra.get("chase"):
+            detail_extra += f" chase={extra['chase']}"
+        if extra.get("chop"):
+            detail_extra += f" er={extra['chop']}"
         if extra.get("level"):
             detail_extra += f" level={extra['level']}"
 

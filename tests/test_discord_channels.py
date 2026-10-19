@@ -54,7 +54,7 @@ def test_the_bot_makes_one_channel_per_set_up_that_is_on(store):
     assert r["total"] == len(on) and len(r["made"]) == len(on)
     names = [c["name"] for c in api.channels if c["type"] == 0]
     assert "set-up-1-fvg-15" in names and "set-up-4-fvg-1" in names and "set-up-13-fvg-1-europa" in names
-    assert not any("apertura" in n for n in names)                       # retired: no channel
+    assert "set-up-6-apertura-30" in names and "set-up-14-fvg-1h" in names   # all on (19-oct)
     assert all(c["parent_id"] == api.channels[0]["id"] for c in api.channels if c["type"] == 0)
     saved = json.loads(store.read_text())
     assert saved["setups"]["4"]["webhook"].startswith("https://discord.com/api/webhooks/")

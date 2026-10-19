@@ -86,6 +86,16 @@ ghost:
   # night's high/low or a level the price turned at 3+ times sits in the
   # first half of the way to the target.
   clear_path: 0.5
+  # Filters (v8, 19-oct):
+  #  * no entrar tarde: skip when the entry is more than 0.75x the stop past
+  #    the zone's middle (the price already ran without us);
+  #  * stop cap: never a stop over 50 pts ($500 on 5 MNQ), whatever the
+  #    candles say (it reached ~77 pts / $765);
+  #  * serrucho: skip when the last 2 hours of 5-minute closes went nowhere
+  #    (net move under 10% of the path walked).
+  max_chase_r: 0.75
+  max_stop_points: {NQ: 50.0, MNQ: 50.0}
+  chop_min_er: 0.1
   # No breakeven: in the lab the BE+2 at 70% saved some trades and cost
   # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
   be_at_progress: null

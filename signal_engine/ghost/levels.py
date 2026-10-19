@@ -152,3 +152,20 @@ def in_the_way(direction: str, entry: float, target: float, levels: list[Level],
         if gap < d <= reach:
             hits.append((d, x))
     return min(hits, key=lambda h: h[0])[1] if hits else None
+
+
+def efficiency(bars: pd.DataFrame, now, minutes: int = 120, step: str = "5min") -> float | None:
+    """How straight the price went over the last `minutes`: net move of the
+    5-minute closes / the path they walked (0 = back and forth, 1 = a line).
+    None without enough bars."""
+    if bars is None or bars.empty:
+        return None
+    b = _bars(bars)
+    now = pd.Timestamp(now)
+    now = now.tz_convert(NY) if now.tzinfo else now.tz_localize(NY)
+    b = b[(b.index > now - pd.Timedelta(minutes=minutes)) & (b.index <= now)]
+    c = b["close"].resample(step, label="right", closed="right").last().dropna()
+    if len(c) < 6:
+        return None
+    path = float(c.diff().abs().sum())
+    return abs(float(c.iloc[-1] - c.iloc[0])) / path if path > 0 else 0.0
