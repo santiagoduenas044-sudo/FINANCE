@@ -38,6 +38,31 @@ def whole_contract_partial(fraction: float, contracts: int) -> float:
     return k / n
 
 
+# A trade nobody watched: the bot (or its set up) was off for longer than this
+# and a new trading day began. It is closed where the bot last saw it.
+UNWATCHED = pd.Timedelta(hours=2)
+# A closed trade that lasted this long crossed days the bot never watched
+# (every strategy is flat at 16:55): its result is not real.
+VOID_AFTER = pd.Timedelta(hours=24)
+
+
+def _trading_day(ts) -> str:
+    """CME trading day (naive = ET): 18:00 ET opens the next date."""
+    t = pd.Timestamp(ts)
+    t = t.tz_localize("America/New_York") if t.tzinfo is None else t.tz_convert("America/New_York")
+    return (t + pd.Timedelta(hours=6)).date().isoformat()
+
+
+def unwatched(trade: PaperTrade, bar_time) -> bool:
+    """The bot stopped watching `trade` and comes back on another trading day."""
+    last = trade.last_bar_time if trade.last_bar_time is not None else trade.opened_at
+    try:
+        gap = pd.Timestamp(bar_time) - pd.Timestamp(last)
+    except (TypeError, ValueError):
+        return False
+    return gap > UNWATCHED and _trading_day(bar_time) != _trading_day(last)
+
+
 class PaperTradeTracker:
     def __init__(self, store_dir: str | Path | None = None,
                  breakeven_after_tp1: bool = False, partial_at_tp1: float = 0.0,
@@ -212,7 +237,10 @@ class PaperTradeTracker:
                 continue
             if trade.last_bar_time is not None and bar_time <= trade.last_bar_time:
                 continue  # never process a bar at/at-before what we already saw
-            self.update_on_bar(trade, bar, bar_time)
+            if unwatched(trade, bar_time):
+                self._close_unwatched(trade)
+            else:
+                self.update_on_bar(trade, bar, bar_time)
             if not trade.is_open:
                 just_closed.append(trade)
         self._reconcile()
@@ -351,11 +379,23 @@ class PaperTradeTracker:
         closed = []
         for trade in list(self.open_trades):
             if trade.instrument == instrument and trade.is_open:
-                self._close(trade, bar_time, price, ExitReason.EOD, TradeStatus.CLOSED,
-                            market=True)
+                if unwatched(trade, bar_time):
+                    self._close_unwatched(trade)
+                else:
+                    self._close(trade, bar_time, price, ExitReason.EOD, TradeStatus.CLOSED,
+                                market=True)
                 closed.append(trade)
         self._reconcile()
         return closed
+
+    def _close_unwatched(self, trade: PaperTrade) -> None:
+        """Closed at the last price the bot saw, when it saw it (the bot or the
+        set up was off): never at a price days later. Same rule as ORBIT."""
+        when = trade.last_bar_time if trade.last_bar_time is not None else trade.opened_at
+        trade.context = {**trade.context, "close_note": "el bot no estaba mirando: "
+                         "cerrado al último precio que vio"}
+        self._close(trade, when, trade.current_price, ExitReason.EOD, TradeStatus.CLOSED,
+                    market=True)
 
     # ------------------------------------------------------------------ #
     def _gap(self, trade: PaperTrade, level: float, opn: float | None) -> float:
@@ -451,10 +491,43 @@ class PaperTradeTracker:
                                       for line in cp.read_text().splitlines() if line.strip()]
             except (OSError, ValueError):
                 self.closed_trades = []
+        self._void_unwatched_closes()
         # Phase 15: restart-safe duplicate guard — remember every signal_id we
         # ever accepted (whether the trade is still open or already closed).
         for t in list(self.open_trades) + list(self.closed_trades):
             self._processed_signal_ids.add(t.signal_id)
+
+    def _void_unwatched_closes(self) -> None:
+        """Trades already recorded that closed days after they opened, at a
+        price from when the bot was not watching (before the rule above): their
+        result is not real. They leave the record and go to paper_voided.jsonl,
+        with a copy of the record as it was."""
+        bad = []
+        for t in self.closed_trades:
+            try:
+                if t.closed_at is not None and \
+                        pd.Timestamp(t.closed_at) - pd.Timestamp(t.opened_at) > VOID_AFTER and \
+                        _trading_day(t.closed_at) != _trading_day(t.opened_at):
+                    bad.append(t)
+            except (TypeError, ValueError):
+                continue
+        if not bad or self._store_dir is None:
+            return
+        cp = self._closed_path()
+        try:
+            stamp = pd.Timestamp.now(tz="America/New_York").strftime("%Y%m%d-%H%M%S")
+            cp.with_name(f"paper_closed.before-void-{stamp}.jsonl").write_text(cp.read_text())
+            with open(self._store_dir / "paper_voided.jsonl", "a") as fh:
+                for t in bad:
+                    fh.write(json.dumps({**t.to_dict(), "void_reason":
+                                         "cerró días después de abrir, sin que el bot mirara"}) + "\n")
+            ids = {id(t) for t in bad}
+            self.closed_trades = [t for t in self.closed_trades if id(t) not in ids]
+            tmp = cp.with_suffix(".tmp")
+            tmp.write_text("".join(json.dumps(t.to_dict()) + "\n" for t in self.closed_trades))
+            tmp.replace(cp)
+        except OSError:
+            pass
 
 
 def _closer_to_entry(trade: PaperTrade, a: float, b: float) -> bool:
