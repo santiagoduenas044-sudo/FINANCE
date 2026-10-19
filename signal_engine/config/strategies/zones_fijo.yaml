@@ -9,8 +9,4 @@ setups:
     point_mode: points
 
 ghost:
-  # the v4 rules: none of the later filters
-  clear_path: null
-  max_chase_r: null
-  max_stop_points: {NQ: 0, MNQ: 0}     # 0 = no cap
-  chop_min_er: null
+  clear_path: null                  # the v4 rules: no "espacio libre" check

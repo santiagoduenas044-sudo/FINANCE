@@ -21,7 +21,8 @@
 #
 # 11-oct-2026 clean-up: only 1, 4 and 13 kept running. 19-oct-2026: the
 # operator turned them ALL back on to compare (one of them had been in
-# profit), and added the 1-hour versions (14, 15).
+# profit), and added the 1-hour versions (14, 15) and copies with
+# filters (16, 17, 18). Versions already running are never changed.
 
 # the bots' own strategies that are retired (e.g. [orbit] = APERTURA, Set up 2)
 retired: []
@@ -47,7 +48,7 @@ ghost:
   - id: zonas_1m_noche
     setup: 4
     name: "FVG 1"
-    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino, si llega tarde o si el mercado va en serrucho."
+    about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
     version: v3
     overrides:
@@ -55,13 +56,11 @@ ghost:
         valid_sessions: ["RTH", "ETH"]
         last_entry_time: "16:15"
         clear_path: 0.5            # espacio libre (12-oct)
-        max_chase_r: 0.75          # no entrar tarde (19-oct)
-        chop_min_er: 0.1           # no entrar en serrucho (19-oct)
 
   - id: zonas_1m_europa
     setup: 13
     name: "FVG 1 EUROPA"
-    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino, si llega tarde o si el mercado va en serrucho."
+    about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
     overrides:
       ghost:
@@ -72,13 +71,11 @@ ghost:
         partial_at_progress: 0.5
         breakeven_after_tp1: true
         clear_path: 0.5            # espacio libre (12-oct)
-        max_chase_r: 0.75          # no entrar tarde (19-oct)
-        chop_min_er: 0.1           # no entrar en serrucho (19-oct)
 
   - id: zonas_1h
     setup: 14
     name: "FVG 1H"
-    about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad. Con los mismos filtros: espacio libre, no entrar tarde y no entrar en serrucho."
+    about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad. Con espacio libre (no entra con un soporte o resistencia en la primera mitad del camino)."
     strategy: zones_1h
     overrides:
       ghost:
@@ -90,6 +87,48 @@ ghost:
     name: "FVG 1H DÍA"
     about: "FVG 1H solo de día: entradas de 9:30 a 15:30, todo cerrado a las 16:55."
     strategy: zones_1h
+
+  # 19-oct: the same set ups with three more filters, as NEW set ups (the
+  # versions already running are never changed: they keep collecting samples)
+  - id: zonas_15m_filtros
+    setup: 16
+    name: "FVG 15 FILTROS"
+    about: "El Set up 1 tal cual, más tres filtros: no entra tarde (precio ya a más de ¾ del stop pasado la mitad de la zona), stop máximo 50 pts ($500) y no entra si las últimas 2 horas fueron serrucho."
+    strategy: zones
+    overrides:
+      ghost:
+        max_chase_r: 0.75
+        max_stop_points: {NQ: 50.0, MNQ: 50.0}
+        chop_min_er: 0.1
+
+  - id: zonas_1m_noche_filtros
+    setup: 17
+    name: "FVG 1 FILTROS"
+    about: "El Set up 4 tal cual, más dos filtros: no entra tarde y no entra si las últimas 2 horas fueron serrucho."
+    strategy: zones_1m
+    overrides:
+      ghost:
+        valid_sessions: ["RTH", "ETH"]
+        last_entry_time: "16:15"
+        clear_path: 0.5
+        max_chase_r: 0.75
+        chop_min_er: 0.1
+
+  - id: zonas_1m_europa_filtros
+    setup: 18
+    name: "FVG 1 EUROPA FILTROS"
+    about: "El Set up 13 tal cual, más dos filtros: no entra tarde y no entra si las últimas 2 horas fueron serrucho."
+    strategy: zones_1m
+    overrides:
+      ghost:
+        valid_sessions: ["RTH", "ETH"]
+        entry_hours: ["03:00", "09:30"]
+        partial_at_tp1: 0.4
+        partial_at_progress: 0.5
+        breakeven_after_tp1: true
+        clear_path: 0.5
+        max_chase_r: 0.75
+        chop_min_er: 0.1
 
   - id: zonas_15m_fijo
     setup: 9

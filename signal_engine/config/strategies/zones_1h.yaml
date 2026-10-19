@@ -20,8 +20,3 @@ setups:
     zone_lookback_bars: 12          # zones from the last 12 hours
     atr_timeframe: "1H"
     confirm_bars: 2                 # the reaction within 2 hours of the touch
-
-ghost:
-  # one-hour stops are bigger by nature: the 50-pt cap of FVG 15 would turn
-  # down nearly every trade; the strategy's own 120-pt ceiling stays
-  max_stop_points: {NQ: 0, MNQ: 0}

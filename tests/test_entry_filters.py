@@ -67,16 +67,21 @@ def test_the_messages_say_why():
     assert "stop" in _idea_reject_reason(["stop_too_wide"])
 
 
-def test_filters_are_on_where_they_belong():
-    g = EngineConfig.load(strategy="zones").ghost
-    assert (g.max_chase_r, g.chop_min_er, g.max_stop_points["NQ"]) == (0.75, 0.1, 50.0)
-    old = EngineConfig.load(strategy="zones_fijo").ghost                    # v4 as it was
-    assert (old.max_chase_r, old.chop_min_er, old.clear_path, old.max_stop_points["NQ"]) \
-        == (None, None, None, 0.0)
+def test_running_versions_are_untouched_and_the_filters_are_new_set_ups():
+    g = EngineConfig.load(strategy="zones").ghost                          # Set up 1 = v7
+    assert (g.max_chase_r, g.chop_min_er, g.max_stop_points) == (None, None, {})
     specs = {s.setup: s for s in load_specs("ghost")}
     for n in (4, 13):
-        assert specs[n].overrides["ghost"]["max_chase_r"] == 0.75
-        assert specs[n].overrides["ghost"]["chop_min_er"] == 0.1
+        assert "max_chase_r" not in specs[n].overrides["ghost"]
+    # each copy = its original + the filters
+    for copy, orig in ((17, 4), (18, 13)):
+        extra = dict(specs[copy].overrides["ghost"])
+        assert (extra.pop("max_chase_r"), extra.pop("chop_min_er")) == (0.75, 0.1)
+        assert extra == specs[orig].overrides["ghost"]
+        assert specs[copy].strategy == specs[orig].strategy
+    f15 = specs[16].overrides["ghost"]
+    assert specs[16].strategy == "zones" and f15["max_stop_points"]["NQ"] == 50.0
+    assert specs[16].label == "Set up 16 · FVG 15 FILTROS"
 
 
 def test_one_hour_set_ups():
@@ -86,7 +91,7 @@ def test_one_hour_set_ups():
     z = cfg.setups.zone_retrace
     assert (z.timeframe, z.zone_timeframe, z.atr_timeframe) == ("1H", "1H", "1H")
     assert cfg.timeframe_roles.structure == "1H" and cfg.timeframe_roles.execution == "1m"
-    assert cfg.ghost.max_stop_points["NQ"] == 0.0                  # no 50-pt cap on 1-hour stops
-    assert cfg.ghost.partial_at_progress == 0.5 and cfg.ghost.chop_min_er == 0.1
+    assert not cfg.ghost.max_stop_points                           # no points cap on 1-hour stops
+    assert cfg.ghost.partial_at_progress == 0.5 and cfg.ghost.clear_path == 0.5
     assert specs[14].overrides["ghost"]["valid_sessions"] == ["RTH", "ETH"]
     assert cfg.ghost.valid_sessions == ["RTH"]                      # Set up 15: day only

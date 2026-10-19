@@ -174,7 +174,7 @@ def test_dashboard_switch_starts_and_stops_ghost_variants(tmp_path):
     assert not any(x["retired"] for x in ghost["variants"])
     vers = {x["version"]: x for x in ghost["versions"]}
     assert vers["v1"]["variant"] == "setups_clasicos" and vers["v1"]["variant_on"] is False
-    assert vers["v3"]["variant_on"] is False and vers["v8"]["current"]
+    assert vers["v3"]["variant_on"] is False and vers["v7"]["current"]
     assert vers["v4"]["variant"] == "zonas_15m_fijo"                 # the fixed-stop Set up 9
     # ORBIT runs elsewhere: the switch is saved for it to pick up
     assert c.post("/api/bots/orbit/variants/apertura_tp2?on=true").json()["on"] is True
@@ -283,12 +283,12 @@ def test_each_strategy_counts_only_its_own_trades(tmp_path):
     app.state.orbit_dir, app.state.shadows_dir = tmp_path / "o", tmp_path / "sh"
     c = TestClient(app)
     st = {s["code"]: s for s in c.get("/api/bots").json()["strategies"]}
-    # each part on its own: v4 (stop fijo), v8 (la de ahora), Set up 9; v5-v7 had no trades here
+    # each part on its own: v4 (stop fijo), v7 (la de ahora), Set up 9; v5, v6 had no trades here
     parts = {p.get("version") or p.get("variant"): p for p in st["FVG 15"]["live"]["detail"]}
     only = parts["v4"]
     pv = only["net_usd"] / 25.0                                   # $ per point of GHOST's size
     assert only["n"] == 1                                         # not the 1-minute trades
-    assert parts["v8"]["n"] == 0 and parts["v8"]["name"].startswith("Set up 1") and not {"v5", "v6", "v7"} & set(parts)
+    assert parts["v7"]["n"] == 0 and parts["v7"]["name"].startswith("Set up 1") and not {"v5", "v6"} & set(parts)
     assert parts["zonas_15m_fijo"]["name"].startswith("Set up 9")
     real = [p for p in st["FVG 1 DÍA"]["live"]["detail"] if p["kind"] == "real"]
     assert real == [{"kind": "real", "bot": "GHOST", "version": "v2",
