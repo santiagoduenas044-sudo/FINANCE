@@ -3228,19 +3228,40 @@ function fundedLine(fo) {
     : fo.few ? ["wait", `${fo.account}: faltan trades para saber`] : ["ok", `Sirve para ${fo.account}`];
   return `<span class="sfo ${k}">${esc(t)}</span>`;
 }
-// the record of every set up as a PDF (each set up on its own pages)
+// the record of every set up as a PDF (each set up on its own pages).
+// On an iPhone/iPad opened from the home screen a "download" link does nothing,
+// so there the button turns into "Abrir / guardar el PDF": a second tap (a fresh
+// gesture, which iOS requires) opens the share sheet (Guardar en Archivos…).
+let pdfReady = null;
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+async function openPdf(file) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: file.name }); return; }
+    catch (err) { if (err && err.name === "AbortError") return; }
+  }
+  const url = URL.createObjectURL(file);
+  if (!window.open(url, "_blank")) location.href = url;   // the PDF viewer, with its own share button
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+}
 $("j-pdf").addEventListener("click", async e => {
-  const b = e.currentTarget, was = b.textContent;
+  const b = e.currentTarget, was = "Descargar récord (PDF)";
+  if (pdfReady) { const f = pdfReady; pdfReady = null; b.textContent = was; await openPdf(f); return; }
   b.disabled = true; b.textContent = "Preparando PDF…";
   try {
     const r = await api("/api/record.pdf", { raw: true });
-    const url = URL.createObjectURL(await r.blob());
-    const a = Object.assign(document.createElement("a"),
-      { href: url, download: `record-set-ups-${fmtDate.format(new Date())}.pdf` });
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    b.textContent = was;
-  } catch (err) { b.textContent = "⚠ No se pudo: " + err.message; setTimeout(() => (b.textContent = was), 4000); }
+    const name = `record-set-ups-${fmtDate.format(new Date())}.pdf`;
+    const file = new File([await r.blob()], name, { type: "application/pdf" });
+    if (IOS) {
+      pdfReady = file;
+      b.textContent = "Abrir / guardar el PDF";
+    } else {
+      const url = URL.createObjectURL(file);
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      b.textContent = was;
+    }
+  } catch (err) { b.textContent = "⚠ No se pudo: " + err.message; setTimeout(() => (b.textContent = was), 6000); }
   b.disabled = false;
 });
 function jStats(T) {
