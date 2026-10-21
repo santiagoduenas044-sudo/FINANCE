@@ -78,6 +78,7 @@ class PaperTradeTracker:
                  be_at_progress: float | None = None,
                  lock_steps: list | None = None,
                  slippage_points: float = 0.0, gap_fills: bool = False,
+                 time_exit_minutes: int | None = None, time_exit_progress: float = 0.33,
                  partial_at_progress: float | None = None):
         # Once TP1 is reached the trade continues toward TP2 with its ORIGINAL
         # stop, so a winner can hand back the whole move and close at -1R. Move
@@ -119,6 +120,9 @@ class PaperTradeTracker:
         # target with its stop at entry + be_offset_points.
         self.partial_at_progress = partial_at_progress
         self.gap_fills = bool(gap_fills)
+        # salida por tiempo: close a trade that has not moved after N minutes
+        self.time_exit_minutes = time_exit_minutes
+        self.time_exit_progress = float(time_exit_progress)
         self.open_trades: list[PaperTrade] = []
         self.closed_trades: list[PaperTrade] = []
         # Phase 15: dedup by signal_id (guards restart + polling reprocesses)
@@ -139,7 +143,9 @@ class PaperTradeTracker:
                    lock_steps=gcfg.lock_steps,
                    slippage_points=getattr(gcfg, "slippage_points", 0.0),
                    gap_fills=getattr(gcfg, "gap_fills", False),
-                   partial_at_progress=getattr(gcfg, "partial_at_progress", None))
+                   partial_at_progress=getattr(gcfg, "partial_at_progress", None),
+                   time_exit_minutes=getattr(gcfg, "time_exit_minutes", None),
+                   time_exit_progress=getattr(gcfg, "time_exit_progress", 0.33))
 
     # ------------------------------------------------------------------ #
     # Creation + duplicate protection
@@ -248,6 +254,8 @@ class PaperTradeTracker:
                 self._close_unwatched(trade)
             else:
                 self.update_on_bar(trade, bar, bar_time)
+                if trade.is_open:
+                    self._maybe_time_exit(trade, bar, bar_time)
             if not trade.is_open:
                 just_closed.append(trade)
         self._reconcile()
@@ -400,6 +408,25 @@ class PaperTradeTracker:
                 closed.append(trade)
         self._reconcile()
         return closed
+
+    def _maybe_time_exit(self, trade: PaperTrade, bar, bar_time) -> None:
+        """Salida por tiempo: after time_exit_minutes, a trade that never went
+        time_exit_progress of the way to its target (and secured nothing yet)
+        is closed at this bar's close."""
+        if not self.time_exit_minutes or trade.tp1_hit or not trade.take_profits:
+            return
+        try:
+            held = pd.Timestamp(bar_time) - pd.Timestamp(trade.opened_at)
+        except (TypeError, ValueError):
+            return
+        if held < pd.Timedelta(minutes=self.time_exit_minutes):
+            return
+        way = abs(trade.take_profits[-1] - trade.entry)
+        if way > 0 and trade.mfe_points < self.time_exit_progress * way:
+            trade.context = {**trade.context, "close_note": f"no avanzó en "
+                             f"{self.time_exit_minutes} min: cerrado por tiempo"}
+            self._close(trade, bar_time, float(bar["close"]), ExitReason.EXPIRED,
+                        TradeStatus.CLOSED, market=True)
 
     def _close_unwatched(self, trade: PaperTrade) -> None:
         """Closed at the last price the bot saw, when it saw it (the bot or the

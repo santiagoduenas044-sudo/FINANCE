@@ -481,7 +481,7 @@ def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
 
 
 _EXIT_ES = {"TP1": "TP1", "TP2": "TP final", "STOP": "Stop", "INVALIDATION": "Invalidado",
-            "EOD": "Cierre fin de día", "CANCELLED": "Cancelado"}
+            "EOD": "Cierre fin de día", "CANCELLED": "Cancelado", "EXPIRED": "Cierre por tiempo"}
 
 
 def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:

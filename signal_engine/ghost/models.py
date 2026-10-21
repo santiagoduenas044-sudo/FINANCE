@@ -73,6 +73,7 @@ class NoTradeReason(str, Enum):
     LEVEL_IN_THE_WAY = "level_in_the_way"    # clear_path: support/resistance before the target
     LATE_ENTRY = "late_entry"                # max_chase_r: price already ran from the zone
     CHOPPY = "choppy_market"                 # chop_min_er: the market goes back and forth
+    AGAINST_PLAN = "against_plan"            # follow_plan: the other side of the morning plan
 
 
 def _iso(ts) -> str | None:

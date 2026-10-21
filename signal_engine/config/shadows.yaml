@@ -130,6 +130,35 @@ ghost:
         max_chase_r: 0.75
         chop_min_er: 0.1
 
+  # 21-oct: three more copies of Set up 1, one change each
+  - id: zonas_15m_nivel
+    setup: 19
+    name: "FVG 15 NIVEL"
+    about: "El Set up 1 tal cual, pero el objetivo va 2 pts antes del siguiente soporte o resistencia (entre 1.5 y 4 veces el stop), donde el precio suele frenar. Sin nivel en ese tramo, objetivo 3× como siempre."
+    strategy: zones
+    overrides:
+      ghost:
+        level_target: true
+
+  - id: zonas_15m_tiempo
+    setup: 20
+    name: "FVG 15 TIEMPO"
+    about: "El Set up 1 tal cual, pero si en 90 min el trade no avanzó ni un tercio del camino al objetivo, lo cierra al precio del momento."
+    strategy: zones
+    overrides:
+      ghost:
+        time_exit_minutes: 90
+        time_exit_progress: 0.33
+
+  - id: zonas_15m_plan
+    setup: 21
+    name: "FVG 15 PLAN"
+    about: "El Set up 1 tal cual, pero solo opera hacia donde dice el plan de las 9:00 (LONG o SHORT). Si el plan sale neutral, opera para los dos lados."
+    strategy: zones
+    overrides:
+      ghost:
+        follow_plan: true
+
   - id: zonas_15m_fijo
     setup: 9
     name: "FVG 15 FIJO"

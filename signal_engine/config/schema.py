@@ -489,6 +489,17 @@ class GhostConfig(BaseModel):
     # the 5-minute closes / total path walked below this (0 = pure back and
     # forth, 1 = straight line). None = off.
     chop_min_er: Optional[float] = None
+    # Objetivo en el nivel: the target goes 2 pts before the first key level
+    # found between 1.5 and 4 stops away (where the price tends to stop),
+    # instead of the fixed multiple. No level there = the usual target.
+    level_target: bool = False
+    # Salida por tiempo: after this many minutes, a trade that has not gone
+    # `time_exit_progress` of the way to its target is closed at the market.
+    time_exit_minutes: Optional[int] = None
+    time_exit_progress: float = 0.33
+    # Con el plan: only trade the side the morning plan leans to (LONG /
+    # SHORT); a NEUTRAL plan lets both sides trade.
+    follow_plan: bool = False
     # Daily limits on the operator's position (ghost.contracts), counted per
     # trading day (18:00 ET -> 17:00 ET, like Apex). None disables each one.
     # They live here, not in the RiskEngine: that engine stops at the

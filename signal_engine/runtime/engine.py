@@ -1348,6 +1348,7 @@ _IDEA_REJECT_ES = {
     "level_in_the_way": "tenía un soporte o resistencia en el camino al objetivo",
     "late_entry": "llegó tarde: el precio ya se había ido lejos de la zona",
     "choppy_market": "el mercado iba de lado (serrucho) en las últimas 2 horas",
+    "against_plan": "iba contra el plan del día",
     "stop_too_wide": "el stop era demasiado largo",
 }
 

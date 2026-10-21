@@ -18,6 +18,7 @@ contribution is simply absent and the decision is more conservative.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Callable
 
 from ..config.schema import GhostConfig
@@ -26,7 +27,7 @@ from ..features.analyzer import MarketAnalysis
 from ..signals.models import NoTrade, Signal
 from .confluence import score_confluence
 from .context import build_market_state
-from .levels import efficiency, in_the_way, levels_at
+from .levels import efficiency, in_the_way, levels_at, next_level, plan_side
 from .models import GhostDecision, MarketState, NoTradeReason
 from .targets import apply_plan, plan_targets
 
@@ -189,10 +190,26 @@ class GhostBrain:
             reasons.append(NoTradeReason.CONFLICTING_TIMEFRAME)
         if cfg.block_against_structure and ms.structure.opposes(direction):
             reasons.append(NoTradeReason.AGAINST_STRUCTURE)
+        levels = None
+        if (cfg.clear_path or cfg.level_target) and sig.take_profits:
+            levels = levels_at(ctx.execution.bars, ctx.decision_time)
+        # objetivo en el nivel: just before the next key level, 1.5-4 stops away
+        if cfg.level_target and levels:
+            risk = abs(sig.entry - sig.stop)
+            lv = next_level(direction, sig.entry, levels, 1.5 * risk, 4.0 * risk)
+            if lv is not None:
+                tp = round((lv.price - 2.0 if direction == "LONG" else lv.price + 2.0) * 4) / 4
+                sig = replace(sig, take_profits=[tp], risk_reward=[round(abs(tp - sig.entry) / risk, 2)])
+                extra["target_level"] = f"{lv.price:.2f} {lv.label}"
+        # con el plan: only the side the 9:00 plan leans to
+        if cfg.follow_plan:
+            side = plan_side(ctx.execution.bars, ctx.decision_time)
+            if side in ("LONG", "SHORT") and side != direction:
+                reasons.append(NoTradeReason.AGAINST_PLAN)
+                extra["plan"] = side
         # "espacio libre": a support / resistance in the way to the target
         if cfg.clear_path and sig.take_profits:
-            lv = in_the_way(direction, sig.entry, sig.take_profits[-1],
-                            levels_at(ctx.execution.bars, ctx.decision_time), cfg.clear_path)
+            lv = in_the_way(direction, sig.entry, sig.take_profits[-1], levels or [], cfg.clear_path)
             if lv is not None:
                 reasons.append(NoTradeReason.LEVEL_IN_THE_WAY)
                 extra["level"] = f"{lv.price:.2f} {lv.label}"
@@ -233,6 +250,10 @@ class GhostBrain:
             detail_extra += f" chase={extra['chase']}"
         if extra.get("chop"):
             detail_extra += f" er={extra['chop']}"
+        if extra.get("target_level"):
+            detail_extra += f" target_level={extra['target_level']}"
+        if extra.get("plan"):
+            detail_extra += f" plan={extra['plan']}"
         if extra.get("level"):
             detail_extra += f" level={extra['level']}"
 

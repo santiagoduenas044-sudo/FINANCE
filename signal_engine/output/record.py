@@ -9,7 +9,7 @@ import pandas as pd
 
 _NY = "America/New_York"
 _EXIT = {"TP1": "objetivo", "TP2": "objetivo", "EOD": "cierre 16:55",
-         "INVALIDATION": "invalidado", "CANCELLED": "cancelado", "EXPIRED": "expirado"}
+         "INVALIDATION": "invalidado", "CANCELLED": "cancelado", "EXPIRED": "cierre por tiempo"}
 
 
 def _ts(v) -> pd.Timestamp | None:

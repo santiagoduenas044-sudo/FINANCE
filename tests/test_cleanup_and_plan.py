@@ -15,7 +15,7 @@ NY = "America/New_York"
 
 def test_every_set_up_runs_again(tmp_path):
     on = {sp.setup for b in ("ghost", "orbit") for sp in load_specs(b) if is_on(b, sp, tmp_path)}
-    assert on == set(range(3, 19))                                   # 19-oct: all on + new ones
+    assert on == set(range(3, 22))                                   # all on + the new ones
     assert not main_retired("orbit") and not main_retired("ghost")
 
 

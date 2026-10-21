@@ -169,3 +169,32 @@ def efficiency(bars: pd.DataFrame, now, minutes: int = 120, step: str = "5min") 
         return None
     path = float(c.diff().abs().sum())
     return abs(float(c.iloc[-1] - c.iloc[0])) / path if path > 0 else 0.0
+
+
+def next_level(direction: str, entry: float, levels: list[Level], lo: float, hi: float) -> Level | None:
+    """The nearest real level (not a lone round number) between `lo` and `hi`
+    points away from the entry in the trade's direction."""
+    best = None
+    for x in levels:
+        if x.names == ["número redondo"]:
+            continue
+        d = (x.price - entry) if direction == "LONG" else (entry - x.price)
+        if lo <= d <= hi and (best is None or d < best[0]):
+            best = (d, x)
+    return best[1] if best else None
+
+
+def plan_side(bars: pd.DataFrame, now) -> str:
+    """The side of this morning's plan (9:00 ET): "LONG", "SHORT" or "NEUTRAL"."""
+    from ..output.briefing import bias        # the same reading the 9:00 message sends
+    now = pd.Timestamp(now)
+    now = now.tz_convert(NY) if now.tzinfo else now.tz_localize(NY)
+    at = now.normalize() + pd.Timedelta(hours=9)
+    if now < at:
+        at -= pd.Timedelta(days=1)
+    if bars is None or bars.empty:
+        return "NEUTRAL"
+    try:
+        return bias(day_parts(bars, at))[0]
+    except Exception:  # noqa: BLE001 — no plan, no filter
+        return "NEUTRAL"
