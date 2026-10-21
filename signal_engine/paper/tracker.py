@@ -44,6 +44,13 @@ UNWATCHED = pd.Timedelta(hours=2)
 # A closed trade that lasted this long crossed days the bot never watched
 # (every strategy is flat at 16:55): its result is not real.
 VOID_AFTER = pd.Timedelta(hours=24)
+# Bars missing for longer than this (power cut, no internet, Mac asleep): the
+# stop order would have been sitting at the broker, so it fills at its level,
+# never at a far-away open seen when the bot came back.
+DATA_GAP = pd.Timedelta(minutes=15)
+# A loss bigger than this many stops cannot happen with a stop in place; such a
+# record comes from a bot that was not watching and leaves the record.
+VOID_LOSS_R = -3.0
 
 
 def _trading_day(ts) -> str:
@@ -250,6 +257,12 @@ class PaperTradeTracker:
                       bar_time: pd.Timestamp) -> None:
         high = float(bar["high"]); low = float(bar["low"]); close = float(bar["close"])
         opn = float(bar["open"]) if "open" in bar and bar["open"] == bar["open"] else None
+        prev = trade.last_bar_time if trade.last_bar_time is not None else trade.opened_at
+        try:
+            if pd.Timestamp(bar_time) - pd.Timestamp(prev) > DATA_GAP:
+                opn = None                  # missed bars: no "jump" fill, the level
+        except (TypeError, ValueError):
+            pass
         trade.last_bar_time = bar_time
         trade.updated_at = bar_time
         trade.bars_held += 1
@@ -498,9 +511,9 @@ class PaperTradeTracker:
             self._processed_signal_ids.add(t.signal_id)
 
     def _void_unwatched_closes(self) -> None:
-        """Trades already recorded that closed days after they opened, at a
-        price from when the bot was not watching (before the rule above): their
-        result is not real. They leave the record and go to paper_voided.jsonl,
+        """Trades already recorded whose result is not real: closed days after
+        they opened, or lost more than 3 stops (a fill seen after a power cut
+        or a sleeping Mac, before the rules above). They leave the record and go to paper_voided.jsonl,
         with a copy of the record as it was."""
         bad = []
         for t in self.closed_trades:
@@ -508,6 +521,8 @@ class PaperTradeTracker:
                 if t.closed_at is not None and \
                         pd.Timestamp(t.closed_at) - pd.Timestamp(t.opened_at) > VOID_AFTER and \
                         _trading_day(t.closed_at) != _trading_day(t.opened_at):
+                    bad.append(t)
+                elif t.r_multiple < VOID_LOSS_R:
                     bad.append(t)
             except (TypeError, ValueError):
                 continue
@@ -519,8 +534,10 @@ class PaperTradeTracker:
             cp.with_name(f"paper_closed.before-void-{stamp}.jsonl").write_text(cp.read_text())
             with open(self._store_dir / "paper_voided.jsonl", "a") as fh:
                 for t in bad:
-                    fh.write(json.dumps({**t.to_dict(), "void_reason":
-                                         "cerró días después de abrir, sin que el bot mirara"}) + "\n")
+                    why = ("perdió más de 3 veces su stop: el bot no estaba viendo el mercado"
+                           if t.r_multiple < VOID_LOSS_R else
+                           "cerró días después de abrir, sin que el bot mirara")
+                    fh.write(json.dumps({**t.to_dict(), "void_reason": why}) + "\n")
             ids = {id(t) for t in bad}
             self.closed_trades = [t for t in self.closed_trades if id(t) not in ids]
             tmp = cp.with_suffix(".tmp")

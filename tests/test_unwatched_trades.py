@@ -70,3 +70,29 @@ def test_old_week_long_trades_leave_the_record(tmp_path):
     tr2 = PaperTradeTracker(store_dir=tmp_path)
     assert [t.signal_id for t in tr2.closed_trades] == ["ok", "night"]
     assert len((tmp_path / "paper_voided.jsonl").read_text().splitlines()) == 1
+
+
+def test_after_a_power_cut_the_stop_fills_at_its_level(tmp_path):
+    tr = PaperTradeTracker(store_dir=tmp_path)
+    t = _open(tr)
+    # back 3 hours later the same day, NQ 1,500 pts lower: the stop was at the broker
+    tr.update_symbol("NQ", _bar(23500, 23510, 23490, 23500), _t("2026-10-10 13:01"))
+    assert t.exit_reason.value == "STOP" and t.exit_price == 24970.0
+
+
+def test_a_live_gap_still_fills_at_the_open(tmp_path):
+    tr = PaperTradeTracker(store_dir=tmp_path, gap_fills=True)
+    t = _open(tr)
+    tr.update_symbol("NQ", _bar(24950, 24955, 24940, 24945), _t("2026-10-10 10:02"))
+    assert t.exit_price == 24950.0                                  # one minute later: real gap
+
+
+def test_a_loss_of_many_stops_leaves_the_record(tmp_path):
+    tr = PaperTradeTracker()
+    t = tr.open_trade(signal_id="cut", instrument="NQ", direction="LONG", setup="zone_retrace",
+                      entry=25000.0, stop=24965.0, take_profits=[25105.0], opened_at=_t("2026-10-14 10:00"))
+    tr._close(t, _t("2026-10-14 13:00"), 23500.0, ExitReason.STOP, TradeStatus.STOPPED)  # -1,500 pts
+    (tmp_path / "paper_closed.jsonl").write_text(json.dumps(t.to_dict()) + "\n")
+    assert PaperTradeTracker(store_dir=tmp_path).closed_trades == []
+    v = json.loads((tmp_path / "paper_voided.jsonl").read_text())
+    assert "3 veces su stop" in v["void_reason"]
