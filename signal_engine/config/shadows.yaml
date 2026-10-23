@@ -165,6 +165,13 @@ ghost:
     about: "Set up 1 con el stop fijo de 20–35 pts de antes del 6 de octubre."
     strategy: zones_fijo
     version: v4
+    overrides:
+      ghost:
+        # as it ran before 11-oct: no later change of Set up 1 reaches it
+        partial_at_tp1: 0.0
+        partial_at_progress: null
+        breakeven_after_tp1: false
+        clear_path: null
 
   - id: zonas_15m_noticias
     setup: 5
@@ -174,6 +181,11 @@ ghost:
     overrides:
       ghost:
         news_blackout: {before: 10, after: 15, impacts: ["High"]}
+        # as it ran before 11-oct: no later change of Set up 1 reaches it
+        partial_at_tp1: 0.0
+        partial_at_progress: null
+        breakeven_after_tp1: false
+        clear_path: null
 
   - id: zonas_15m_tendencia
     setup: 10
@@ -183,6 +195,11 @@ ghost:
     overrides:
       ghost:
         trend_filter: vwap
+        # as it ran before 11-oct: no later change of Set up 1 reaches it
+        partial_at_tp1: 0.0
+        partial_at_progress: null
+        breakeven_after_tp1: false
+        clear_path: null
 
   - id: zonas_1m_noche_tendencia
     setup: 11

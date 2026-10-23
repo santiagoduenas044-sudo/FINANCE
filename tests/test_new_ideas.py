@@ -94,3 +94,15 @@ def test_the_three_set_ups_are_set_up_1_plus_one_change():
     assert specs[21].overrides == {"ghost": {"follow_plan": True}}
     assert [specs[n].label for n in (19, 20, 21)] == \
         ["Set up 19 · FVG 15 NIVEL", "Set up 20 · FVG 15 TIEMPO", "Set up 21 · FVG 15 PLAN"]
+
+
+def test_set_ups_5_9_10_run_as_before_11_oct():
+    """They copy Set up 1's file: later changes to Set up 1 (lock-in at half,
+    espacio libre) must not reach them."""
+    from signal_engine.config.schema import EngineConfig
+    specs = {s.setup: s for s in load_specs("ghost")}
+    for n in (5, 9, 10):
+        g = EngineConfig.load(strategy=specs[n].strategy, overrides=specs[n].overrides).ghost
+        assert (g.partial_at_tp1, g.partial_at_progress, g.breakeven_after_tp1, g.clear_path) \
+            == (0.0, None, False, None), n
+    assert EngineConfig.load(strategy="zones", overrides=specs[5].overrides).ghost.news_blackout
