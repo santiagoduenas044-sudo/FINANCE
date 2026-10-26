@@ -227,6 +227,10 @@ PYEOF
       *) echo "uso: bash deploy/macos/ctl.sh orbit <on|off|restart|status|logs|probar [discord] [DESDE [HASTA]] [detalle]>";;
     esac
     ;;
+  auditoria)
+    # Todos los trades de todos los set ups en un archivo para revisar (sin secretos).
+    cd "$REPO_DIR" && PYTHONPATH="$REPO_DIR" "$REPO_DIR/.venv/bin/python" scripts/auditoria.py
+    ;;
   web)
     # La página web: usuarios con contraseña y publicarla en internet con
     # Tailscale Funnel (https://<esta-mac>.<tailnet>.ts.net, gratis, sin abrir puertos).
@@ -266,6 +270,6 @@ PYEOF
     esac
     ;;
   *)
-    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord [comandos]|nube <IP>|llave|volver|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario>" >&2
+    echo "usage: bash deploy/macos/ctl.sh <start|stop|restart|status|logs|health|update|autostart on|off|discord [comandos]|nube <IP>|llave|volver|ghost porque|probar|orbit on|off|status|logs|web on|off|usuario|auditoria>" >&2
     exit 2;;
 esac
