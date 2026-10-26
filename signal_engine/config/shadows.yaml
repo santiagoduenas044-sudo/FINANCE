@@ -82,7 +82,7 @@ ghost:
   - id: zonas_1h
     setup: 14
     name: "FVG 1H"
-    about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad. Con espacio libre (no entra con un soporte o resistencia en la primera mitad del camino)."
+    about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad."
     strategy: zones_1h
     overrides:
       ghost:

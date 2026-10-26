@@ -85,7 +85,9 @@ ghost:
   # Espacio libre (v7, 12-oct): no trade when yesterday's high/low/close, the
   # night's high/low or a level the price turned at 3+ times sits in the
   # first half of the way to the target.
-  clear_path: 0.5
+  # Off since v8 (26-oct): in two weeks it let through 1 trade of Set up 1 and none
+  # of the set ups that copy it; NQ nearly always has a level in the first half.
+  clear_path: null
   # No breakeven: in the lab the BE+2 at 70% saved some trades and cost
   # others, and on the 15-minute zones it took ~$2/trade away (+$10 vs +$12).
   be_at_progress: null

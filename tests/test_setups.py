@@ -272,7 +272,7 @@ def test_set_up_1_and_13_lock_in_halfway_and_4_stays_as_it_was():
     from signal_engine.versions import current_version
     g = EngineConfig.load(strategy="zones").ghost
     assert g.partial_at_progress == 0.5 and g.partial_at_tp1 == 0.4 and g.breakeven_after_tp1
-    assert current_version("GHOST") == "v7"
+    assert current_version("GHOST") == "v8"
     specs = {s.setup: s for s in load_specs("ghost")}
     assert specs[13].overrides["ghost"]["partial_at_progress"] == 0.5
     assert "partial_at_progress" not in specs[4].overrides["ghost"]

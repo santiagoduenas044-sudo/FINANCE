@@ -36,6 +36,9 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
          "Las reglas de v6, y no entra si un soporte o resistencia (máximo, mínimo o cierre "
          "de ayer, máximo o mínimo de la noche, o un nivel que frenó al precio 3 veces) está "
          "en la primera mitad del camino al objetivo."),
+        ("v8", "2026-10-26", "FVG 15 · sin espacio libre",
+         "Las reglas de v7 sin el filtro de espacio libre, que dejaba pasar casi ningún trade "
+         "(1 en dos semanas). Sigue asegurando a la mitad."),
     ],
     "ORBIT": [
         ("v1", "2026-09-29", "APERTURA · 1 MNQ",
@@ -59,7 +62,7 @@ BOT_VERSIONS: dict[str, list[tuple[str, str, str, str]]] = {
 # its variants' switches) · "en estudio" · "por probar" · "descartada".
 STRATEGIES: list[dict] = [
     {"code": "FVG 15", "name": "Zonas 15 min", "bot": "GHOST", "status": "en vivo",
-     "real": {"GHOST": ["v4", "v5", "v6", "v7"]}, "shadows": ["zonas_15m_fijo"],
+     "real": {"GHOST": ["v4", "v5", "v6", "v7", "v8"]}, "shadows": ["zonas_15m_fijo"],
      "text": "Huecos de precio (FVG) de 15 min: espera el primer regreso del precio al hueco y "
              "entra cuando una vela reacciona; objetivo 3× el stop. Desde el 6 de octubre el "
              "stop sigue el tamaño de las velas (Set up 1).",
@@ -222,6 +225,7 @@ VERSION_NAMES: dict[tuple[str, str], str] = {
     ("GHOST", "v5"): "Zonas de 15 minutos, stop según el mercado",
     ("GHOST", "v6"): "FVG de 15 minutos que asegura a la mitad",
     ("GHOST", "v7"): "FVG de 15 minutos con espacio libre",
+    ("GHOST", "v8"): "FVG de 15 minutos sin espacio libre",
     ("ORBIT", "v1"): "Caja de apertura con 1 MNQ",
     ("ORBIT", "v2"): "Caja de apertura con 1 NQ",
     ("ORBIT", "v3"): "Caja de apertura con 5 MNQ",

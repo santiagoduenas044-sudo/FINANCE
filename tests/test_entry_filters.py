@@ -92,6 +92,6 @@ def test_one_hour_set_ups():
     assert (z.timeframe, z.zone_timeframe, z.atr_timeframe) == ("1H", "1H", "1H")
     assert cfg.timeframe_roles.structure == "1H" and cfg.timeframe_roles.execution == "1m"
     assert not cfg.ghost.max_stop_points                           # no points cap on 1-hour stops
-    assert cfg.ghost.partial_at_progress == 0.5 and cfg.ghost.clear_path == 0.5
+    assert cfg.ghost.partial_at_progress == 0.5 and cfg.ghost.clear_path is None
     assert specs[14].overrides["ghost"]["valid_sessions"] == ["RTH", "ETH"]
     assert cfg.ghost.valid_sessions == ["RTH"]                      # Set up 15: day only

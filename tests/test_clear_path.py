@@ -81,8 +81,11 @@ def test_the_idea_message_names_the_level():
                     "(5,012 · máximo de ayer)")
 
 
-def test_the_three_set_ups_use_it():
-    assert EngineConfig.load(strategy="zones").ghost.clear_path == 0.5
-    specs = {s.setup: s for s in load_specs("ghost")}
-    assert specs[4].overrides["ghost"]["clear_path"] == 0.5
-    assert specs[13].overrides["ghost"]["clear_path"] == 0.5
+def test_no_running_set_up_uses_it_since_26_oct():
+    """The filter still works when a strategy asks for it (tests above), but
+    no running set up does: it let through 1 trade in two weeks."""
+    assert EngineConfig.load(strategy="zones").ghost.clear_path is None
+    for sp in load_specs("ghost"):
+        if not sp.retired:
+            g = EngineConfig.load(strategy=sp.strategy, overrides=sp.overrides or None).ghost
+            assert g.clear_path is None, sp.label
