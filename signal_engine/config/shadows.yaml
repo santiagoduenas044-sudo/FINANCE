@@ -23,9 +23,12 @@
 # operator turned them ALL back on to compare (one of them had been in
 # profit), and added the 1-hour versions (14, 15) and copies with
 # filters (16, 17, 18). Versions already running are never changed.
+# 26-oct audit: every FVG 1 set up (3, 4, 11, 12, 13, 17, 18), CLÁSICO (8) and
+# APERTURA 2× (7) lost and are retired; their records stay. APERTURA (2) and
+# APERTURA 30 (6) go too: only FVG 15 / FVG 1H keep running.
 
 # the bots' own strategies that are retired (e.g. [orbit] = APERTURA, Set up 2)
-retired: []
+retired: [orbit]                 # 26-oct: APERTURA (Set up 2) perdía
 
 # every dashboard switch goes back to the defaults below once per new date
 switches_reset: "2026-10-19"
@@ -33,6 +36,7 @@ switches_reset: "2026-10-19"
 ghost:
   - id: setups_clasicos
     setup: 8
+    retired: true              # 26-oct: perdía (auditoría)
     name: "CLÁSICO"
     about: "La primera versión (v1): ruptura de apertura, barrida de liquidez y VWAP en velas de 5 min."
     strategy: legacy
@@ -40,6 +44,7 @@ ghost:
 
   - id: zonas_1m
     setup: 3
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 DÍA"
     about: "FVG 1 solo de día (9:30–15:30)."
     strategy: zones_1m
@@ -47,6 +52,7 @@ ghost:
 
   - id: zonas_1m_noche
     setup: 4
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1"
     about: "Huecos (FVG) de 5 min con entrada en velas de 1 min, de día y de noche. Stop 20–35 pts, objetivo hasta 3×, BE+2 al 70 %. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
@@ -59,6 +65,7 @@ ghost:
 
   - id: zonas_1m_europa
     setup: 13
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 EUROPA"
     about: "FVG 1 que solo entra de 3:00 a 9:30 (hora de NY), el horario donde el Set up 4 ganaba. A la mitad del camino cierra 2 de 5 MNQ y sube el stop a entrada +2. No entra si hay un soporte o resistencia en la primera mitad del camino."
     strategy: zones_1m
@@ -103,6 +110,7 @@ ghost:
 
   - id: zonas_1m_noche_filtros
     setup: 17
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 FILTROS"
     about: "El Set up 4 tal cual, más dos filtros: no entra tarde y no entra si las últimas 2 horas fueron serrucho."
     strategy: zones_1m
@@ -116,6 +124,7 @@ ghost:
 
   - id: zonas_1m_europa_filtros
     setup: 18
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 EUROPA FILTROS"
     about: "El Set up 13 tal cual, más dos filtros: no entra tarde y no entra si las últimas 2 horas fueron serrucho."
     strategy: zones_1m
@@ -203,6 +212,7 @@ ghost:
 
   - id: zonas_1m_noche_tendencia
     setup: 11
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 VWAP"
     about: "Set up 4 solo a favor del VWAP."
     strategy: zones_1m
@@ -214,6 +224,7 @@ ghost:
 
   - id: zonas_1m_noche_noticias
     setup: 12
+    retired: true              # 26-oct: perdía (auditoría)
     name: "FVG 1 CALMA"
     about: "Set up 4 sin entrar cerca de noticias fuertes."
     strategy: zones_1m
@@ -226,6 +237,7 @@ ghost:
 orbit:
   - id: apertura_30m
     setup: 6
+    retired: true              # 26-oct: perdía (auditoría)
     name: "APERTURA 30"
     about: "La caja de 9:30 a 10:00 en vez de 9:45."
     settings:
@@ -233,6 +245,7 @@ orbit:
 
   - id: apertura_tp2
     setup: 7
+    retired: true              # 26-oct: perdía (auditoría)
     name: "APERTURA 2×"
     about: "La misma caja con el objetivo a 2× el stop."
     settings:

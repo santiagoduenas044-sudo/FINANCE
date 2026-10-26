@@ -53,11 +53,11 @@ def test_the_bot_makes_one_channel_per_set_up_that_is_on(store):
     on = [s for s in dch.setups() if s["on"]]
     assert r["total"] == len(on) and len(r["made"]) == len(on)
     names = [c["name"] for c in api.channels if c["type"] == 0]
-    assert "set-up-1-fvg-15" in names and "set-up-4-fvg-1" in names and "set-up-13-fvg-1-europa" in names
-    assert "set-up-6-apertura-30" in names and "set-up-14-fvg-1h" in names   # all on (19-oct)
+    assert "set-up-1-fvg-15" in names and "set-up-5-fvg-15-calma" in names and "set-up-14-fvg-1h" in names
+    assert not any("apertura" in n or "fvg-1-" in n for n in names)          # retired 26-oct
     assert all(c["parent_id"] == api.channels[0]["id"] for c in api.channels if c["type"] == 0)
     saved = json.loads(store.read_text())
-    assert saved["setups"]["4"]["webhook"].startswith("https://discord.com/api/webhooks/")
+    assert saved["setups"]["5"]["webhook"].startswith("https://discord.com/api/webhooks/")
     # again: nothing new, nothing duplicated
     before = len(api.channels)
     assert dch.create_channels(api=api, path=store)["made"] == []
@@ -119,8 +119,8 @@ def test_history_goes_to_each_set_up_channel(store):
 def test_channels_with_the_old_name_are_renamed(store):
     api = FakeDiscord()
     dch.create_channels(api=api, path=store)
-    old = next(c for c in api.channels if c.get("name") == "set-up-4-fvg-1")
-    old["name"] = "set-up-4-iman-1-noche"                                 # as it was made on 9-oct
+    old = next(c for c in api.channels if c.get("name") == "set-up-5-fvg-15-calma")
+    old["name"] = "set-up-5-iman-15-calma"                                # as it was made on 9-oct
     dch.create_channels(api=api, path=store)
-    assert old["name"] == "set-up-4-fvg-1"
+    assert old["name"] == "set-up-5-fvg-15-calma"
     assert ("PATCH", f"/channels/{old['id']}") in api.calls

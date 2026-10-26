@@ -13,10 +13,10 @@ from signal_engine.runtime.shadows import is_on, load_specs, main_retired
 NY = "America/New_York"
 
 
-def test_every_set_up_runs_again(tmp_path):
+def test_only_fvg_15_and_1h_run_after_the_audit(tmp_path):
     on = {sp.setup for b in ("ghost", "orbit") for sp in load_specs(b) if is_on(b, sp, tmp_path)}
-    assert on == set(range(3, 22))                                   # all on + the new ones
-    assert not main_retired("orbit") and not main_retired("ghost")
+    assert on == {5, 9, 10, 14, 15, 16, 19, 20, 21}                 # 26-oct audit (+ Set up 1)
+    assert main_retired("orbit") and not main_retired("ghost")
 
 
 def test_a_retired_set_up_cannot_be_switched_back_on(tmp_path):
@@ -32,10 +32,10 @@ def test_old_switches_go_back_to_on_once(tmp_path):
     import json
 
     from signal_engine.runtime.shadows import set_on, switches
-    (tmp_path / "enabled.json").write_text(json.dumps({"ghost": {"zonas_1m": False}}))
-    spec = next(s for s in load_specs("ghost") if s.id == "zonas_1m")
+    (tmp_path / "enabled.json").write_text(json.dumps({"ghost": {"zonas_15m_noticias": False}}))
+    spec = next(s for s in load_specs("ghost") if s.id == "zonas_15m_noticias")
     assert is_on("ghost", spec, tmp_path)                        # the 11-oct "off" is gone
-    set_on("ghost", "zonas_1m", False, tmp_path)                 # a new switch stays
+    set_on("ghost", "zonas_15m_noticias", False, tmp_path)       # a new switch stays
     assert not is_on("ghost", spec, tmp_path) and switches(tmp_path)["_reset"]
 
 
