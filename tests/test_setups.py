@@ -55,16 +55,13 @@ def test_alert_note_in_points_and_dollars(tmp_path):
                       entry=20_000.0, stop=19_975.0, take_profits=[20_075.0], opened_at=T0)
     pv = {"5 MNQ": 10.0}
     title, text, _ = alert_note("Set up 3 · FVG 1 DÍA", "open", t, pv)
-    assert title == "🟢 Set up 3 · FVG 1 DÍA — COMPRA NQ"
-    assert text.splitlines() == ["✅ **Entrada 20,000.00**",
-                                 "🛑 Stop 19,975.00 · 25.0 pts · −$250",
-                                 "🎯 Objetivo 20,075.00 · 75.0 pts · +$750"]
+    assert title == "🟢 Set up 3 · FVG 1 DÍA — COMPRA NQ en 20,000"
+    assert "1. Stop 19,975 (−$250)" in text and "2. Objetivo 20,075 (+$750)" in text
     tr.update_symbol("NQ", _bar(20_000, 20_080, 19_990, 20_070), T0 + pd.Timedelta(minutes=1))
     title, text, _ = alert_note("Set up 3 · FVG 1 DÍA", "close", t, pv, tr.closed_trades)
-    assert title == "✅ Set up 3 · FVG 1 DÍA — objetivo · +75.00 pts"
-    first, record = text.splitlines()
-    assert first == "20,000.00 → 20,075.00 · **+$750**"
-    assert record.startswith("Récord: 1 trade · ganó 1 · **+$7") and "con comisiones" in record
+    assert title == "✅ Set up 3 · FVG 1 DÍA — GANÓ +$750"
+    assert "🎯 Objetivo 20,075: cierra +$750" in text
+    assert "_Set up 3: 1 trade · 100 % · +$7" in text                   # after commissions
 
 
 class _FakeRuntime:

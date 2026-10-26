@@ -38,6 +38,7 @@ class ShadowSpec:
     enabled: bool = True                 # default; the dashboard switch overrides it
     setup: int | None = None             # its number: "Set up 3"
     retired: bool = False                # retired: never runs again; its record stays
+    vs: int | None = None                # the set up it is a copy of ("pairs" in the day's message)
 
     @property
     def code(self) -> str:
@@ -267,14 +268,9 @@ def alert_note(label: str, kind: str, trade, pv: dict | None,
     """(title, text, color) of a set up's Discord note when it enters
     ("open") or exits ("close"). `pv`: {"5 MNQ": 10.0} for the dollars;
     `closed`: all its closed trades, for the running record line."""
-    from ..output.record import _mark, _n, commission_per_trade, exit_label, usd
+    from ..output.record import commission_per_trade
     position, per_pt = next(iter((pv or {}).items()), ("", 0.0))
     long = trade.direction == "LONG"
-    side = "COMPRA" if long else "VENTA"
-    sym = trade.instrument
-
-    def money(pts: float) -> str:
-        return f" · {usd(pts, per_pt)}" if per_pt else ""
 
     if kind == "partial":
         got = abs(trade.tp1 - trade.entry)
@@ -286,27 +282,13 @@ def alert_note(label: str, kind: str, trade, pv: dict | None,
                 f"{part} en {_px(trade.tp1)}{money_k}\n"
                 f"🛑 Stop de los demás a {_px(trade.stop)}: ya no puede perder\n"
                 f"🎯 Siguen a {_px(trade.tp2)}", 0x2ECC71)
-    if kind == "open":
-        risk = abs(trade.entry - trade.stop)
-        target = trade.tp2 if trade.tp2 is not None else trade.tp1
-        lines = [f"✅ **Entrada {_px(trade.entry)}**",
-                 f"🛑 Stop {_px(trade.stop)} · {risk:.1f} pts{money(-risk)}"]
-        if target is not None:
-            reward = abs(target - trade.entry)
-            lines.append(f"🎯 Objetivo {_px(target)} · {reward:.1f} pts{money(reward)}")
-        return (f"{'🟢' if long else '🔴'} {label} — {side} {sym}", "\n".join(lines),
-                0x00C851 if long else 0xFF4444)
-    pts = trade.pnl_points
-    why = exit_label(trade)
-    lines = [f"{_px(trade.entry)} → {_px(trade.exit_price)}"
-             + (f" · **{usd(pts, per_pt)}**" if per_pt else "")]
+    from ..output import trade_text as tt
     allp = [t.pnl_points for t in closed or []]
-    if allp and per_pt:
-        wins = sum(1 for p in allp if p > 0.01)
-        fee = commission_per_trade(position)
-        net = sum(allp) * per_pt - fee * len(allp)
-        lines.append(f"Récord: {_n(len(allp))} · ganó {wins} · "
-                     f"**{'+' if net >= 0 else '−'}${abs(net):,.0f}**"
-                     + (" con comisiones" if fee else ""))
-    return (f"{_mark(pts)} {label} — {why} · {pts:+.2f} pts", "\n".join(lines),
-            0x2ECC71 if pts > 0.01 else (0x95A5A6 if pts >= -0.01 else 0xE74C3C))
+    fee = commission_per_trade(position) if position else 0.0
+    record = tt.record_line(label.split(" · ")[0], allp, per_pt, fee) if per_pt else None
+    td = trade.to_dict()
+    if kind == "open":
+        return (tt.entry_title(td, label), tt.entry_text(td, per_pt, position, record),
+                0x00C851 if long else 0xFF4444)
+    title, color = tt.exit_title(td, label, per_pt)
+    return title, tt.exit_text(td, per_pt, position, record), color

@@ -251,3 +251,127 @@ def day_record(runtime, now, symbol: str = "NQ") -> str:
         return day_message(trade_log(runtime), now)
     except Exception:  # noqa: BLE001
         return _setup1_record(runtime, now, symbol)
+
+
+# --------------------------------------------------------------------------- #
+# The day's message, option C (26-oct): a bar per set up that traded today,
+# the count of who won and lost, and every copy against its original.
+# --------------------------------------------------------------------------- #
+def _running(log: dict) -> list[dict]:
+    out = []
+    for so in log.get("sources") or []:
+        if not so.get("setup") or so.get("retired"):
+            continue
+        if so.get("kind") != "main" and not so.get("enabled", True):
+            continue
+        out.append({**so, "label": so.get("setup_label") or so["name"]})
+    return sorted(out, key=lambda s: s["setup"])
+
+
+def _short(label: str) -> str:
+    """'Set up 16 · FVG 15 FILTROS' -> '16 FVG 15 FILTROS'."""
+    return label.replace("Set up ", "").replace(" · ", " ", 1)
+
+
+def day_bars_png(rows: list[tuple[str, float]], title: str) -> bytes | None:
+    """Horizontal bars, green won / red lost, one per set up. None without
+    matplotlib or rows (the message still goes)."""
+    if not rows:
+        return None
+    try:
+        import io
+
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception:  # noqa: BLE001
+        return None
+    bg, fg, grid = "#0e1117", "#d0d4dc", "#232833"
+    rows = sorted(rows, key=lambda r: r[1])
+    fig, ax = plt.subplots(figsize=(8, 0.42 * len(rows) + 1.2), dpi=110)
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
+    vals = [v for _, v in rows]
+    ax.barh(range(len(rows)), vals, color=["#26a69a" if v >= 0 else "#ef5350" for v in vals], height=0.62)
+    ax.set_yticks(range(len(rows)), [n for n, _ in rows], color=fg, fontsize=9)
+    ax.axvline(0, color="#6b7280", linewidth=1)
+    span = max(abs(v) for v in vals) or 1.0
+    for i, v in enumerate(vals):
+        ax.text(v + (span * 0.02 if v >= 0 else -span * 0.02), i,
+                f"{'+' if v >= 0 else '−'}${abs(v):,.0f}", va="center",
+                ha="left" if v >= 0 else "right", color="#26a69a" if v >= 0 else "#ef5350",
+                fontsize=9, fontweight="bold")
+    ax.set_xlim(-span * 1.35 if min(vals) < 0 else -span * 0.05, span * 1.35 if max(vals) > 0 else span * 0.05)
+    ax.tick_params(axis="x", colors=fg, labelsize=8)
+    ax.xaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(
+        lambda x, _p: f"{'−' if x < 0 else ''}${abs(x):,.0f}"))
+    ax.set_axisbelow(True)
+    ax.grid(axis="x", color=grid, linewidth=0.6)
+    for side in ax.spines.values():
+        side.set_visible(False)
+    ax.set_title(title, color=fg, fontsize=11, loc="left")
+    fig.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", facecolor=bg)
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def day_summary(log: dict, now) -> tuple[str, bytes | None]:
+    """(text, chart) of the day's close. Every set up on its own; dollars
+    after commissions; Set up 1 counts only the version in use."""
+    now = pd.Timestamp(now)
+    now = now.tz_localize("America/New_York") if now.tzinfo is None else now.tz_convert("America/New_York")
+    day = now.date().isoformat()
+    trades = log.get("trades") or []
+    setups = _running(log)
+
+    def mine(so):
+        return [t for t in trades if t["src"] == so["id"]
+                and (so.get("kind") != "main" or t.get("version") == so.get("current"))]
+
+    rows, won, lost, none = [], 0, 0, []
+    by_n = {}
+    for so in setups:
+        T = mine(so)
+        by_n[so["setup"]] = (so, T)
+        today = [t for t in T if t["day"] == day]
+        if not today:
+            none.append(str(so["setup"]))
+            continue
+        v = sum(t["net_usd"] for t in today)
+        rows.append((_short(so["label"]), v))
+        won += v >= 0.5
+        lost += v <= -0.5
+    lines = []
+    if rows:
+        best = max(rows, key=lambda r: r[1])
+        worst = min(rows, key=lambda r: r[1])
+        lines.append(f"**{won} {'ganó' if won == 1 else 'ganaron'} · {lost} {'perdió' if lost == 1 else 'perdieron'}"
+                     f" · {len(none)} sin trades**")
+        lines.append(f"🏆 Mejor: {best[0]} {_money(best[1])}" + (f" · 💀 Peor: {worst[0]} {_money(worst[1])}"
+                                                               if worst[1] < -0.5 else ""))
+    else:
+        lines.append("**Hoy ningún set up operó.**")
+    pairs = []
+    for so in setups:
+        vs = so.get("vs")
+        if not vs or vs not in by_n:
+            continue
+        T = by_n[so["setup"]][1]
+        if not T:
+            continue
+        since = min(t["day"] for t in T)                       # the same days for both
+        orig = [t for t in by_n[vs][1] if t["day"] >= since]
+        d = sum(t["net_usd"] for t in T) - sum(t["net_usd"] for t in orig)
+        word = "mejor" if d > 0.5 else ("peor" if d < -0.5 else "igual")
+        pairs.append(f"{_short(so['label'])} vs {vs} → {_money(d)} {word}")
+    if pairs:
+        lines += ["", "**Parejas** (copia contra original, desde que existe la copia)"] + pairs
+    totals = [f"{so['setup']} {_money(sum(t['net_usd'] for t in T))}"
+              for so, T in (by_n[n] for n in sorted(by_n)) if T]
+    if totals:
+        lines += ["", "**Total de cada uno:** " + " · ".join(totals)]
+    lines += ["", "_Cada set up por separado · en papel · dólares con comisiones_"]
+    png = day_bars_png(rows, f"Resultado de hoy por set up · {now:%d-%m}")
+    return "\n".join(lines), png

@@ -343,6 +343,9 @@ class PaperTradeTracker:
                     off = self.be_offset_points if self.partial_at_progress else 0.0
                     be = trade.entry + off if trade.is_long else trade.entry - off
                     trade.stop = self._tighter(trade, trade.stop, be)
+                # for the exit message: when it secured the partial, and the new stop
+                trade.context = {**(trade.context or {}), "tp1_at": pd.Timestamp(bar_time).isoformat(),
+                                 "tp1_stop": trade.stop}
         self._manage_stop(trade)
         self._save_open()
 

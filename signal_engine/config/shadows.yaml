@@ -15,6 +15,7 @@
 # ghost: strategy = a file in config/strategies/ ("legacy" = default.yaml),
 #        overrides = changes on top, version = the GHOST version it replays.
 # orbit: settings = changes to APERTURA's rules (opening_range.OrbSettings).
+# vs:    the set up it copies with one change (compared as a pair every day).
 
 # retired: true = the set up never runs again (no switch turns it back on);
 #        its record stays and shows in the dashboard and the PDF.
@@ -81,6 +82,7 @@ ghost:
 
   - id: zonas_1h
     setup: 14
+    vs: 1                      # copia del Set up 1
     name: "FVG 1H"
     about: "La estrategia del Set up 1 en velas de 1 hora, de día y de noche. Stop y objetivo según el tamaño de las velas de 1 hora (más grandes), objetivo 3×, asegura a la mitad."
     strategy: zones_1h
@@ -91,6 +93,7 @@ ghost:
 
   - id: zonas_1h_dia
     setup: 15
+    vs: 14                      # copia del Set up 14
     name: "FVG 1H DÍA"
     about: "FVG 1H solo de día: entradas de 9:30 a 15:30, todo cerrado a las 16:55."
     strategy: zones_1h
@@ -99,6 +102,7 @@ ghost:
   # versions already running are never changed: they keep collecting samples)
   - id: zonas_15m_filtros
     setup: 16
+    vs: 1                      # copia del Set up 1
     name: "FVG 15 FILTROS"
     about: "El Set up 1 tal cual, más tres filtros: no entra tarde (precio ya a más de ¾ del stop pasado la mitad de la zona), stop máximo 50 pts ($500) y no entra si las últimas 2 horas fueron serrucho."
     strategy: zones
@@ -142,6 +146,7 @@ ghost:
   # 21-oct: three more copies of Set up 1, one change each
   - id: zonas_15m_nivel
     setup: 19
+    vs: 1                      # copia del Set up 1
     name: "FVG 15 NIVEL"
     about: "El Set up 1 tal cual, pero el objetivo va 2 pts antes del siguiente soporte o resistencia (entre 1.5 y 4 veces el stop), donde el precio suele frenar. Sin nivel en ese tramo, objetivo 3× como siempre."
     strategy: zones
@@ -151,6 +156,7 @@ ghost:
 
   - id: zonas_15m_tiempo
     setup: 20
+    vs: 1                      # copia del Set up 1
     name: "FVG 15 TIEMPO"
     about: "El Set up 1 tal cual, pero si en 90 min el trade no avanzó ni un tercio del camino al objetivo, lo cierra al precio del momento."
     strategy: zones
@@ -161,6 +167,7 @@ ghost:
 
   - id: zonas_15m_plan
     setup: 21
+    vs: 1                      # copia del Set up 1
     name: "FVG 15 PLAN"
     about: "El Set up 1 tal cual, pero solo opera hacia donde dice el plan de las 9:00 (LONG o SHORT). Si el plan sale neutral, opera para los dos lados."
     strategy: zones

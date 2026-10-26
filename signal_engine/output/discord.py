@@ -431,6 +431,13 @@ def _targets_line(tp1, final, ref=None, per_point: dict | None = None, *,
 
 # Short on purpose: a signal is read in a few seconds on a phone. Every line is
 # a number to act on; the rules behind them live in the strategy, not the text.
+def _label(p: dict, num=None) -> str:
+    """'Set up 1 · FVG 15 · IDEA #7': who, and which idea (links heads-up,
+    entry and exit of the same trade)."""
+    parts = [p.get("setup_tag"), f"IDEA #{num}" if num is not None else None]
+    return " · ".join(x for x in parts if x) or "GHOST"
+
+
 def _tag(p: dict) -> str:
     """"Set up 1 · FVG 15 · " before a bot's own titles (empty without a tag)."""
     return f"{p['setup_tag']} · " if p.get("setup_tag") else ""
@@ -446,38 +453,26 @@ def _build_trade_idea_payload(event: OutputEvent) -> dict:
                       f"(Era la posible {side} en la zona {_px(p.get('bottom'))} – "
                       f"{_px(p.get('top'))}; no tiene que ver con otras ideas abiertas.)",
                       _CANCEL_COLOR, event.disclaimer)
-    plan = p.get("plan") or {}
-    risk = p.get("risk_points")
-    lines = [f"Vigila **{_px(p.get('mid'))}** (zona {_px(p.get('bottom'))} – {_px(p.get('top'))})",
-             f"🛑 SL {_px(p.get('stop'))} · ~{risk:.0f} pts{_usd(risk, p.get('usd_per_point'))}"]
-    if plan.get("tp1") is not None:
-        lines.append(_targets_line(plan["tp1"], plan.get("final"), p.get("mid"),
-                                   p.get("usd_per_point")))
-    lines.append("⏳ **Todavía no estoy seguro** — esperemos la reacción en la zona. No entres aún.")
-    return _embed(f"🟡 {_tag(p)}IDEA #{num} — posible {side} · {sym}", "\n".join(lines),
+    from . import trade_text as tt
+    per = p.get("usd_per_point") or {}
+    _position, per_pt = next(iter(per.items()), ("", 0.0))
+    label = _label(p, p.get("number"))
+    return _embed(tt.alert_title(p, label), tt.alert_text(p, per_pt, p.get("record")),
                   _IDEA_COLOR, event.disclaimer)
 
 
 def _build_idea_trade_opened_payload(event: OutputEvent) -> dict:
+    """Option C: why it entered and the plan step by step (chart attached)."""
+    from . import trade_text as tt
     p = event.status_payload or {}
     ctx = p.get("context") or {}
-    num, sym = ctx.get("idea_number"), p.get("instrument", "?")
-    direction = p.get("direction", "LONG")
-    side = _side(direction)
-    entry, stop = p.get("entry"), p.get("stop")
-    mid = ctx.get("zone_mid", entry)
-    title = (f"⚡ {_tag(p)}SEÑAL DIRECTA #{num} — {side} · {sym}" if ctx.get("idea_direct")
-             else f"🟢 {_tag(p)}IDEA #{num} — {side} · {sym}")
-    # what this trade really risks: from where it enters (not the zone's
-    # middle — a direct signal can enter far from it)
-    risk = abs(entry - stop) if entry is not None and stop is not None else None
-    lines = [f"✅ **Entra ahora {_px(entry)}** · óptima {_px(mid)}",
-             f"🛑 SL {_px(stop)}" + (f" · ~{risk:.0f} pts{_usd(risk, ctx.get('usd_per_point'))}"
-                                     if risk is not None else ""),
-             _targets_line(p.get("tp1"), p.get("tp2"), entry, ctx.get("usd_per_point"),
-                           breakeven=True)]
-    return _embed(title, "\n".join(lines), _TRADE_COLOR.get(direction, _WIN_COLOR),
-                  event.disclaimer)
+    position, per_pt = next(iter((ctx.get("usd_per_point") or {}).items()), ("", 0.0))
+    label = _label(p, ctx.get("idea_number"))
+    title = tt.entry_title(p, label)
+    if ctx.get("idea_direct"):
+        title = "⚡ " + title[2:] + " · señal directa"
+    return _embed(title, tt.entry_text(p, per_pt, position, p.get("record")),
+                  _TRADE_COLOR.get(p.get("direction", "LONG"), _WIN_COLOR), event.disclaimer)
 
 
 _EXIT_ES = {"TP1": "TP1", "TP2": "TP final", "STOP": "Stop", "INVALIDATION": "Invalidado",
@@ -485,27 +480,14 @@ _EXIT_ES = {"TP1": "TP1", "TP2": "TP final", "STOP": "Stop", "INVALIDATION": "In
 
 
 def _build_idea_trade_closed_payload(event: OutputEvent) -> dict:
+    """Option C: the trade's story hour by hour, and the set up's record."""
+    from . import trade_text as tt
     p = event.status_payload or {}
     ctx = p.get("context") or {}
-    num = ctx.get("idea_number")
-    pts = p.get("pnl_points") or 0.0
-    reason = (p.get("exit_reason") or "").upper()
-    label = _EXIT_ES.get(reason, reason.title() or "Cerrado")
-    if reason == "STOP" and p.get("tp1_hit"):
-        label = "BE tras parcial" if p.get("partial_fraction") else "Breakeven"
-    elif reason == "STOP" and pts > 1e-6:
-        label = "Trailing stop"
-    elif reason == "STOP" and abs(pts) <= 1e-6:
-        label = "Breakeven"
-    mark = "✅" if pts > 1e-6 else ("➖" if abs(pts) <= 1e-6 else "🛑")
-    usd = "".join(f" · {'+' if pts >= 0 else '−'}${abs(pts) * pv:,.0f} {s}"
-                  for s, pv in sorted((ctx.get("usd_per_point") or {}).items(),
-                                      key=lambda kv: kv[1]))
-    return _embed(
-        f"{mark} {_tag(p)}IDEA #{num} — {label} · {pts:+.2f} pts",
-        f"{_px(p.get('entry'))} → {_px(p.get('exit_price'))}{usd}",
-        _FLAT_COLOR if pts == 0 else (_WIN_COLOR if pts > 0 else _LOSS_COLOR),
-        event.disclaimer)
+    position, per_pt = next(iter((ctx.get("usd_per_point") or {}).items()), ("", 0.0))
+    label = _label(p, ctx.get("idea_number"))
+    title, color = tt.exit_title(p, label, per_pt)
+    return _embed(title, tt.exit_text(p, per_pt, position, p.get("record")), color, event.disclaimer)
 
 
 def _build_trade_tp1_payload(event: OutputEvent) -> dict:

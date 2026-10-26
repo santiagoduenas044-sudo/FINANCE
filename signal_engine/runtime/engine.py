@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -375,7 +376,30 @@ class BotRuntime:
             return None
 
     def _tag(self, d: dict) -> dict:
-        return {**d, "setup_tag": self.setup_tag} if self.setup_tag else d
+        d = {**d, "setup_tag": self.setup_tag} if self.setup_tag else dict(d)
+        try:
+            d["record"] = self._record_line(d.get("instrument") or d.get("symbol") or "NQ")
+        except Exception:  # noqa: BLE001 - a record line is never worth a message
+            pass
+        return d
+
+    def _record_line(self, symbol: str) -> str | None:
+        """'Set up 1: 12 trades · 58 % · +$1,240' for the foot of its messages
+        (the version in use, dollars after commissions)."""
+        from ..output.record import commission_per_trade
+        from ..output.trade_text import record_line
+        from ..versions import current_version, ghost_version_of
+        if self.paper_tracker is None:
+            return None
+        pv = self._point_values(symbol) or {}
+        if not pv:
+            return None
+        position, per_pt = next(iter(pv.items()))
+        cur = current_version("GHOST")
+        pts = [t.pnl_points for t in self.paper_tracker.closed_trades
+               if t.closed_at is not None and ghost_version_of(t) == cur]
+        label = (self.setup_tag or "GHOST").split(" · ")[0]
+        return record_line(label, pts, per_pt, commission_per_trade(position))
 
     def _notify_trade_updates(self, symbol: str, just_closed: list,
                               before_r: dict[str, float],
@@ -736,8 +760,24 @@ class BotRuntime:
                 # signal log must NOT fire either — invariant: approved ==
                 # Discord == PaperTrades.
                 paper_trade = None
-                idea_ctx: dict = {}
-                zid = (d.signal.market_context or {}).get("zone_id")
+                mc0 = d.signal.market_context or {}
+                # the zone and the plan's rules travel with every trade (also the
+                # parallel set ups'), so its Discord messages can say why and how
+                idea_ctx: dict = {k: mc0[k] for k in ("zone_top", "zone_bottom", "zone_mid",
+                                                      "target_basis") if k in mc0}
+                tl = re.search(r" target_level=(.+?)(?: level=| plan=|$)", d.detail or "")
+                if tl:
+                    idea_ctx["target_level"] = tl.group(1).strip()
+                trk = self.paper_tracker
+                if trk is not None:
+                    idea_ctx["plan_rules"] = {
+                        "partial": trk.partial_at_tp1 if trk.partial_at_tp1 else None,
+                        "be_at": trk.be_at_progress,
+                        "time_exit": getattr(trk, "time_exit_minutes", None),
+                        "eod": gcfg.eod_close_time if gcfg.eod_close_enabled else None,
+                        "be_offset": trk.be_offset_points,
+                        "lock_after_partial": bool(trk.breakeven_after_tp1)}
+                zid = mc0.get("zone_id")
                 if zone_det is not None and zid:
                     idea = self.idea_board.claim_for_trade(
                         symbol, zone_states.get(zid), zid, d.timestamp)
@@ -745,6 +785,7 @@ class BotRuntime:
                         mc = d.signal.market_context
                         mid = mc.get("zone_mid", d.signal.entry)
                         idea_ctx = {
+                            **idea_ctx,
                             "idea_number": idea.number, "idea_direct": idea.direct,
                             "zone_top": mc.get("zone_top"),
                             "zone_bottom": mc.get("zone_bottom"),
@@ -840,6 +881,10 @@ class BotRuntime:
             if not ctx.execution.bars.empty else None
         for ev in events:
             ev["usd_per_point"] = self._point_values(symbol)
+            try:
+                ev["record"] = self._record_line(symbol)
+            except Exception:  # noqa: BLE001
+                pass
             if self.setup_tag:
                 ev["setup_tag"] = self.setup_tag
             st = by_id.get(ev.get("zone_id"))
@@ -961,9 +1006,18 @@ class BotRuntime:
             if not (close <= hhmm < "18:00") or self._record_sent == day:
                 return
             self._record_sent = day
-            from ..output.record import day_record
-            text = day_record(self, t, symbol)
-            self.output_dispatcher.publish_daily_record(text, day)
+            from ..output.record import day_record, day_summary
+            png = None
+            try:
+                from ..api.bots import trade_log
+                text, png = day_summary(trade_log(self), t)
+            except Exception as exc:  # noqa: BLE001 - fall back to the plain list
+                log.warning("day summary failed (%s); plain record", type(exc).__name__)
+                text = day_record(self, t, symbol)
+            if png:
+                self.output_dispatcher.publish_daily_record(text, day, png)
+            else:
+                self.output_dispatcher.publish_daily_record(text, day)
         except Exception as exc:  # noqa: BLE001
             log.warning("daily record failed (%s)", type(exc).__name__)
 

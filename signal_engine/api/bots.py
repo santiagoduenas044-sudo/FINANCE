@@ -627,7 +627,7 @@ def trade_log(runtime, orbit_dir: Path | None = None, shadows_dir: Path | None =
         sources.append({"id": src, "bot": "GHOST", "kind": "variant", "name": spec.label,
                         "setup": spec.setup,
                         "about": spec.about, "enabled": is_on("ghost", spec, base),
-                        "retired": spec.retired,
+                        "retired": spec.retired, "vs": spec.vs,
                         "position": label, "fee": fee})
         trades += _ghost_rows(tr, sym, pv, fee, src, version=spec.version or "paralelo")
 

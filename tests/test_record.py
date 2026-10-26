@@ -69,7 +69,7 @@ def test_daily_record_once_after_the_flat():
     rt._maybe_daily_record("NQ", _t("2026-09-30 16:56"))
     assert len(sent) == 2                                     # next day, again once
     e = build_discord_payload(OutputEvent.from_daily_record(sent[0][1], sent[0][0]))["embeds"][0]
-    assert e["title"] == "🔔 Cierre del día · 29-Sep" and "Set up 1 · FVG 15" in e["description"]
+    assert e["title"] == "🔔 Cierre del día · 29-Sep" and "dólares con comisiones" in e["description"]
     assert e["footer"]["text"].startswith("Trading simulado en papel")
 
 
@@ -124,7 +124,7 @@ def test_daily_record_uses_the_current_version(tmp_path):
     rt = _runtime(tr, sent)
     rt._maybe_daily_record("NQ", _t("2026-09-29 16:57"))
     # its trades are all from the 1-minute versions: none counts as Set up 1
-    assert "➖ **Set up 1 · FVG 15** — hoy sin trades" in sent[0][1]
+    assert "ningún set up operó" in sent[0][1]
 
 
 def test_day_message_says_plainly_who_won_and_who_lost():

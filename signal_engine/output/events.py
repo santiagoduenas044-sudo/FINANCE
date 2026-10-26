@@ -185,7 +185,7 @@ class OutputEvent:
         )
 
     @classmethod
-    def from_daily_record(cls, text: str, day: str) -> "OutputEvent":
+    def from_daily_record(cls, text: str, day: str, image_png: bytes | None = None) -> "OutputEvent":
         """The trading record after the day's close (one per trading day)."""
         return cls(
             kind="daily_record",
@@ -193,6 +193,7 @@ class OutputEvent:
             title="RÉCORD",
             disclaimer="Trading simulado en papel — no es consejo financiero.",
             status_payload={"text": text, "day": day},
+            image_png=image_png,
         )
 
     @classmethod

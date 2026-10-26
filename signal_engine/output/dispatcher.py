@@ -122,9 +122,9 @@ class OutputDispatcher:
         """Breakeven / trailing moved the stop into profit (with a chart)."""
         self._emit(OutputEvent.from_stop_moved(paper_trade_dict, old_stop, image_png))
 
-    def publish_daily_record(self, text: str, day: str) -> None:
-        """The record once the day is flat (today, week, total, last trades)."""
-        self._emit(OutputEvent.from_daily_record(text, day))
+    def publish_daily_record(self, text: str, day: str, image_png: bytes | None = None) -> None:
+        """The day's close: every set up on its own, with its bar chart."""
+        self._emit(OutputEvent.from_daily_record(text, day, image_png))
 
     def publish_note(self, *, title: str, text: str, color: int, key: str,
                      image: bytes | None = None) -> None:
