@@ -24,6 +24,9 @@ class FakeDiscord:
             hook = {"id": str(self.next), "token": f"tok{self.next}", "name": body["name"]}
             self.hooks.setdefault(ch, []).append(hook)
             return hook
+        if method == "DELETE" and path.startswith("/channels/"):
+            self.channels = [c for c in self.channels if c["id"] != path.split("/")[2]]
+            return None
         if method == "PATCH" and path.startswith("/channels/"):
             ch = next(c for c in self.channels if c["id"] == path.split("/")[2])
             ch.update(body)
@@ -124,3 +127,21 @@ def test_channels_with_the_old_name_are_renamed(store):
     dch.create_channels(api=api, path=store)
     assert old["name"] == "set-up-5-fvg-15-calma"
     assert ("PATCH", f"/channels/{old['id']}") in api.calls
+
+
+def test_channels_of_retired_set_ups_are_deleted(store, monkeypatch):
+    api = FakeDiscord()
+    dch.create_channels(api=api, path=store)
+    cat = api.channels[0]["id"]
+    # as left by an older version: Set up 4's channel and one the owner made by hand
+    api.channels += [{"id": "900", "type": 0, "name": "set-up-4-fvg-1", "parent_id": cat},
+                     {"id": "901", "type": 0, "name": "charla", "parent_id": cat},
+                     {"id": "902", "type": 0, "name": "set-up-4-fvg-1", "parent_id": "otra"}]
+    r = dch.create_channels(api=api, path=store)
+    assert r["deleted"] == ["Set up 4 · FVG 1"]
+    names = {(c["name"], c.get("parent_id")) for c in api.channels}
+    assert ("charla", cat) in names and ("set-up-4-fvg-1", "otra") in names   # never anyone else's
+    assert ("set-up-4-fvg-1", cat) not in names
+    assert "4" not in json.loads(store.read_text())["setups"]
+    assert all(row["n"] != 4 for row in dch.status(store)["rows"])          # gone from Sistema
+    assert dch.create_channels(api=api, path=store)["deleted"] == []         # nothing more to do

@@ -52,7 +52,8 @@ def setups() -> list[dict]:
     from ..versions import MAIN_SETUP, main_setup_label
     from ..runtime.shadows import main_retired
     out = [{"n": MAIN_SETUP[b], "id": b.lower(), "label": main_setup_label(b),
-            "about": "", "on": not main_retired(b)} for b in ("GHOST", "ORBIT")]
+            "about": "", "on": not main_retired(b), "retired": main_retired(b)}
+           for b in ("GHOST", "ORBIT")]
     for bot in ("ghost", "orbit"):
         for sp in load_specs(bot):
             try:
@@ -60,7 +61,8 @@ def setups() -> list[dict]:
             except Exception:  # noqa: BLE001
                 on = bool(getattr(sp, "enabled", True))
             out.append({"n": sp.setup, "id": sp.id, "label": sp.label,
-                        "about": getattr(sp, "about", "") or "", "on": on})
+                        "about": getattr(sp, "about", "") or "", "on": on,
+                        "retired": bool(getattr(sp, "retired", False))})
     return sorted(out, key=lambda s: s["n"])
 
 
@@ -111,7 +113,8 @@ def status(path: Path = STORE) -> dict:
     data = _load(path)
     have = data.get("setups") or {}
     rows = [{"n": s["n"], "label": s["label"], "on": s["on"],
-             "channel": (have.get(str(s["n"])) or {}).get("name")} for s in setups()]
+             "channel": (have.get(str(s["n"])) or {}).get("name")}
+            for s in setups() if not s.get("retired")]
     return {"bot": bool(os.environ.get(TOKEN_ENV, "").strip()), "rows": rows,
             "history": data.get("history") or {}, "error": data.get("error")}
 
@@ -175,7 +178,9 @@ def _guild(api) -> str:
 
 def create_channels(api=_api, path: Path = STORE, only_on: bool = True) -> dict:
     """Category + one channel and webhook per set up that is on. Running it
-    again only adds what is missing (a channel deleted by hand is made again)."""
+    again only adds what is missing (a channel deleted by hand is made again),
+    and deletes the channels of the set ups that were retired: the ones the
+    bot made, inside its "Set ups" category, never any other channel."""
     with _lock:
         data = dict(_load(path))
         try:
@@ -210,9 +215,27 @@ def create_channels(api=_api, path: Path = STORE, only_on: bool = True) -> dict:
                     row = {"channel": str(ch["id"]), "name": ch["name"],
                            "webhook": f"https://discord.com/api/webhooks/{hook['id']}/{hook['token']}"}
                 have[str(s["n"])] = row
+            # retired set ups: their channel goes (with its messages)
+            deleted = []
+            for s in setups():
+                if not s.get("retired"):
+                    continue
+                row = have.pop(str(s["n"]), None) or {}
+                ids = {str(row["channel"])} if row.get("channel") else set()
+                ids |= {str(c["id"]) for c in existing if c.get("type") == 0
+                        and str(c.get("parent_id")) == str(cat["id"]) and c.get("name") == _slug(s["label"])}
+                for cid in ids:
+                    if cid not in by_id:
+                        continue                              # already gone
+                    try:
+                        api("DELETE", f"/channels/{cid}")
+                    except ChannelError as exc:
+                        if "404" not in str(exc):
+                            raise
+                    deleted.append(s["label"])
             data.update({"guild": guild, "category": str(cat["id"]), "setups": have, "error": None})
             _save(data, path)
-            return {"made": made, "total": len(have)}
+            return {"made": made, "deleted": deleted, "total": len(have)}
         except ChannelError as exc:
             data["error"] = str(exc)
             _save(data, path)

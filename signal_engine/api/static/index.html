@@ -1165,7 +1165,7 @@ footer { color: var(--ink-3); font-size: 11px; letter-spacing: .04em; text-align
           (necesita los permisos <b>Gestionar canales</b> y <b>Gestionar webhooks</b>).</p>
         <div class="chlist" id="ch-list"></div>
         <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <button type="button" class="pbtn on" id="ch-make">Crear un canal por set up</button>
+          <button type="button" class="pbtn on" id="ch-make">Actualizar canales</button>
           <button type="button" class="pbtn" id="ch-hist">Reenviar historial a cada canal</button></div>
         <p class="foot" id="ch-msg"></p></div></div>
     <div class="card mb owner-only"><h3>Página web y usuarios <span class="r" id="us-state"></span></h3>
@@ -2124,9 +2124,12 @@ async function chLoad() {
     : made < on ? (on - made === 1 ? "Falta 1 set up por tener su canal." : `Faltan ${on - made} set ups por tener su canal.`) : "";
 }
 $("ch-make").addEventListener("click", async e => {
-  const b = e.currentTarget; b.disabled = true; $("ch-msg").textContent = "Creando canales…";
+  const b = e.currentTarget; b.disabled = true; $("ch-msg").textContent = "Actualizando canales…";
   try { const r = await api("/api/discord/channels", { method: "POST" });
-    $("ch-msg").textContent = r.made.length ? `✅ Listo: ${r.made.length} canales nuevos.` : "✅ Ya estaban todos."; }
+    const parts = [];
+    if (r.made.length) parts.push(r.made.length === 1 ? "1 canal nuevo" : `${r.made.length} canales nuevos`);
+    if ((r.deleted || []).length) parts.push(r.deleted.length === 1 ? "1 canal borrado (set up retirado)" : `${r.deleted.length} canales borrados (set ups retirados)`);
+    $("ch-msg").textContent = parts.length ? "✅ Listo: " + parts.join(" · ") + "." : "✅ Ya estaba todo al día."; }
   catch (err) { $("ch-msg").textContent = "⚠ " + err.message; }
   setTimeout(chLoad, 600);
 });
